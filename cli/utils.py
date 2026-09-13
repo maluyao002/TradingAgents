@@ -22,6 +22,14 @@ ANALYST_ORDER = [
 
 CRYPTO_SUFFIXES = ("-USD", "-USDT", "-USDC", "-BTC", "-ETH")
 
+# Keep the profile picker useful without exposing every agent-level assignment.
+# The model profiles themselves remain the source of truth for routing.
+PROFILE_MENU_DESCRIPTIONS = {
+    "quick": "Mostly Luna; Terra decisions",
+    "balanced": "Mostly Terra; Sol research; Astra final",
+    "deep": "Terra specialists; Sol debate; Astra managers",
+}
+
 
 def is_valid_ticker_input(value: str) -> bool:
     """Whether a ticker entry is acceptable (charset + length).
@@ -196,6 +204,52 @@ def select_research_depth() -> int:
     return choice
 
 
+def select_model_profile(default: str = "balanced") -> str:
+    """Select a native OpenAI agent profile, or keep the custom workflow.
+
+    Selecting Custom deliberately preserves the existing per-model, research
+    depth, and global reasoning-effort prompts for people who need to tune a
+    run themselves. Cancelling exits rather than beginning an accidental run.
+    """
+    from tradingagents.model_profiles import MODEL_PROFILES
+
+    choices = []
+    for name, profile in MODEL_PROFILES.items():
+        rounds = profile["rounds"]
+        description = PROFILE_MENU_DESCRIPTIONS[name]
+        choices.append(
+            questionary.Choice(
+                f"{profile['label']} — {description} — "
+                f"{rounds} debate / {rounds} risk rounds",
+                value=name,
+            )
+        )
+    choices.append(
+        questionary.Choice(
+            "Custom — choose research depth, models, and reasoning effort",
+            value="custom",
+        )
+    )
+
+    choice = questionary.select(
+        "Select Your [OpenAI Agent Profile]:",
+        choices=choices,
+        default=default,
+        instruction="\n- Balanced is the default\n- Choose Custom for individual controls",
+        style=questionary.Style(
+            [
+                ("selected", "fg:yellow noinherit"),
+                ("highlighted", "fg:yellow noinherit"),
+                ("pointer", "fg:yellow noinherit"),
+            ]
+        ),
+    ).ask()
+    if choice is None:
+        console.print("\n[red]No OpenAI profile selected. Exiting...[/red]")
+        raise SystemExit(1)
+    return choice
+
+
 # Mainstream OpenRouter chat-LLM provider namespaces. We surface the newest
 # models from these rather than the universal-newest, which is dominated by
 # niche/experimental releases. These are the general-purpose chat providers;
@@ -302,6 +356,9 @@ def _select_model(provider: str, mode: str) -> str:
 
     choice = questionary.select(
         f"Select Your [{mode.title()}-Thinking LLM Engine]:",
+        # Keep cost-conscious initial choices when sorting the catalog.
+        default={"quick": "gpt-5.6-luna", "deep": "gpt-5.6-sol"}[mode]
+        if provider.lower() == "openai" else None,
         choices=[
             questionary.Choice(display, value=value)
             for display, value in get_model_options(provider, mode)

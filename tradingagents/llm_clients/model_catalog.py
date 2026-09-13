@@ -96,17 +96,24 @@ _MINIMAX_MODELS: dict[str, list[ModelOption]] = {
 
 
 MODEL_OPTIONS: ProviderModeOptions = {
+    # Newest generation first; within a generation, highest capability first.
+    # Use explicit IDs in menus; accept documented aliases separately below.
     "openai": {
         "quick": [
-            ("GPT-5.6 Luna - Fast, cost-efficient frontier", "gpt-5.6-luna"),
+            ("GPT-6 Astra - Most capable reasoning", "gpt-6-astra"),
+            ("GPT-5.6 Sol - Frontier reasoning", "gpt-5.6-sol"),
             ("GPT-5.6 Terra - Balances intelligence and cost", "gpt-5.6-terra"),
+            ("GPT-5.6 Luna - Fast, cost-efficient frontier", "gpt-5.6-luna"),
             ("GPT-5.4 Mini - Fast, strong coding and tool use", "gpt-5.4-mini"),
+            ("Custom model ID", "custom"),
         ],
         "deep": [
-            ("GPT-5.6 - Latest frontier reasoning (Sol)", "gpt-5.6"),
+            ("GPT-6 Astra - Most capable reasoning", "gpt-6-astra"),
+            ("GPT-5.6 Sol - Frontier reasoning", "gpt-5.6-sol"),
             ("GPT-5.6 Terra - Balances intelligence and cost", "gpt-5.6-terra"),
             ("GPT-5.5 - Previous-gen frontier, 1M context", "gpt-5.5"),
             ("GPT-5.4 - Cost-effective, 1M context", "gpt-5.4"),
+            ("Custom model ID", "custom"),
         ],
     },
     "anthropic": {
@@ -213,15 +220,20 @@ def get_model_options(provider: str, mode: str) -> list[ModelOption]:
     return MODEL_OPTIONS[provider.lower()][mode]
 
 
+# https://developers.openai.com/api/docs/models/gpt-5.6-sol
+MODEL_ALIASES = {"openai": {"gpt-5.6": "gpt-5.6-sol"}}
+
+
 def get_known_models() -> dict[str, list[str]]:
-    """Build known model names from the shared CLI catalog."""
+    """Build known model names from the CLI catalog and documented aliases."""
     return {
         provider: sorted(
             {
                 value
                 for options in mode_options.values()
                 for _, value in options
-            }
+                if value != "custom"
+            } | set(MODEL_ALIASES.get(provider, {}))
         )
         for provider, mode_options in MODEL_OPTIONS.items()
     }

@@ -61,6 +61,7 @@ class TestCliSkipsPromptsFromEnv(unittest.TestCase):
              mock.patch.object(m, "select_research_depth", return_value=1), \
              mock.patch.object(m, "ensure_api_key") as ensure_key, \
              mock.patch.object(m, "select_llm_provider") as prompt_provider, \
+             mock.patch.object(m, "select_model_profile", return_value="custom") as prompt_profile, \
              mock.patch.object(m, "ask_output_language") as prompt_lang, \
              mock.patch.object(m, "select_shallow_thinking_agent") as prompt_quick, \
              mock.patch.object(m, "select_deep_thinking_agent") as prompt_deep:
@@ -68,6 +69,9 @@ class TestCliSkipsPromptsFromEnv(unittest.TestCase):
 
         # None of the LLM selection prompts should have been shown.
         prompt_provider.assert_not_called()
+        # OpenAI from the launcher still offers profiles, with Custom selected
+        # because explicit model environment overrides are already in effect.
+        prompt_profile.assert_called_once_with("custom")
         prompt_lang.assert_not_called()
         prompt_quick.assert_not_called()
         prompt_deep.assert_not_called()
@@ -104,6 +108,7 @@ class TestResearchDepthSkippedFromEnv(unittest.TestCase):
              mock.patch.object(m, "select_research_depth") as prompt_depth, \
              mock.patch.object(m, "ensure_api_key"), \
              mock.patch.object(m, "select_llm_provider", return_value=("openai", None)), \
+             mock.patch.object(m, "select_model_profile", return_value="custom"), \
              mock.patch.object(m, "ask_output_language", return_value="English"), \
              mock.patch.object(m, "select_shallow_thinking_agent", return_value="gpt-5.4-mini"), \
              mock.patch.object(m, "select_deep_thinking_agent", return_value="gpt-5.5"), \
@@ -134,6 +139,7 @@ class TestReasoningEffortSkippedFromEnv(unittest.TestCase):
              mock.patch.object(m, "select_research_depth", return_value=1), \
              mock.patch.object(m, "ensure_api_key"), \
              mock.patch.object(m, "select_llm_provider", return_value=("openai", None)), \
+             mock.patch.object(m, "select_model_profile", return_value="custom"), \
              mock.patch.object(m, "ask_output_language", return_value="English"), \
              mock.patch.object(m, "select_shallow_thinking_agent", return_value="gpt-5.4-mini"), \
              mock.patch.object(m, "select_deep_thinking_agent", return_value="gpt-5.5"), \

@@ -23,6 +23,15 @@ class DummyLLMClient(BaseLLMClient):
 
 @pytest.mark.unit
 class ModelValidationTests(unittest.TestCase):
+    def test_sol_explicit_id_and_alias_are_recognized(self):
+        for model in ("gpt-5.6-sol", "gpt-5.6", "gpt-6-astra"):
+            with self.subTest(model=model), warnings.catch_warnings(record=True) as caught:
+                DummyLLMClient("openai", model).get_llm()
+                self.assertEqual(caught, [])
+
+    def test_custom_menu_sentinel_is_not_a_known_model(self):
+        self.assertFalse(validate_model("openai", "custom"))
+
     def test_cli_catalog_models_are_all_validator_approved(self):
         for provider, models in get_known_models().items():
             if provider in ("ollama", "openrouter"):
