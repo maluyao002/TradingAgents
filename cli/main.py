@@ -38,6 +38,7 @@ from cli.utils import (
     select_analysts,
     select_deep_thinking_agent,
     select_llm_provider,
+    select_model_profile,
     select_research_depth,
     select_shallow_thinking_agent,
 )
@@ -49,6 +50,7 @@ from tradingagents.graph.analyst_execution import (
     sync_analyst_tracker_from_chunk,
 )
 from tradingagents.graph.trading_graph import TradingAgentsGraph
+from tradingagents.model_profiles import MODEL_PROFILES, apply_model_profile
 from tradingagents.reporting import write_report_tree
 
 console = Console()
@@ -106,6 +108,7 @@ class MessageBuffer:
     def __init__(self, max_length=100):
         self.messages = deque(maxlen=max_length)
         self.tool_calls = deque(maxlen=max_length)
+        self.activity = deque(maxlen=max_length)
         self.current_report = None
         self.final_report = None  # Store the complete final report
         self.agent_status = {}
@@ -147,6 +150,7 @@ class MessageBuffer:
         self.current_agent = None
         self.messages.clear()
         self.tool_calls.clear()
+        self.activity.clear()
         self._processed_message_ids.clear()
 
     def get_completed_reports_count(self):
@@ -173,10 +177,12 @@ class MessageBuffer:
     def add_message(self, message_type, content):
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         self.messages.append((timestamp, message_type, content))
+        self.activity.append((timestamp, message_type, content))
 
     def add_tool_call(self, tool_name, args):
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         self.tool_calls.append((timestamp, tool_name, args))
+        self.activity.append((timestamp, "Tool", f"{tool_name}: {format_tool_args(args)}"))
 
     def update_agent_status(self, agent, status):
         if agent in self.agent_status:
@@ -285,150 +291,84 @@ def format_tokens(n):
     return str(n)
 
 
-def update_display(layout, spinner_text=None, stats_handler=None, start_time=None):
-    # Header with welcome message
-    layout["header"].update(
-        Panel(
-            "[bold green]Welcome to TradingAgents CLI[/bold green]\n"
-            "[dim]© [Tauric Research](https://github.com/TauricResearch)[/dim]",
-            title="Welcome to TradingAgents",
-            border_style="green",
-            padding=(1, 2),
-            expand=True,
+class AnalysisDashboard:
+    """Rebuild the view on Rich's refresh tick, including terminal resizes."""
+
+    def __init__(self, layout, stats_handler=None, start_time=None):
+        self.layout = layout
+        self.stats_handler = stats_handler
+        self.start_time = start_time
+
+    def __rich_console__(self, render_console, options):
+        update_display(
+            self.layout, stats_handler=self.stats_handler, start_time=self.start_time,
+            terminal_size=(options.max_width, options.height or render_console.height),
         )
+        yield self.layout
+
+
+def update_display(layout, spinner_text=None, stats_handler=None, start_time=None,
+                   terminal_size=None):
+    width, height = terminal_size or (console.width, console.height)
+    # Give the activity panels enough rows before allocating the report preview.
+    # The old 3:5 split left only table headings visible in an 80x24 terminal.
+    upper_height = max(6, min(len(message_buffer.agent_status) + 4, height - 12))
+    layout["upper"].size = upper_height
+    narrow = width < 70
+    if narrow:
+        if layout["upper"].splitter.name != "column":
+            layout["upper"].split_column(Layout(name="progress"), Layout(name="messages"))
+        panel_height = max(3, upper_height // 2)
+        layout["progress"].size = panel_height
+    else:
+        if layout["upper"].splitter.name != "row":
+            layout["upper"].split_row(Layout(name="progress", ratio=2), Layout(name="messages", ratio=3))
+        panel_height = upper_height
+
+    complete = bool(message_buffer.agent_status) and all(
+        status == "completed" for status in message_buffer.agent_status.values()
     )
+    heading = "Analysis complete" if complete else "Analysis in progress"
+    layout["header"].update(Panel(
+        f"[bold green]TradingAgents[/bold green] · {heading}",
+        border_style="green", padding=(0, 1),
+    ))
 
-    # Progress panel showing agent status
-    progress_table = Table(
-        show_header=True,
-        header_style="bold magenta",
-        show_footer=False,
-        box=box.SIMPLE_HEAD,  # Use simple header with horizontal lines
-        title=None,  # Remove the redundant Progress title
-        padding=(0, 2),  # Add horizontal padding
-        expand=True,  # Make table expand to fill available space
-    )
-    progress_table.add_column("Team", style="cyan", justify="center", width=20)
-    progress_table.add_column("Agent", style="green", justify="center", width=20)
-    progress_table.add_column("Status", style="yellow", justify="center", width=20)
-
-    # Group agents by team - filter to only include agents in agent_status
-    all_teams = {
-        "Analyst Team": [
-            "Market Analyst",
-            "Sentiment Analyst",
-            "News Analyst",
-            "Fundamentals Analyst",
-        ],
-        "Research Team": ["Bull Researcher", "Bear Researcher", "Research Manager"],
-        "Trading Team": ["Trader"],
-        "Risk Management": ["Aggressive Analyst", "Neutral Analyst", "Conservative Analyst"],
-        "Portfolio Management": ["Portfolio Manager"],
-    }
-
-    # Filter teams to only include agents that are in agent_status
-    teams = {}
-    for team, agents in all_teams.items():
-        active_agents = [a for a in agents if a in message_buffer.agent_status]
-        if active_agents:
-            teams[team] = active_agents
-
-    for team, agents in teams.items():
-        # Add first agent with team name
-        first_agent = agents[0]
-        status = message_buffer.agent_status.get(first_agent, "pending")
+    # Compact single-line rows keep the active agent visible on smaller screens.
+    show_header = panel_height >= 7
+    row_limit = max(1, panel_height - (4 if show_header else 2))
+    progress_table = Table(show_header=show_header, box=None, padding=(0, 1), expand=True)
+    progress_table.add_column("Agent", style="cyan", ratio=1, no_wrap=True, overflow="ellipsis")
+    progress_table.add_column("Status", width=9, no_wrap=True)
+    statuses = list(message_buffer.agent_status.items())
+    priority = {"error": 0, "in_progress": 1, "pending": 2, "completed": 3}
+    statuses.sort(key=lambda item: priority.get(item[1], 4))
+    for agent, status in statuses[:row_limit]:
         if status == "in_progress":
-            spinner = Spinner(
-                "dots", text="[blue]in_progress[/blue]", style="bold cyan"
-            )
-            status_cell = spinner
+            cell = Spinner("dots", text="Running", style="cyan")
         else:
-            status_color = {
-                "pending": "yellow",
-                "completed": "green",
-                "error": "red",
-            }.get(status, "white")
-            status_cell = f"[{status_color}]{status}[/{status_color}]"
-        progress_table.add_row(team, first_agent, status_cell)
+            label, color = {"pending": ("Waiting", "yellow"),
+                            "completed": ("Done", "green"),
+                            "error": ("Error", "red")}.get(status, (status, "white"))
+            cell = Text(label, style=color)
+        progress_table.add_row(Text(agent), cell)
+    if not statuses:
+        progress_table.add_row("Preparing analysis", "Waiting")
+    layout["progress"].update(Panel(progress_table, title="Progress", border_style="cyan", padding=(0, 0)))
 
-        # Add remaining agents in team
-        for agent in agents[1:]:
-            status = message_buffer.agent_status.get(agent, "pending")
-            if status == "in_progress":
-                spinner = Spinner(
-                    "dots", text="[blue]in_progress[/blue]", style="bold cyan"
-                )
-                status_cell = spinner
-            else:
-                status_color = {
-                    "pending": "yellow",
-                    "completed": "green",
-                    "error": "red",
-                }.get(status, "white")
-                status_cell = f"[{status_color}]{status}[/{status_color}]"
-            progress_table.add_row("", agent, status_cell)
-
-        # Add horizontal line after each team
-        progress_table.add_row("─" * 20, "─" * 20, "─" * 20, style="dim")
-
-    layout["progress"].update(
-        Panel(progress_table, title="Progress", border_style="cyan", padding=(1, 2))
-    )
-
-    # Messages panel showing recent messages and tool calls
-    messages_table = Table(
-        show_header=True,
-        header_style="bold magenta",
-        show_footer=False,
-        expand=True,  # Make table expand to fill available space
-        box=box.MINIMAL,  # Use minimal box style for a lighter look
-        show_lines=True,  # Keep horizontal lines
-        padding=(0, 1),  # Add some padding between columns
-    )
-    messages_table.add_column("Time", style="cyan", width=8, justify="center")
-    messages_table.add_column("Type", style="green", width=10, justify="center")
-    messages_table.add_column(
-        "Content", style="white", no_wrap=False, ratio=1
-    )  # Make content column expand
-
-    # Combine tool calls and messages
-    all_messages = []
-
-    # Add tool calls
-    for timestamp, tool_name, args in message_buffer.tool_calls:
-        formatted_args = format_tool_args(args)
-        all_messages.append((timestamp, "Tool", f"{tool_name}: {formatted_args}"))
-
-    # Add regular messages
-    for timestamp, msg_type, content in message_buffer.messages:
-        content_str = str(content) if content else ""
-        if len(content_str) > 200:
-            content_str = content_str[:197] + "..."
-        all_messages.append((timestamp, msg_type, content_str))
-
-    # Sort by timestamp descending (newest first)
-    all_messages.sort(key=lambda x: x[0], reverse=True)
-
-    # Calculate how many messages we can show based on available space
-    max_messages = 12
-
-    # Get the first N messages (newest ones)
-    recent_messages = all_messages[:max_messages]
-
-    # Add messages to table (already in newest-first order)
-    for timestamp, msg_type, content in recent_messages:
-        # Format content with word wrapping
-        wrapped_content = Text(content, overflow="fold")
-        messages_table.add_row(timestamp, msg_type, wrapped_content)
-
-    layout["messages"].update(
-        Panel(
-            messages_table,
-            title="Messages & Tools",
-            border_style="blue",
-            padding=(1, 2),
-        )
-    )
+    messages_table = Table(show_header=False, box=None, padding=(0, 1), expand=True)
+    messages_table.add_column("Activity", ratio=1, no_wrap=True, overflow="ellipsis")
+    message_height = upper_height - panel_height if narrow else upper_height
+    recent_messages = list(message_buffer.activity)[-max(1, message_height - 2):]
+    for timestamp, msg_type, content in reversed(recent_messages):
+        # Preserve literal tool/model content rather than interpreting Rich markup.
+        text = " ".join(str(content).split())
+        messages_table.add_row(Text(f"{timestamp} {msg_type}: {text}"))
+    if not recent_messages:
+        messages_table.add_row(Text("Waiting for agent activity…", style="dim"))
+    layout["messages"].update(Panel(
+        messages_table, title="Messages & Tools", border_style="blue", padding=(0, 0),
+    ))
 
     # Analysis panel showing current report
     if message_buffer.current_report:
@@ -599,29 +539,7 @@ def get_user_selections():
         f"[green]Selected analysts:[/green] {', '.join(analyst.value for analyst in selected_analysts)}"
     )
 
-    # Step 5: Research depth (skipped when both round counts are set via env).
-    # Research depth maps to the debate + risk round counts; when both are
-    # supplied through TRADINGAGENTS_MAX_DEBATE_ROUNDS / _MAX_RISK_ROUNDS we keep
-    # the run non-interactive and honor the env values (#977).
-    depth_from_env = bool(os.environ.get("TRADINGAGENTS_MAX_DEBATE_ROUNDS")) and bool(
-        os.environ.get("TRADINGAGENTS_MAX_RISK_ROUNDS")
-    )
-    if depth_from_env:
-        selected_research_depth = DEFAULT_CONFIG["max_debate_rounds"]
-        console.print(
-            f"[green]✓ Research depth from environment:[/green] "
-            f"{DEFAULT_CONFIG['max_debate_rounds']} debate / "
-            f"{DEFAULT_CONFIG['max_risk_discuss_rounds']} risk rounds"
-        )
-    else:
-        console.print(
-            create_question_box(
-                "Step 5: Research Depth", "Select your research depth level"
-            )
-        )
-        selected_research_depth = select_research_depth()
-
-    # Step 6: LLM Provider (skipped when set via TRADINGAGENTS_LLM_PROVIDER).
+    # Step 5: LLM Provider (skipped when set via TRADINGAGENTS_LLM_PROVIDER).
     # The backend URL comes from TRADINGAGENTS_LLM_BACKEND_URL when set,
     # otherwise the provider's default endpoint — the same value the menu
     # would have picked.
@@ -638,7 +556,7 @@ def get_user_selections():
     else:
         console.print(
             create_question_box(
-                "Step 6: LLM Provider", "Select your LLM provider"
+                "Step 5: LLM Provider", "Select your LLM provider"
             )
         )
         selected_llm_provider, backend_url = select_llm_provider()
@@ -674,8 +592,62 @@ def get_user_selections():
         # doesn't fail later at the first API call.
         ensure_api_key(selected_llm_provider)
 
-    # Step 7: Thinking agents (skipped when either model is set via environment)
-    if os.environ.get("TRADINGAGENTS_QUICK_THINK_LLM") or os.environ.get("TRADINGAGENTS_DEEP_THINK_LLM"):
+    # Step 6: Native OpenAI profiles set every agent's model and effort. The
+    # profile prompt stays out of non-OpenAI flows. When model environment
+    # variables exist, Custom is preselected so the inherited settings remain
+    # explicit rather than being silently discarded.
+    selected_model_profile = None
+    if selected_llm_provider.lower() == "openai":
+        profile_default = (
+            "custom"
+            if os.environ.get("TRADINGAGENTS_QUICK_THINK_LLM")
+            or os.environ.get("TRADINGAGENTS_DEEP_THINK_LLM")
+            or os.environ.get("TRADINGAGENTS_OPENAI_REASONING_EFFORT")
+            else "balanced"
+        )
+        console.print(
+            create_question_box(
+                "Step 6: OpenAI Agent Profile",
+                "Choose a ready-made model and reasoning plan, or Custom",
+                "Custom" if profile_default == "custom" else "Balanced",
+            )
+        )
+        profile_choice = select_model_profile(profile_default)
+        if profile_choice and profile_choice != "custom":
+            selected_model_profile = profile_choice
+            profile = MODEL_PROFILES[profile_choice]
+            console.print(
+                f"[green]✓ OpenAI profile:[/green] {profile['label']} "
+                f"({profile['rounds']} debate / {profile['rounds']} risk rounds)"
+            )
+
+    # Step 7: Research depth. Profiles supply this setting, while explicit env
+    # round overrides remain visible and win when the effective config is built.
+    depth_from_env = bool(os.environ.get("TRADINGAGENTS_MAX_DEBATE_ROUNDS")) and bool(
+        os.environ.get("TRADINGAGENTS_MAX_RISK_ROUNDS")
+    )
+    if depth_from_env:
+        selected_research_depth = DEFAULT_CONFIG["max_debate_rounds"]
+        console.print(
+            f"[green]✓ Research depth from environment:[/green] "
+            f"{DEFAULT_CONFIG['max_debate_rounds']} debate / "
+            f"{DEFAULT_CONFIG['max_risk_discuss_rounds']} risk rounds"
+        )
+    elif selected_model_profile:
+        selected_research_depth = MODEL_PROFILES[selected_model_profile]["rounds"]
+    else:
+        console.print(
+            create_question_box(
+                "Step 7: Research Depth", "Select your research depth level"
+            )
+        )
+        selected_research_depth = select_research_depth()
+
+    # Step 8: Thinking agents (skipped for a selected profile or env models).
+    if selected_model_profile:
+        selected_shallow_thinker = None
+        selected_deep_thinker = None
+    elif os.environ.get("TRADINGAGENTS_QUICK_THINK_LLM") or os.environ.get("TRADINGAGENTS_DEEP_THINK_LLM"):
         selected_shallow_thinker = DEFAULT_CONFIG["quick_think_llm"]
         selected_deep_thinker = DEFAULT_CONFIG["deep_think_llm"]
         console.print(
@@ -685,13 +657,13 @@ def get_user_selections():
     else:
         console.print(
             create_question_box(
-                "Step 7: Thinking Agents", "Select your thinking agents for analysis"
+                "Step 8: Thinking Agents", "Select your thinking agents for analysis"
             )
         )
         selected_shallow_thinker = select_shallow_thinking_agent(selected_llm_provider)
         selected_deep_thinker = select_deep_thinking_agent(selected_llm_provider)
 
-    # Step 8: Provider-specific reasoning/thinking configuration. Each knob is
+    # Step 9: Provider-specific reasoning/thinking configuration. Each knob is
     # settable via its TRADINGAGENTS_* env var; when that var is set (or the
     # provider itself came from env) the prompt is skipped and the configured
     # value is used — same env-precedence rule as the steps above. None = each
@@ -701,7 +673,11 @@ def get_user_selections():
     anthropic_effort = None
 
     provider_lower = selected_llm_provider.lower()
-    if provider_from_env:
+    if selected_model_profile:
+        # Agent-specific effort comes from the profile. A global OpenAI effort
+        # would overwrite it downstream, so leave it unset.
+        pass
+    elif provider_from_env:
         thinking_level = DEFAULT_CONFIG["google_thinking_level"]
         reasoning_effort = DEFAULT_CONFIG["openai_reasoning_effort"]
         anthropic_effort = DEFAULT_CONFIG["anthropic_effort"]
@@ -714,13 +690,13 @@ def get_user_selections():
     elif provider_lower == "openai":
         reasoning_effort = thinking_value_or_prompt(
             "TRADINGAGENTS_OPENAI_REASONING_EFFORT", "openai_reasoning_effort",
-            "Reasoning effort", "Step 8: Reasoning Effort",
+            "Reasoning effort", "Step 9: Reasoning Effort",
             "Configure OpenAI reasoning effort level", ask_openai_reasoning_effort,
         )
     elif provider_lower == "anthropic":
         anthropic_effort = thinking_value_or_prompt(
             "TRADINGAGENTS_ANTHROPIC_EFFORT", "anthropic_effort",
-            "Claude effort", "Step 8: Effort Level",
+            "Claude effort", "Step 9: Effort Level",
             "Configure Claude effort level", ask_anthropic_effort,
         )
 
@@ -730,6 +706,7 @@ def get_user_selections():
         "analysis_date": analysis_date,
         "analysts": selected_analysts,
         "research_depth": selected_research_depth,
+        "model_profile": selected_model_profile,
         "llm_provider": selected_llm_provider.lower(),
         "backend_url": backend_url,
         "shallow_thinker": selected_shallow_thinker,
@@ -977,22 +954,44 @@ def _build_run_config(selections: dict, checkpoint: bool | None) -> dict:
     Round counts and checkpoint follow "explicit env/flag wins": an env-applied
     value on DEFAULT_CONFIG is preserved unless the user overrode it on the CLI.
     """
-    config = DEFAULT_CONFIG.copy()
+    profile_name = selections.get("model_profile")
+    base_config = DEFAULT_CONFIG.copy()
+    # The interactive provider selection is authoritative here. This matters
+    # when a launcher supplied a non-OpenAI default but the user selected an
+    # OpenAI profile in the CLI.
+    base_config["llm_provider"] = selections["llm_provider"].lower()
+    config = (
+        apply_model_profile(base_config, profile_name)
+        if profile_name
+        else base_config
+    )
     # Research depth sets both round counts, but an explicit env override
     # (TRADINGAGENTS_MAX_DEBATE_ROUNDS / _MAX_RISK_ROUNDS) wins over the
     # interactive selection — leave the env-applied value in place (#977).
-    if not os.environ.get("TRADINGAGENTS_MAX_DEBATE_ROUNDS"):
-        config["max_debate_rounds"] = selections["research_depth"]
-    if not os.environ.get("TRADINGAGENTS_MAX_RISK_ROUNDS"):
-        config["max_risk_discuss_rounds"] = selections["research_depth"]
-    config["quick_think_llm"] = selections["shallow_thinker"]
-    config["deep_think_llm"] = selections["deep_thinker"]
+    if os.environ.get("TRADINGAGENTS_MAX_DEBATE_ROUNDS"):
+        config["max_debate_rounds"] = DEFAULT_CONFIG["max_debate_rounds"]
+    else:
+        config["max_debate_rounds"] = (
+            MODEL_PROFILES[profile_name]["rounds"]
+            if profile_name else selections["research_depth"]
+        )
+    if os.environ.get("TRADINGAGENTS_MAX_RISK_ROUNDS"):
+        config["max_risk_discuss_rounds"] = DEFAULT_CONFIG["max_risk_discuss_rounds"]
+    else:
+        config["max_risk_discuss_rounds"] = (
+            MODEL_PROFILES[profile_name]["rounds"]
+            if profile_name else selections["research_depth"]
+        )
+    if not profile_name:
+        config["quick_think_llm"] = selections["shallow_thinker"]
+        config["deep_think_llm"] = selections["deep_thinker"]
     config["backend_url"] = selections["backend_url"]
     config["llm_provider"] = selections["llm_provider"].lower()
     # Provider-specific thinking configuration
-    config["google_thinking_level"] = selections.get("google_thinking_level")
-    config["openai_reasoning_effort"] = selections.get("openai_reasoning_effort")
-    config["anthropic_effort"] = selections.get("anthropic_effort")
+    if not profile_name:
+        config["google_thinking_level"] = selections.get("google_thinking_level")
+        config["openai_reasoning_effort"] = selections.get("openai_reasoning_effort")
+        config["anthropic_effort"] = selections.get("anthropic_effort")
     config["output_language"] = selections.get("output_language", "English")
     # --checkpoint/--no-checkpoint overrides only when explicitly given; omitting
     # the flag preserves TRADINGAGENTS_CHECKPOINT_ENABLED / the default (#976).
@@ -1001,11 +1000,65 @@ def _build_run_config(selections: dict, checkpoint: bool | None) -> dict:
     return config
 
 
+def _display_profile_summary(config: dict, selected_analysts) -> None:
+    """Show the effective profile settings immediately before a paid run."""
+    profile_name = config.get("model_profile")
+    if not profile_name:
+        return
+
+    table = Table(box=box.SIMPLE, show_header=True, header_style="bold cyan")
+    table.add_column("Agent")
+    table.add_column("Model")
+    table.add_column("Reasoning")
+    display_names = {
+        "market": "Market / Technical Analyst",
+        "social": "Sentiment Analyst",
+        "news": "News Analyst",
+        "fundamentals": "Fundamentals Analyst",
+        "bull": "Bull Researcher",
+        "bear": "Bear Researcher",
+        "research_manager": "Research Manager",
+        "trader": "Trader",
+        "aggressive": "Aggressive Risk Analyst",
+        "neutral": "Neutral Risk Analyst",
+        "conservative": "Conservative Risk Analyst",
+        "portfolio_manager": "Portfolio Manager",
+    }
+    selected_roles = [getattr(analyst, "value", analyst) for analyst in selected_analysts]
+    core_roles = [
+        "bull", "bear", "research_manager", "trader", "aggressive",
+        "neutral", "conservative", "portfolio_manager",
+    ]
+    for role in dict.fromkeys(selected_roles + core_roles):
+        settings = config["agent_models"][role]
+        table.add_row(
+            display_names[role],
+            settings["model"],
+            settings["reasoning_effort"],
+        )
+    table.caption = (
+        "Signal processing is deterministic. Outcome reflection uses the profile's "
+        "separate reflection helper."
+    )
+    console.print(
+        Panel(
+            table,
+            title=(
+                f"OpenAI {MODEL_PROFILES[profile_name]['label']} Profile — "
+                f"{config['max_debate_rounds']} debate / "
+                f"{config['max_risk_discuss_rounds']} risk rounds"
+            ),
+            border_style="green",
+        )
+    )
+
+
 def run_analysis(checkpoint: bool | None = None):
     # First get all user selections
     selections = get_user_selections()
 
     config = _build_run_config(selections, checkpoint)
+    _display_profile_summary(config, selections["analysts"])
 
     # Create stats callback handler for tracking LLM/tool calls
     stats_handler = StatsCallbackHandler()
@@ -1081,10 +1134,8 @@ def run_analysis(checkpoint: bool | None = None):
     # Now start the display layout
     layout = create_layout()
 
-    with Live(layout, refresh_per_second=4):
-        # Initial display
-        update_display(layout, stats_handler=stats_handler, start_time=start_time)
-
+    dashboard = AnalysisDashboard(layout, stats_handler, start_time)
+    with Live(dashboard, console=console, refresh_per_second=4):
         # Add initial messages
         message_buffer.add_message("System", f"Selected ticker: {selections['ticker']}")
         if selections["asset_type"] != "stock":
@@ -1096,19 +1147,12 @@ def run_analysis(checkpoint: bool | None = None):
             "System",
             f"Selected analysts: {', '.join(analyst.value for analyst in selections['analysts'])}",
         )
-        update_display(layout, stats_handler=stats_handler, start_time=start_time)
 
         # Update agent status to in_progress for the first analyst
         first_analyst = get_initial_analyst_node(analyst_execution_plan)
         message_buffer.update_agent_status(first_analyst, "in_progress")
         analyst_wall_time_tracker.mark_started(selected_analyst_keys[0])
-        update_display(layout, stats_handler=stats_handler, start_time=start_time)
 
-        # Create spinner text
-        spinner_text = (
-            f"Analyzing {selections['ticker']} on {selections['analysis_date']}..."
-        )
-        update_display(layout, spinner_text, stats_handler=stats_handler, start_time=start_time)
 
         # Initialize state and get graph args with callbacks.
         # Resolve the instrument identity once here so all agents anchor to
@@ -1238,9 +1282,6 @@ def run_analysis(checkpoint: bool | None = None):
                         message_buffer.update_agent_status("Neutral Analyst", "completed")
                         message_buffer.update_agent_status("Portfolio Manager", "completed")
 
-                # Update the display
-                update_display(layout, stats_handler=stats_handler, start_time=start_time)
-
                 trace.append(chunk)
 
             # Clean run: drop this run's checkpoint so a later run starts fresh.
@@ -1272,7 +1313,6 @@ def run_analysis(checkpoint: bool | None = None):
             if section in final_state:
                 message_buffer.update_report_section(section, final_state[section])
 
-        update_display(layout, stats_handler=stats_handler, start_time=start_time)
 
     # Post-analysis prompts (outside Live context for clean interaction)
     console.print("\n[bold cyan]Analysis Complete![/bold cyan]\n")

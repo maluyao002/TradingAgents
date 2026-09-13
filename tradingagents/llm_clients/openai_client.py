@@ -169,10 +169,10 @@ _PASSTHROUGH_KWARGS = (
 )
 
 # OpenAI's ``reasoning_effort`` is only accepted by reasoning models — the GPT-5
-# family and the o-series. Non-reasoning models (gpt-4.1, gpt-4o, ...) 400 with
+# family, GPT-6 Astra, and the o-series. Non-reasoning models (gpt-4.1, gpt-4o, ...) 400 with
 # "Unsupported parameter: 'reasoning.effort' is not supported with this model".
 # Drop the kwarg for those rather than crash the run.
-_OPENAI_REASONING_MODEL = re.compile(r"^(gpt-5|o[1-9])")
+_OPENAI_REASONING_MODEL = re.compile(r"^(gpt-5|gpt-6-astra(?:$|-)|o[1-9])")
 
 
 def _supports_reasoning_effort(model: str) -> bool:

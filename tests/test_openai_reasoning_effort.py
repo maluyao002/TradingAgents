@@ -2,7 +2,7 @@
 
 Non-reasoning OpenAI models (gpt-4.1, gpt-4o, ...) 400 with "Unsupported
 parameter: 'reasoning.effort'". The client must drop the kwarg for those rather
-than forward it and crash the run. The GPT-5 family and the o-series accept it.
+than forward it and crash the run. GPT-6 Astra, the GPT-5 family, and the o-series accept it.
 """
 
 import pytest
@@ -16,9 +16,20 @@ from tradingagents.llm_clients.openai_client import (
 @pytest.mark.parametrize(
     "model,expected",
     [
-        ("gpt-5.5", True), ("gpt-5.4", True), ("gpt-5.4-mini", True),
-        ("gpt-5.5-pro", True), ("o1", True), ("o3-mini", True),
-        ("gpt-4.1", False), ("gpt-4o", False), ("gpt-4o-mini", False),
+        ("gpt-6-astra", True),
+        ("gpt-5.6-sol", True),
+        ("gpt-5.6", True),  # Documented alias for Sol.
+        ("gpt-5.6-terra", True),
+        ("gpt-5.6-luna", True),
+        ("gpt-5.5-pro", True),
+        ("gpt-5.5", True),
+        ("gpt-5.4", True),
+        ("gpt-5.4-mini", True),
+        ("o3-mini", True),
+        ("o1", True),
+        ("gpt-4.1", False),
+        ("gpt-4o", False),
+        ("gpt-4o-mini", False),
         ("gpt-3.5-turbo", False),
     ],
 )
@@ -35,6 +46,14 @@ def _effort_on(model, monkeypatch):
 
 def test_reasoning_model_receives_effort(monkeypatch):
     assert _effort_on("gpt-5.4-mini", monkeypatch) == "low"
+
+
+@pytest.mark.parametrize("model", ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6"])
+def test_current_models_receive_effort_and_use_responses(model, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    llm = OpenAIClient(model, provider="openai", reasoning_effort="low").get_llm()
+    assert llm.reasoning_effort == "low"
+    assert llm.use_responses_api is True
 
 
 def test_non_reasoning_model_drops_effort(monkeypatch):
