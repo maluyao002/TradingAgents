@@ -116,10 +116,36 @@ class _PreparedEvidence:
     errors: tuple[str, ...] = ()
 
 
-def evidence_output_instruction(role: str | None = None) -> str:
+def evidence_output_instruction(
+    role: str | None = None,
+    *,
+    structured_fields: bool = False,
+) -> str:
     """Return the exact same-call handoff contract for a specialist prompt."""
 
     role_text = f" for the {role} specialist" if role else ""
+    if structured_fields:
+        return f"""
+When the response format supplies structured fields{role_text}, put the complete
+readable analysis in narrative and separately fill caveats, conflicts, and
+evidence_ids. Do not put evidence-handoff markers or a second copy of the
+analysis inside narrative. The application deterministically wraps those typed
+fields in the evidence handoff below without another model call.
+
+Use only exact evidence IDs from the supplied prepared evidence. Do not invent,
+rename, combine, or alter IDs. Cite each supporting ID inline in narrative and
+also include it in evidence_ids. Carry every material limitation and unresolved
+contradiction into caveats or conflicts. Include at least one evidence ID unless
+the prepared evidence has zero sources and facts and explicitly says the data is
+unavailable.
+
+If the provider cannot return the structured fields and instead requests plain
+text, return exactly one block in this form and no prose outside it:
+
+{HANDOFF_START}
+{{"conclusions":["complete readable analysis"],"caveats":["material limitation"],"conflicts":["unresolved conflict"],"evidence_ids":["known-source-or-fact-id"]}}
+{HANDOFF_END}
+"""
     return f"""
 Return the complete analysis{role_text} only as exactly one evidence handoff
 block. Put every conclusion, limitation, and unresolved contradiction in the
@@ -851,7 +877,7 @@ def _inline_evidence_ids(sections: Sequence[str], known_ids: set[str]) -> tuple[
     references: list[str] = []
     for section in sections:
         for match in re.finditer(r"\[([^\[\]\n]+)\](?!\()", section):
-            for token in match.group(1).split(","):
+            for token in re.split(r"[;,]", match.group(1)):
                 item = token.strip()
                 if (
                     item in known_ids

@@ -21,7 +21,7 @@ def _state():
 
 @pytest.mark.unit
 def test_write_report_tree_creates_files(tmp_path):
-    out = write_report_tree(_state(), "AAPL", tmp_path)
+    out = write_report_tree(_state(), "AAPL", tmp_path, {"report_split_files": True})
     assert out.name == "complete_report.md"
     assert (tmp_path / "1_analysts" / "market.md").read_text() == "MKT"
     assert (tmp_path / "1_analysts" / "news.md").read_text() == "NEWS"
@@ -144,3 +144,27 @@ def test_save_reports_defaults_under_results_dir(tmp_path):
     assert out.exists()
     assert out.parent.parent.name == "reports"  # results_dir/reports/AAPL_<stamp>/...
     assert out.parent.name.startswith("AAPL_")
+
+
+@pytest.mark.unit
+def test_default_export_has_one_markdown_and_preserves_every_section(tmp_path):
+    state = _state()
+    state["investment_debate_state"].update(bull_history="BULL", bear_history="BEAR")
+    state["risk_debate_state"].update(aggressive_history="AGGRESSIVE", conservative_history="CONSERVATIVE", neutral_history="NEUTRAL")
+    state["evidence_packets"] = {"market": {"report": "audit evidence"}}
+    report = write_report_tree(state, "AAPL", tmp_path)
+    assert list(tmp_path.rglob("*.md")) == [report]
+    text = report.read_text()
+    for section in ("BULL", "BEAR", "AGGRESSIVE", "CONSERVATIVE", "NEUTRAL", "MKT", "NEWS", "RM PLAN", "TRADE", "PM DECISION"):
+        assert section in text
+    assert text.index("PM DECISION") < text.index("MKT")
+    assert json.loads((tmp_path / "evidence.json").read_text())["evidence_packets"] == state["evidence_packets"]
+
+
+@pytest.mark.unit
+def test_reused_directory_is_rejected_before_overwriting_or_leaving_stale_reports(tmp_path):
+    write_report_tree(_state(), "AAPL", tmp_path, {"report_split_files": True})
+    original = {p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+    with pytest.raises(FileExistsError, match="Choose a new directory"):
+        write_report_tree({"market_report": "NEW RUN"}, "TEST", tmp_path)
+    assert {p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == original

@@ -18,6 +18,7 @@ so that:
 
 from __future__ import annotations
 
+import json
 from enum import Enum
 from typing import Literal
 
@@ -316,8 +317,9 @@ class SentimentReport(BaseModel):
     (dashboards, audit logs, PDF renderers, other agents) can read
     ``overall_band`` and ``overall_score`` without maintaining fragile regex
     fallbacks that drift with every model release. ``narrative`` preserves the
-    rich source-by-source analysis; ``render_sentiment_report`` prepends a
-    deterministic header so the saved report stays human-readable.
+    rich source-by-source analysis. The evidence fields let
+    ``render_sentiment_report`` produce the same validated handoff as the other
+    specialists without asking the model for a second representation.
     """
 
     overall_band: SentimentBand = Field(
@@ -359,19 +361,60 @@ class SentimentReport(BaseModel):
             "Preserve source IDs/URLs and dates when supplied; disclose missing metadata without inventing it. Describe sample counts without implying predictive accuracy. Do not issue transaction instructions or repeat the full news report."
         ),
     )
+    caveats: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Every material limitation on the sentiment assessment, including missing or sparse "
+            "sources, selection bias, duplication, missing timestamps, and limits on what sample "
+            "ratios establish. Use an empty list only when none exist."
+        ),
+    )
+    conflicts: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Unresolved disagreements among the supplied sources or within a source. Preserve the "
+            "competing observations and their evidence IDs. Use an empty list only when none exist."
+        ),
+    )
+    evidence_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Exact source or fact IDs from the supplied prepared evidence that support the "
+            "narrative. Never invent, rename, combine, or alter IDs. Include at least one unless "
+            "the preparation contains no evidence and explicitly reports unavailable data."
+        ),
+    )
 
 
 def render_sentiment_report(report: SentimentReport) -> str:
     """Render a SentimentReport to the markdown shape the rest of the system expects.
 
-    The structured header (band + score + confidence) is prepended to the
-    narrative so the saved report is both human-readable and machine-parseable
-    without regex.
+    The structured header is followed by one machine-readable evidence block.
+    The normal packet builder validates the IDs and turns the block back into a
+    human-readable report while preserving the complete narrative.
     """
-    return "\n".join([
-        f"**Overall Sentiment:** **{report.overall_band.value}** "
-        f"(Score: {report.overall_score:.1f}/10)",
-        f"**Confidence:** {report.confidence.capitalize()}",
-        "",
-        report.narrative,
-    ])
+    # Importing the marker constants here would make the schemas module depend
+    # on the evidence subsystem. Keep their stable wire spelling local while
+    # serializing the typed fields into the same validated contract.
+    handoff = json.dumps(
+        {
+            "conclusions": [report.narrative],
+            "caveats": report.caveats,
+            "conflicts": report.conflicts,
+            "evidence_ids": report.evidence_ids,
+        },
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    )
+    return "\n".join(
+        [
+            f"**Overall Sentiment:** **{report.overall_band.value}** "
+            f"(Score: {report.overall_score:.1f}/10)",
+            f"**Confidence:** {report.confidence.capitalize()}",
+            "",
+            "<!-- EVIDENCE_HANDOFF_START -->",
+            handoff,
+            "<!-- EVIDENCE_HANDOFF_END -->",
+        ]
+    )

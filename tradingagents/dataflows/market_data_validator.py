@@ -11,6 +11,7 @@ claim. Deterministic, no LLM involved.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import datetime, timedelta, timezone
 from importlib.metadata import version
 from typing import Any
 
@@ -27,6 +28,20 @@ DEFAULT_SNAPSHOT_INDICATORS: tuple[str, ...] = (
 )
 
 _TREND_INDICATORS = {"close_10_ema", "close_50_sma", "close_200_sma", "macd"}
+
+
+def _observed_at() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def market_finality_caveat(snapshot: dict[str, Any]) -> str:
+    if snapshot.get("bar_status") == "historical":
+        return "Historical provider daily bar; exchange-final status is not independently verified."
+    return (
+        "PROVISIONAL: daily-bar finality is unverified. The Close field is the latest "
+        "provider price observation, not a confirmed session close; do not say 'closed at'. "
+        "OHLCV, indicators and changes using this row may change before the session ends."
+    )
 
 
 def _indicator_method(name: str) -> str:
@@ -140,8 +155,14 @@ def build_verified_market_snapshot_data(
             "volume": _plain_number(row.get("Volume")),
         })
 
+    observed = _observed_at()
+    # Without exchange/session metadata, retain a conservative worldwide date
+    # boundary (UTC-12), including sessions still active after midnight UTC.
+    recent = rows[-1]["date"] >= (observed - timedelta(hours=12)).date().isoformat()
     return {
         "symbol": symbol.upper(),
+        "observed_at": observed.isoformat(),
+        "bar_status": "provisional" if recent else "historical",
         "requested_date": curr_date,
         "latest_date": rows[-1]["date"],
         "latest_ohlcv": {
@@ -172,6 +193,8 @@ def render_verified_market_snapshot(
         "",
         f"- Requested analysis date: {curr_date}",
         f"- Latest trading row used: {latest_date}",
+        f"- Snapshot observed at (not necessarily provider refresh time): {snapshot.get('observed_at', 'unknown')}",
+        f"- {market_finality_caveat(snapshot)}",
         "- Rows after the requested analysis date are excluded before verification.",
         "",
         "### Latest verified OHLCV row",
@@ -180,7 +203,8 @@ def render_verified_market_snapshot(
         "|---|---:|",
     ]
     for field in ("Open", "High", "Low", "Close", "Volume"):
-        lines.append(f"| {field} | {_fmt(latest.get(field))} |")
+        label = "Close (provisional price)" if field == "Close" and snapshot.get("bar_status") != "historical" else field
+        lines.append(f"| {label} | {_fmt(latest.get(field))} |")
 
     lines += ["", "### Verified technical indicators (latest row)", "",
               "| Indicator | Value |", "|---|---:|"]

@@ -1356,7 +1356,9 @@ def run_analysis(checkpoint: bool | None = None, *, selections=None, codex_adapt
         ).strip()
         save_path = Path(save_path_str)
         try:
-            report_file = save_report_to_disk(final_state, selections["ticker"], save_path, config)
+            split_choice = typer.prompt("Save separate agent Markdown files too?", default="N").strip().upper()
+            report_config = config | {"report_split_files": split_choice in ("Y", "YES")}
+            report_file = save_report_to_disk(final_state, selections["ticker"], save_path, report_config)
             console.print(f"\n[green]✓ Report saved to:[/green] {save_path.resolve()}")
             console.print(f"  [dim]Complete report:[/dim] {report_file.name}")
         except Exception as e:

@@ -5,12 +5,16 @@ labor, growth — from the St. Louis Fed's free API. Used by the news analyst to
 ground macro commentary in actual numbers rather than headlines alone.
 
 A free API key (https://fred.stlouisfed.org/docs/api/api_key.html) is read from
-``FRED_API_KEY``; if it is unset the vendor raises ``FredNotConfiguredError`` so
+``FRED_API_KEY`` or an explicitly configured macOS Keychain item. If neither
+is available, the vendor raises ``FredNotConfiguredError`` so
 the routing layer treats it as "unavailable" rather than a hard crash.
 """
 import logging
 import os
+import subprocess
+import sys
 from datetime import datetime, timedelta
+from functools import lru_cache
 
 import pytz
 import requests
@@ -94,12 +98,34 @@ class FredNotConfiguredError(VendorNotConfiguredError):
     """
 
 
+@lru_cache(maxsize=4)
+def _keychain_key(item: str, account: str, selector: str = "-s") -> str | None:
+    """Read only an explicitly configured macOS item; never log its output."""
+    try:
+        result = subprocess.run(
+            ["/usr/bin/security", "find-generic-password", selector, item,
+             "-a", account, "-w"],
+            capture_output=True, text=True, timeout=15, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return (result.stdout.strip() or None) if result.returncode == 0 else None
+
+
 def get_api_key() -> str:
-    """Retrieve the FRED API key from the environment."""
+    """Prefer the environment, with an opt-in macOS Keychain fallback."""
     api_key = os.getenv("FRED_API_KEY")
+    service = os.getenv("FRED_KEYCHAIN_SERVICE")
+    label = os.getenv("FRED_KEYCHAIN_LABEL")
+    if not api_key and (service or label) and sys.platform == "darwin":
+        api_key = _keychain_key(
+            service or label, os.getenv("FRED_KEYCHAIN_ACCOUNT", "api-key"),
+            "-s" if service else "-l",
+        )
     if not api_key:
         raise FredNotConfiguredError(
-            "FRED_API_KEY environment variable is not set. Get a free key at "
+            "FRED API key is unavailable. Set FRED_API_KEY or configure "
+            "FRED_KEYCHAIN_SERVICE / FRED_KEYCHAIN_LABEL on macOS. Get a free key at "
             "https://fred.stlouisfed.org/docs/api/api_key.html."
         )
     return api_key

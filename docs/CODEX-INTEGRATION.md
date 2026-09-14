@@ -299,3 +299,11 @@ integration tests establish routing, validation and recovery, not model quality.
 
 - [Official app-server protocol](https://learn.chatgpt.com/docs/app-server)
 - [Official authentication](https://learn.chatgpt.com/docs/auth)
+
+### Report exports and market-data availability
+
+Reports now default to one `complete_report.md`, with the portfolio decision first and every analyst and debate section retained. Evidence and run metadata remain in JSON sidecars. Choose “Save separate agent Markdown files too?” when saving to also export individual sections; programmatic callers can set `config["report_split_files"] = True`. Exporting either format makes no model calls. Save into a fresh or empty directory; nonempty destinations are rejected before writing so older files cannot be mixed into a new run.
+
+FRED uses `FRED_API_KEY` when set. On macOS, an existing Keychain item can instead be selected with `FRED_KEYCHAIN_SERVICE` or `FRED_KEYCHAIN_LABEL`, and optionally `FRED_KEYCHAIN_ACCOUNT` (default `api-key`). Service takes precedence over label if both are set. No item names are guessed. Unavailable keys leave macro data explicitly unavailable. Keychain lookup results are cached for the process lifetime; restart after changing or unlocking credentials.
+
+Recent daily prices carry a provisional warning through prepared facts and downstream evidence. Without exchange-session metadata, the conservative date boundary includes any day that could still be current in UTC-12; it does not certify an official closing auction. Observation time is snapshot preparation time and does not guarantee a fresh provider response.

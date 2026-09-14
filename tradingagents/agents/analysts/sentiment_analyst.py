@@ -186,10 +186,12 @@ Fill the following fields:
 - **overall_score**: A number from 0 (maximally bearish) to 10 (maximally bullish); 5 is neutral. Keep it consistent with overall_band.
 - **confidence**: low / medium / high, based on data quality and sample size.
 - **narrative**: Concise source breakdown, evidence limitations, material themes and a compact evidence table. Avoid extended company-news analysis.
+- **caveats**: Every material data or inference limitation as a separate string.
+- **conflicts**: Every unresolved cross-source disagreement as a separate string.
+- **evidence_ids**: Exact supplied source or fact IDs supporting the narrative; do not invent or combine IDs.
 
 {specialist_policy("sentiment")}
-When using structured output, put the complete analysis in the evidence handoff inside the narrative field; do not add separate narrative prose outside that block.
-{evidence_output_instruction("sentiment")}
+{evidence_output_instruction("sentiment", structured_fields=True)}
 {get_language_instruction()}"""
 
 

@@ -205,6 +205,73 @@ def test_inline_numeric_citations_preserve_both_periods_and_dependencies(
     assert "RAW PROVIDER CONTENT" not in rendered
 
 
+@pytest.mark.parametrize("separator", [",", ";", ", ", "; "])
+@pytest.mark.parametrize("include_prepared_on_resume", [False, True])
+def test_grouped_citations_accept_commas_and_semicolons_on_build_and_resume(
+    separator, include_prepared_on_resume,
+):
+    prepared = _prepared("fundamentals")
+    base = {**prepared["facts"][0], "caveats": [], "inputs": []}
+    prepared["facts"] = [
+        {**base, "id": "fundamentals:fact:prior", "value": 10, "period": "FY2024"},
+        {**base, "id": "fundamentals:fact:current", "value": 20},
+    ]
+    citation = separator.join(["fundamentals:fact:current", "fundamentals:fact:prior"])
+    payload = {
+        "conclusions": [f"EPS was 20 versus 10 [{citation}]."],
+        "caveats": [],
+        "conflicts": [],
+        "evidence_ids": ["fundamentals:source:1"],
+    }
+    original = f"{HANDOFF_START}\n{json.dumps(payload)}\n{HANDOFF_END}"
+    packet = build_packet("fundamentals", original, prepared)
+    assert packet.compacted
+    assert {
+        "fundamentals:fact:current",
+        "fundamentals:fact:prior",
+    } <= set(packet.evidence_ids)
+
+    serialized = packet.to_dict()
+    serialized["evidence_ids"] = ["fundamentals:source:1"]
+    state = {"evidence_packets": {"fundamentals": serialized}}
+    if include_prepared_on_resume:
+        state["prepared_data"] = {"fundamentals": prepared}
+    rendered = render_analyst_context(state, ["fundamentals"])
+    assert "Complete report (compact handoff unavailable)" not in rendered
+    assert "fundamentals:fact:current |" in rendered
+    assert "fundamentals:fact:prior |" in rendered
+
+
+@pytest.mark.parametrize(
+    "citation",
+    [
+        "market:fact:1; market:fact:missing",
+        "market:fact:1, market:fact:missing",
+        "market:fact:1; news:fact:1",
+    ],
+)
+def test_grouped_citations_still_reject_every_unknown_id_on_build_and_resume(citation):
+    prepared = _prepared()
+    payload = {
+        "conclusions": [f"Reported EPS is 4.2 [{citation}]."],
+        "caveats": [],
+        "conflicts": [],
+        "evidence_ids": ["market:source:1"],
+    }
+    original = f"{HANDOFF_START}\n{json.dumps(payload)}\n{HANDOFF_END}"
+    packet = build_packet("market", original, prepared)
+    assert not packet.compacted
+    assert any("unknown evidence IDs" in error for error in packet.validation_errors)
+
+    valid = build_packet("market", _report(), prepared).to_dict()
+    valid["conclusions"] = payload["conclusions"]
+    rendered = render_analyst_context(
+        {"evidence_packets": {"market": valid}, "prepared_data": {"market": prepared}},
+        ["market"],
+    )
+    assert "Complete report (compact handoff unavailable)" in rendered
+
+
 @pytest.mark.parametrize("citation", ["market:fact:missing", "market:fact:bad!", "news:fact:1"])
 def test_unknown_inline_citation_disables_compaction_including_on_resume(citation):
     prepared = _prepared()

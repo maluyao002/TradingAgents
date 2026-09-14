@@ -14,6 +14,7 @@ from .financial_calculations import free_cash_flow, parse_decimal, plain_number,
 from .interface import route_to_vendor_with_metadata
 from .market_data_validator import (
     build_verified_market_snapshot_data,
+    market_finality_caveat,
     render_verified_market_snapshot,
 )
 
@@ -185,17 +186,26 @@ def prepare_market(ticker: str, date: str) -> dict[str, Any]:
             ],
         }
 
+    finality_caveat = market_finality_caveat(snapshot)
+    caveats.append(finality_caveat)
     raw = render_verified_market_snapshot(snapshot)
-    source_id = _source_id("market-snapshot", "yfinance", ticker, raw)
+    # Observation time is provenance, not evidence identity. Identical prices
+    # and finality status should retain the same citation IDs across fetches.
+    identity = json.dumps(
+        {key: value for key, value in snapshot.items() if key != "observed_at"},
+        sort_keys=True, ensure_ascii=False,
+    )
+    source_id = _source_id("market-snapshot", "yfinance", ticker, identity)
     source = {
         "id": source_id,
         "label": f"Verified market snapshot for {ticker.upper()}",
         "content": raw,
         "vendor": "yfinance",
-        "retrieved_at": _retrieved_at(),
+        "retrieved_at": snapshot.get("observed_at") or _retrieved_at(),
         "published_at": None,
         "period": snapshot["latest_date"],
         "basis": "not_disclosed",
+        "caveats": [finality_caveat],
     }
 
     facts = []
@@ -247,6 +257,9 @@ def prepare_market(ticker: str, date: str) -> dict[str, Any]:
             basis="calculated: 10-row EMA minus 50-row SMA; not a crossover date",
             source_id=source_id, kind="calculated", inputs=[fast["id"], slow["id"]],
         ))
+
+    for fact in facts:
+        fact["caveats"].append(finality_caveat)
 
     return {
         "analysis_date": date,

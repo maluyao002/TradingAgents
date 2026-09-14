@@ -233,3 +233,73 @@ class FredRoutingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@pytest.mark.unit
+def test_keychain_opt_in_and_environment_precedence(monkeypatch):
+    monkeypatch.setattr(fred.sys, "platform", "darwin")
+    monkeypatch.setenv("FRED_KEYCHAIN_SERVICE", "test-fred-service")
+    monkeypatch.setenv("FRED_KEYCHAIN_ACCOUNT", "test-account")
+    monkeypatch.setenv("FRED_API_KEY", "environment-key")
+    with mock.patch.object(fred.subprocess, "run") as run:
+        assert fred.get_api_key() == "environment-key"
+        run.assert_not_called()
+        monkeypatch.delenv("FRED_API_KEY")
+        fred._keychain_key.cache_clear()
+        run.return_value = mock.Mock(returncode=0, stdout="keychain-key\n")
+        assert fred.get_api_key() == "keychain-key"
+        assert fred.get_api_key() == "keychain-key"
+        run.assert_called_once_with(
+            ["/usr/bin/security", "find-generic-password", "-s", "test-fred-service",
+             "-a", "test-account", "-w"],
+            capture_output=True, text=True, timeout=15, check=False,
+        )
+        fred._keychain_key.cache_clear()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("platform,service", [("linux", "test"), ("darwin", "")])
+def test_keychain_requires_macos_and_explicit_service(monkeypatch, platform, service):
+    monkeypatch.delenv("FRED_API_KEY", raising=False)
+    monkeypatch.delenv("FRED_KEYCHAIN_LABEL", raising=False)
+    monkeypatch.setenv("FRED_KEYCHAIN_SERVICE", service)
+    monkeypatch.setattr(fred.sys, "platform", platform)
+    with mock.patch.object(fred.subprocess, "run") as run:
+        with pytest.raises(fred.FredNotConfiguredError):
+            fred.get_api_key()
+        run.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("failure", ["missing", "timeout", "oserror"])
+def test_keychain_failures_are_redacted(monkeypatch, failure):
+    monkeypatch.delenv("FRED_API_KEY", raising=False)
+    monkeypatch.delenv("FRED_KEYCHAIN_LABEL", raising=False)
+    monkeypatch.setenv("FRED_KEYCHAIN_SERVICE", "test")
+    monkeypatch.setattr(fred.sys, "platform", "darwin")
+    fred._keychain_key.cache_clear()
+    with mock.patch.object(fred.subprocess, "run") as run:
+        if failure == "missing":
+            run.return_value = mock.Mock(returncode=1, stdout="secret", stderr="secret")
+        elif failure == "timeout":
+            run.side_effect = fred.subprocess.TimeoutExpired("secret", 15, output="secret")
+        else:
+            run.side_effect = OSError("secret")
+        with pytest.raises(fred.FredNotConfiguredError) as exc:
+            fred.get_api_key()
+        assert "secret" not in str(exc.value)
+    fred._keychain_key.cache_clear()
+
+
+@pytest.mark.unit
+def test_keychain_explicit_label(monkeypatch):
+    monkeypatch.delenv("FRED_API_KEY", raising=False)
+    monkeypatch.delenv("FRED_KEYCHAIN_SERVICE", raising=False)
+    monkeypatch.setenv("FRED_KEYCHAIN_LABEL", "test-label")
+    monkeypatch.setenv("FRED_KEYCHAIN_ACCOUNT", "test-account")
+    monkeypatch.setattr(fred.sys, "platform", "darwin")
+    fred._keychain_key.cache_clear()
+    with mock.patch.object(fred.subprocess, "run", return_value=mock.Mock(returncode=0, stdout="test-key")) as run:
+        assert fred.get_api_key() == "test-key"
+        assert run.call_args.args[0] == ["/usr/bin/security", "find-generic-password", "-l", "test-label", "-a", "test-account", "-w"]
+    fred._keychain_key.cache_clear()

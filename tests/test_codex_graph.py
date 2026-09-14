@@ -42,7 +42,7 @@ class ScriptedAdapter:
         if role in {"market", "news"}:
             return json.dumps({"content": role + " evidence summary", "tool_calls": []})
         if role == "social":
-            return json.dumps({"overall_band": "Mixed", "overall_score": 0, "confidence": "low", "narrative": "Sparse fixture evidence."})
+            return json.dumps({"overall_band": "Mixed", "overall_score": 0, "confidence": "low", "narrative": "Sparse fixture evidence.", "caveats": ["Sparse fixture evidence limits inference."], "conflicts": [], "evidence_ids": ["sentiment-news"]})
         if role == "research_manager":
             return json.dumps({"recommendation": "Hold", "rationale": "Uncertain fixture evidence", "strategic_actions": "Wait for confirmation"})
         if role == "trader":

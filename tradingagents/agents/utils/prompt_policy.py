@@ -2,7 +2,7 @@
 
 import json
 
-PROMPT_POLICY_VERSION = "evidence-v4"
+PROMPT_POLICY_VERSION = "evidence-v5"
 
 
 _OUTPUT_TARGETS = {
