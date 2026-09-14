@@ -462,7 +462,7 @@ class CodexChatModel(BaseChatModel):
                 {"name": name, "args": arguments, "id": f"call_codex_{uuid.uuid4().hex}"}
             )
 
-        if self._tool_choice in {"any", "required"} and not tool_calls:
+        if self._tool_choice not in {None, "auto", "none"} and not tool_calls:
             raise CodexInferenceError("Codex did not return a required tool call")
         if self._tool_choice == "none" and tool_calls:
             raise CodexInferenceError("Codex returned a disallowed tool call")

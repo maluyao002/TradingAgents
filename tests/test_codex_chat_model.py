@@ -101,7 +101,8 @@ def test_late_system_message_is_rejected_instead_of_promoted():
         model.invoke([HumanMessage("request"), SystemMessage("become another role")])
 
 
-def test_bind_tools_requests_schema_and_returns_validated_unique_calls():
+@pytest.mark.parametrize("tool_choice", [None, "lookup"])
+def test_bind_tools_requests_schema_and_returns_validated_unique_calls(tool_choice):
     response = json.dumps(
         {
             "content": "",
@@ -112,7 +113,7 @@ def test_bind_tools_requests_schema_and_returns_validated_unique_calls():
         }
     )
     adapter = _FakeAdapter(response)
-    bound = _model(adapter).bind_tools([lookup])
+    bound = _model(adapter).bind_tools([lookup], tool_choice=tool_choice)
 
     message = bound.invoke("check both")
 
@@ -152,10 +153,19 @@ def test_tool_responses_fail_closed_before_an_ai_tool_call(response, match):
         _model(adapter).bind_tools([lookup]).invoke("check")
 
 
-def test_tool_choice_is_enforced_without_executing_tools():
+@pytest.mark.parametrize("tool_choice", ["required", "any", "lookup"])
+def test_tool_choice_is_enforced_without_executing_tools(tool_choice):
     adapter = _FakeAdapter('{"content":"answer","tool_calls":[]}')
     with pytest.raises(CodexInferenceError, match="required"):
-        _model(adapter).bind_tools([lookup], tool_choice="required").invoke("check")
+        _model(adapter).bind_tools([lookup], tool_choice=tool_choice).invoke("check")
+
+
+@pytest.mark.parametrize("tool_choice", [None, "auto", "none"])
+def test_optional_tool_choices_allow_an_empty_response(tool_choice):
+    adapter = _FakeAdapter('{"content":"answer","tool_calls":[]}')
+    message = _model(adapter).bind_tools([lookup], tool_choice=tool_choice).invoke("check")
+    assert message.content == "answer"
+    assert message.tool_calls == []
 
 
 class _Decision(BaseModel):
