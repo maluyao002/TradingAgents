@@ -38,7 +38,7 @@ passed. Review corrections cover detached descendant cleanup, explicit POSIX
 support, strict authentication/isolation response validation, path-free filesystem
 failures, and detection of all workspace entry types. The Unix socket regression
 requires local IPC permission when tests run in a restricted sandbox. Live gates
-below remain pending. Stage 2 awaits approval; stages 3–5 have not started.
+below remain pending. Stage 2 is merged; stage 3 is in development; stages 4–5 have not started.
 
 The initial transport supports macOS/Linux only. It explicitly rejects Windows
 before launching a subprocess; the existing API backend remains cross-platform.
@@ -70,7 +70,7 @@ permission to enable the complete backend.
 
 ## Stage 2: adapter and startup choice
 
-Implemented in [PR #4](https://github.com/maluyao002/TradingAgents/pull/4), awaiting approval.
+Merged into `feat/codex-integration` in [PR #4](https://github.com/maluyao002/TradingAgents/pull/4).
 Validation: 986 full offline tests and 65 subtests passed; Ruff passed. Independent
 review and focused re-review are complete with no remaining findings. Review fixes
 require explicit effective configuration fields and retain known turn IDs for
@@ -121,9 +121,9 @@ by this backend. Keep the same `TRADINGAGENTS_CODEX_HOME` for later setup checks
 the application deliberately ignores your normal `CODEX_HOME`. The CLI only provides
 guidance when sign-in is missing; it does not read, copy, or display credentials.
 
-Stage 2's adapter is standalone. Connecting the fundamentals analyst is stage 3;
-tool execution and the remaining graph are stage 4. Until then, choose API to run
-a research report. The stage 2 PR must be approved before it is merged.
+Stage 2's adapter is standalone. The stage 3 pilot below connects one fundamentals
+analyst; tool execution and the remaining graph are stage 4. The existing API
+workflow remains available for full research reports.
 
 The adapter's text interface takes explicit role instructions, evidence/history,
 model, and effort for each call. Each call uses a new ephemeral thread, so the
@@ -144,6 +144,81 @@ instruction discovery settings are also checked explicitly. The corrected
 `mcpServerStatus/list` request and isolation checks passed a metadata-only smoke
 check on CLI 0.153.4 with a temporary empty runtime, no authentication reads, and
 zero inference turns. This does not establish model execution or research quality.
+
+## Stage 3: fundamentals-only pilot
+
+Implemented in [PR #5](https://github.com/maluyao002/TradingAgents/pull/5),
+awaiting user approval. Branch: `feat/codex-stage-3`, based on merged stage 2. This pilot
+reuses the existing fundamentals analyst, prepared financial calculations, prompt,
+and evidence-packet validation. It does not change the API research graph.
+
+Run interactively with either backend:
+
+```sh
+tradingagents --backend codex --fundamentals
+tradingagents --backend api --fundamentals
+```
+
+The pilot shows the exact fundamentals model and effort for Quick, Balanced, or
+Deep. Balanced and Deep currently both use Sol/high for this role; the profiles'
+other roles and debate rounds are not part of a single-analyst run. Codex validates
+the selected pair against its catalog; the API pilot explicitly uses OpenAI with
+the same pair. API model entitlement is still checked by the provider. Neither
+backend automatically falls back to the other. The pilot API call disables automatic
+retries, and the Codex inference deadline is five minutes.
+
+For a matched comparison, run the first backend and replay its saved evidence
+through the other. Substitute the current analysis date and the actual result path:
+
+```sh
+python -m cli.fundamentals --backend codex --ticker AMD --date YYYY-MM-DD --profile balanced
+python -m cli.fundamentals --backend api --ticker AMD --date YYYY-MM-DD --profile balanced --evidence reports/fundamentals_RUN/result.json
+```
+
+Each run writes `fundamentals_report.md` and `result.json` to a unique directory
+under ignored `reports/`. The result includes the prepared evidence snapshot,
+validated evidence packet, backend/model/effort, a SHA-256 evidence fingerprint, and elapsed time. Replay uses
+only the source snapshot, never the previous analyst's answer, and rejects a
+ticker/date mismatch. It does not refetch providers. Keep bundles local: they
+contain research/source data and are not intended for a public PR.
+
+With no replay bundle, TradingAgents fetches data through the existing configured
+providers. A historical date may deliberately produce unavailable fundamentals
+because those providers lack point-in-time publication timestamps. This limitation
+is retained, not replaced with current data. Credentials use the existing provider
+setup; Codex sign-in does not grant access to paid data feeds.
+
+The user initiates all live comparisons. Review both reports for continuing versus
+discontinued OCF, four-quarter versus overview FCF horizons, working-capital bridges,
+required financial comparisons, numeric citations, and preserved missing-data
+caveats. Validation status and citation coverage are structural checks, not proof
+of factual correctness or equivalent research quality. No live model comparison
+has been performed during implementation. Full pipeline/progress/checkpoint work
+remains stage 4, and repeated quality/latency/usage evaluation remains stage 5.
+
+Validation uses focused offline checks: 19 new core pilot cases, nine pilot CLI
+cases, and the affected existing CLI, prepared-data, reconciliation, citation, and
+prompt tests. No full-suite rerun or real research inference was needed for this
+stage. Live matched comparison remains pending the user's run. A fresh independent
+read-only review found one portability issue: locale-dependent artifact encoding.
+All artifact reads/writes now use explicit UTF-8, verified by a Unicode round-trip
+test with UTF-8 mode disabled and the C locale. No other actionable findings were reported.
+
+A user-run pilot exposed a documented `warning` notification associated with the
+active thread. An empty-thread metadata check reproduced this event without
+inference. The adapter now accepts well-formed advisory warnings without echoing
+private warning text; unrelated-thread warnings, malformed payloads, unknown
+active-turn events, and tool activity remain rejected. All 59 adapter tests pass,
+including five focused warning/unknown-event regression cases.
+
+A follow-up tiny, user-authorized Codex diagnostic identified
+`thread/settings/updated` during turn startup. The adapter now validates its
+model, effort, provider, workspace, approval settings, and read-only sandbox before
+continuing. A repeat diagnostic using Sol/low received a final text response and
+completed cleanup; no market data or API backend was used. This verifies the live
+protocol path, not AMD research quality or the Balanced/high workload. Unexpected
+known protocol events now include their public method name in diagnostics, never
+their payload. Unknown names stay redacted.
 
 ## Sources
 

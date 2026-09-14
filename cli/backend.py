@@ -31,7 +31,7 @@ def select_backend() -> Backend:
         "How would you like to use TradingAgents?",
         [
             questionary.Choice("API — run analysis with your existing provider", value="api"),
-            questionary.Choice("Codex subscription — check setup (preview)", value="codex"),
+            questionary.Choice("Codex subscription — setup / fundamentals pilot", value="codex"),
         ],
         default="api",
     ))
@@ -53,14 +53,13 @@ def _profile_issues(adapter, name: str) -> list[str]:
 
 
 def run_codex_setup(console: Console) -> None:
-    """Read subscription/model metadata only; the graph is connected in stage 3."""
+    """Read subscription/model metadata only; inference requires the explicit pilot option."""
     from tradingagents.codex.adapter import CodexAdapter, CodexAdapterError
-
     from tradingagents.codex.transport import TransportError
 
     console.print("\n[bold]Codex subscription setup — preview[/bold]")
     console.print(
-        "This checks sign-in and model settings. Research through Codex starts in stage 3."
+        "This checks sign-in and model settings. Use --backend codex --fundamentals for the fundamentals-only pilot."
     )
     home = os.environ.get("TRADINGAGENTS_CODEX_HOME", "~/.tradingagents/codex")
     try:
@@ -112,5 +111,5 @@ def run_codex_setup(console: Console) -> None:
     console.print(
         "\nSetup check complete. No analysis was run and no settings were saved. "
         "Model access and available usage still need a user-run inference check. "
-        "Use --backend api for research until stage 3 is ready."
+        "Use --backend codex --fundamentals for the pilot, or --backend api for the full pipeline."
     )

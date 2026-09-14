@@ -174,12 +174,38 @@ for line in sys.stdin:
             "modelProvider": params["modelProvider"],
             "instructionSources": [],
         }
+        if scenario.startswith("warning-"):
+            warning_params = {"message": "private runtime detail", "threadId": thread_id}
+            if scenario == "warning-global":
+                warning_params.pop("threadId")
+            elif scenario == "warning-other-thread":
+                warning_params["threadId"] = "unknown-thread"
+            elif scenario == "warning-malformed":
+                warning_params["message"] = {"private": "detail"}
+            send({"method": "warning", "params": warning_params})
+        if scenario in {"unknown-active-event", "known-active-event"}:
+            event_method = "thread/queue/changed" if scenario == "known-active-event" else "future/unsafe"
+            send({"method": event_method, "params": {"threadId": thread_id}})
         if scenario == "reused-thread":
             result["thread"]["id"] = "thread-1"
     elif method == "turn/start":
         thread_id = params["threadId"]
         turn_id = "turn-%s" % thread_number
         result = {"turn": {"id": turn_id, "status": "inProgress", "items": []}}
+        if scenario.startswith("settings-"):
+            settings = {
+                "model": params["model"], "effort": params["effort"], "modelProvider": "openai",
+                "cwd": params["cwd"], "approvalPolicy": "never", "approvalsReviewer": "user",
+                "sandboxPolicy": {"type": "readOnly"},
+            }
+            if scenario.startswith("settings-wrong-"):
+                settings[scenario.removeprefix("settings-wrong-")] = "unexpected"
+            event = {"threadId": thread_id, "threadSettings": settings}
+            if scenario == "settings-other-thread":
+                event["threadId"] = "unknown-thread"
+            if scenario == "settings-malformed":
+                event["threadSettings"] = None
+            send({"method": "thread/settings/updated", "params": event})
         if scenario == "malformed-turn-start":
             result["turn"]["items"] = None
         send({"id": request_id, "result": result})
@@ -485,3 +511,51 @@ def test_reentering_adapter_repeats_server_scoped_isolation_checks(tmp_path):
     assert methods.count("config/read") == 2
     assert methods.count("mcpServerStatus/list") == 2
     assert methods.count("experimentalFeature/list") == 2
+
+
+@pytest.mark.parametrize("scenario", ["warning-thread", "warning-global"])
+def test_advisory_warnings_do_not_abort_text_analysis(tmp_path, scenario):
+    adapter, log = _adapter(tmp_path, scenario)
+    with adapter:
+        assert adapter.complete("Role", "Evidence", "gpt-test-terra", "medium") == "final analysis"
+    assert "turn/interrupt" not in [request["method"] for request in _requests(log)]
+
+
+@pytest.mark.parametrize("scenario,match", [
+    ("warning-other-thread", "unknown thread"),
+    ("warning-malformed", "invalid warning"),
+    ("unknown-active-event", "unexpected active-turn"),
+])
+def test_warning_support_keeps_unknown_and_invalid_events_rejected(tmp_path, scenario, match):
+    adapter, log = _adapter(tmp_path, scenario)
+    with adapter, pytest.raises(CodexInferenceError, match=match) as caught:
+        adapter.complete("Role", "Evidence", "gpt-test-terra", "medium")
+    assert "private" not in str(caught.value)
+    methods = [request["method"] for request in _requests(log)]
+    assert "turn/interrupt" in methods
+    assert "thread/unsubscribe" in methods
+
+
+def test_settings_update_before_turn_response_allows_matching_configuration(tmp_path):
+    adapter, _ = _adapter(tmp_path, "settings-valid")
+    with adapter:
+        assert adapter.complete("Role", "Evidence", "gpt-test-terra", "medium") == "final analysis"
+
+
+@pytest.mark.parametrize("scenario", [
+    "settings-wrong-model", "settings-wrong-effort", "settings-wrong-modelProvider",
+    "settings-wrong-cwd", "settings-wrong-approvalPolicy", "settings-wrong-approvalsReviewer",
+    "settings-wrong-sandboxPolicy", "settings-other-thread", "settings-malformed",
+])
+def test_unsafe_settings_updates_abort_and_clean_up(tmp_path, scenario):
+    adapter, log = _adapter(tmp_path, scenario)
+    with adapter, pytest.raises(CodexInferenceError, match="settings") as caught:
+        adapter.complete("Role", "Evidence", "gpt-test-terra", "medium")
+    assert str(tmp_path) not in str(caught.value)
+    assert "turn/interrupt" in [request["method"] for request in _requests(log)]
+
+
+def test_known_unhandled_method_is_named_without_payload(tmp_path):
+    adapter, _ = _adapter(tmp_path, "known-active-event")
+    with adapter, pytest.raises(CodexInferenceError, match=r"notification \(thread/queue/changed\)"):
+        adapter.complete("Role", "Evidence", "gpt-test-terra", "medium")
