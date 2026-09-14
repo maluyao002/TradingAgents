@@ -1,8 +1,8 @@
 """Offline coverage for the fundamentals-only backend pilot."""
 
 import json
-from datetime import date, timedelta
 from copy import deepcopy
+from datetime import date, timedelta
 from unittest.mock import MagicMock
 
 import pytest
@@ -112,7 +112,7 @@ def test_matched_api_and_codex_use_same_analyst_prompt_and_snapshot(monkeypatch)
     system = api_prompts[0][0].content
     assert adapter.calls[0][0] == system
     api_history = api_prompts[0][1:]
-    assert [type(message) for message in api_history] == [HumanMessage, HumanMessage]
+    assert [type(message) for message in api_history] == [HumanMessage, HumanMessage, HumanMessage]
     assert all(f"<human>\n{message.content}\n</human>" in adapter.calls[0][1]
                for message in api_history)
     assert "OCF includes continuing and discontinued operations" in adapter.calls[0][1]

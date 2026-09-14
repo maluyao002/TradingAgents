@@ -21,7 +21,7 @@ from rich.table import Table
 from rich.text import Text
 
 from cli.announcements import display_announcements, fetch_announcements
-from cli.backend import Backend, run_codex_setup, select_backend
+from cli.backend import Backend, select_backend
 from cli.stats_handler import StatsCallbackHandler
 from cli.utils import (
     ask_anthropic_effort,
@@ -435,7 +435,7 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
     layout["footer"].update(Panel(stats_table, border_style="grey50"))
 
 
-def get_user_selections():
+def get_user_selections(codex_adapter=None):
     """Get all user selections before starting the analysis display."""
     # Display ASCII art welcome message
     with open(Path(__file__).parent / "static" / "welcome.txt", encoding="utf-8") as f:
@@ -541,6 +541,20 @@ def get_user_selections():
     console.print(
         f"[green]Selected analysts:[/green] {', '.join(analyst.value for analyst in selected_analysts)}"
     )
+
+    if codex_adapter is not None:
+        from cli.backend import select_codex_profile
+        # The subscription path never prompts for or constructs an API provider.
+        selected_model_profile = select_codex_profile(codex_adapter)
+        return {
+            "ticker": selected_ticker, "asset_type": asset_type.value,
+            "analysis_date": analysis_date, "analysts": selected_analysts,
+            "research_depth": MODEL_PROFILES[selected_model_profile]["rounds"],
+            "model_profile": selected_model_profile,
+            "llm_backend": "codex", "llm_provider": "openai",
+            "backend_url": None, "shallow_thinker": None, "deep_thinker": None,
+            "output_language": output_language,
+        }
 
     # Step 5: LLM Provider (skipped when set via TRADINGAGENTS_LLM_PROVIDER).
     # The backend URL comes from TRADINGAGENTS_LLM_BACKEND_URL when set,
@@ -988,6 +1002,7 @@ def _build_run_config(selections: dict, checkpoint: bool | None) -> dict:
     if not profile_name:
         config["quick_think_llm"] = selections["shallow_thinker"]
         config["deep_think_llm"] = selections["deep_thinker"]
+    config["llm_backend"] = selections.get("llm_backend", "api")
     config["backend_url"] = selections["backend_url"]
     config["llm_provider"] = selections["llm_provider"].lower()
     # Provider-specific thinking configuration
@@ -1047,7 +1062,7 @@ def _display_profile_summary(config: dict, selected_analysts) -> None:
         Panel(
             table,
             title=(
-                f"OpenAI {MODEL_PROFILES[profile_name]['label']} Profile — "
+                f"{'Codex' if config.get('llm_backend') == 'codex' else 'OpenAI'} {MODEL_PROFILES[profile_name]['label']} Profile — "
                 f"{config['max_debate_rounds']} debate / "
                 f"{config['max_risk_discuss_rounds']} risk rounds"
             ),
@@ -1057,9 +1072,9 @@ def _display_profile_summary(config: dict, selected_analysts) -> None:
 
 
 @run_data_scope
-def run_analysis(checkpoint: bool | None = None):
+def run_analysis(checkpoint: bool | None = None, *, selections=None, codex_adapter=None):
     # First get all user selections
-    selections = get_user_selections()
+    selections = selections if selections is not None else get_user_selections()
 
     config = _build_run_config(selections, checkpoint)
     _display_profile_summary(config, selections["analysts"])
@@ -1074,11 +1089,13 @@ def run_analysis(checkpoint: bool | None = None):
     analyst_wall_time_tracker = AnalystWallTimeTracker(analyst_execution_plan)
 
     # Initialize the graph with callbacks bound to LLMs
+    backend_kwargs = {"codex_adapter": codex_adapter} if codex_adapter is not None else {}
     graph = TradingAgentsGraph(
         selected_analyst_keys,
         config=config,
         debug=True,
         callbacks=[stats_handler],
+        **backend_kwargs,
     )
 
     # Initialize message buffer with selected analysts
@@ -1339,7 +1356,9 @@ def run_analysis(checkpoint: bool | None = None):
         ).strip()
         save_path = Path(save_path_str)
         try:
-            report_file = save_report_to_disk(final_state, selections["ticker"], save_path, config)
+            split_choice = typer.prompt("Save separate agent Markdown files too?", default="N").strip().upper()
+            report_config = config | {"report_split_files": split_choice in ("Y", "YES")}
+            report_file = save_report_to_disk(final_state, selections["ticker"], save_path, report_config)
             console.print(f"\n[green]✓ Report saved to:[/green] {save_path.resolve()}")
             console.print(f"  [dim]Complete report:[/dim] {report_file.name}")
         except Exception as e:
@@ -1349,6 +1368,28 @@ def run_analysis(checkpoint: bool | None = None):
     display_choice = typer.prompt("\nDisplay full report on screen?", default="Y").strip().upper()
     if display_choice in ("Y", "YES", ""):
         display_complete_report(final_state)
+
+
+def run_codex_analysis(checkpoint=None, clear_checkpoints=False):
+    """Own the isolated runtime for the whole run, including failure cleanup."""
+    from tradingagents.codex.adapter import CodexAdapter, CodexAdapterError
+    from tradingagents.codex.transport import TransportError
+
+    try:
+        home = os.environ.get("TRADINGAGENTS_CODEX_HOME", "~/.tradingagents/codex")
+        with CodexAdapter(home=home, timeout=300) as adapter:
+            selections = get_user_selections(codex_adapter=adapter)
+            if clear_checkpoints:
+                from tradingagents.graph.checkpointer import clear_all_checkpoints
+                directory = Path(DEFAULT_CONFIG["data_cache_dir"]) / "codex"
+                count = clear_all_checkpoints(directory)
+                console.print(f"Cleared {count} Codex checkpoint(s).", markup=False)
+            run_analysis(checkpoint=checkpoint, selections=selections, codex_adapter=adapter)
+    except (CodexAdapterError, TransportError) as exc:
+        console.print(f"Codex analysis failed: {exc}", markup=False)
+        console.print("No API fallback was attempted. If checkpoints were enabled, rerun "
+                      "with the same settings to resume from the last completed node.", markup=False)
+        raise typer.Exit(code=1) from None
 
 
 @app.command()
@@ -1380,9 +1421,7 @@ def analyze(
             run_pilot(console, selected_backend)
             return
         if selected_backend == Backend.CODEX:
-            if clear_checkpoints or checkpoint is not None:
-                raise typer.BadParameter("Checkpoint options apply to API analysis, not the Codex setup preview.")
-            run_codex_setup(console)
+            run_codex_analysis(checkpoint=checkpoint, clear_checkpoints=clear_checkpoints)
             return
         if clear_checkpoints:
             from tradingagents.graph.checkpointer import clear_all_checkpoints

@@ -17,10 +17,14 @@ class StatsCallbackHandler(BaseCallbackHandler):
         self.tokens_in = 0
         self.tokens_out = 0
         self.cached_tokens_in = 0
+        self.reasoning_tokens_out = 0
+        self.total_tokens = 0
         self._usage_seen = {
             "input_tokens": False,
             "output_tokens": False,
             "cached_input_tokens": False,
+            "reasoning_output_tokens": False,
+            "total_tokens": False,
         }
         self._runs: dict[str, str] = {}
         self._per_model: dict[str, dict[str, int | bool]] = {}
@@ -31,9 +35,13 @@ class StatsCallbackHandler(BaseCallbackHandler):
             "input_tokens": 0,
             "output_tokens": 0,
             "cached_input_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 0,
             "input_seen": False,
             "output_seen": False,
             "cached_seen": False,
+            "reasoning_seen": False,
+            "total_seen": False,
             "calls_started": 0,
             "calls_finished": 0,
             "calls_with_usage": 0,
@@ -122,8 +130,16 @@ class StatsCallbackHandler(BaseCallbackHandler):
                 cached = value
         input_tokens = number("input_tokens", "prompt_tokens")
         output_tokens = number("output_tokens", "completion_tokens")
+        total_tokens = number("total_tokens")
+        reasoning = number("reasoning_output_tokens")
+        output_details = usage_metadata.get("output_token_details")
+        if reasoning is None and isinstance(output_details, dict):
+            value = output_details.get("reasoning")
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                reasoning = value
         with self._lock:
-            per_model["calls_with_usage"] += 1
+            if input_tokens is not None and output_tokens is not None:
+                per_model["calls_with_usage"] += 1
             if input_tokens is not None:
                 self.tokens_in += input_tokens
                 self._usage_seen["input_tokens"] = True
@@ -139,6 +155,16 @@ class StatsCallbackHandler(BaseCallbackHandler):
                 self._usage_seen["cached_input_tokens"] = True
                 per_model["cached_input_tokens"] += cached
                 per_model["cached_seen"] = True
+            if reasoning is not None:
+                self.reasoning_tokens_out += reasoning
+                self._usage_seen["reasoning_output_tokens"] = True
+                per_model["reasoning_output_tokens"] += reasoning
+                per_model["reasoning_seen"] = True
+            if total_tokens is not None:
+                self.total_tokens += total_tokens
+                self._usage_seen["total_tokens"] = True
+                per_model["total_tokens"] += total_tokens
+                per_model["total_seen"] = True
 
     def on_llm_error(self, error: BaseException, **kwargs: Any) -> None:
         """Close failed calls so persisted completeness reports their missing usage."""
@@ -179,6 +205,10 @@ class StatsCallbackHandler(BaseCallbackHandler):
                         values["cached_input_tokens"] if values["cached_seen"] else None
                     ),
                     "calls_started": values["calls_started"],
+                    "reasoning_output_tokens": (
+                        values["reasoning_output_tokens"] if values["reasoning_seen"] else None
+                    ),
+                    "total_tokens": values["total_tokens"] if values["total_seen"] else None,
                     "calls_finished": values["calls_finished"],
                     "calls_with_usage": values["calls_with_usage"],
                     "usage_complete": (
@@ -197,6 +227,10 @@ class StatsCallbackHandler(BaseCallbackHandler):
                     self.cached_tokens_in if self._usage_seen["cached_input_tokens"] else None
                 ),
                 "per_model": per_model,
+                "reasoning_output_tokens": (
+                    self.reasoning_tokens_out if self._usage_seen["reasoning_output_tokens"] else None
+                ),
+                "total_tokens": self.total_tokens if self._usage_seen["total_tokens"] else None,
                 "usage_completeness": {
                     "calls_started": self.llm_calls,
                     "calls_finished": calls_finished,

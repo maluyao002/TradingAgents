@@ -1,7 +1,7 @@
 """Reusable report-tree writer shared by the CLI and the programmatic API.
 
-Writes a run's per-section markdown (analysts, research, trading, risk,
-portfolio) plus a consolidated ``complete_report.md`` under ``save_path``. The
+Writes a consolidated report and optional per-section markdown (analysts,
+research, trading, risk, portfolio) under ``save_path``. The
 CLI and ``TradingAgentsGraph.save_reports`` both call this, so a headless / API
 run produces the same on-disk report tree a CLI run does.
 """
@@ -35,7 +35,7 @@ def _usage_per_model(value: Any) -> dict[str, dict[str, int | None]]:
             continue
         safe[model_id] = {
             key: _valid_count(metrics.get(key))
-            for key in ("input_tokens", "output_tokens", "cached_input_tokens")
+            for key in ("input_tokens", "output_tokens", "cached_input_tokens", "reasoning_output_tokens", "total_tokens")
         }
         safe[model_id].update({
             key: _valid_count(metrics.get(key))
@@ -89,6 +89,7 @@ def build_run_metadata(
         usage = {}
     return {
         "schema_version": 1,
+        "backend": "codex" if config.get("llm_backend") == "codex" else "api",
         "ticker": ticker,
         "analysis_date": final_state.get("trade_date"),
         "model_profile": next(
@@ -119,6 +120,8 @@ def build_run_metadata(
             "input_tokens": _valid_count(usage.get("input_tokens")),
             "output_tokens": _valid_count(usage.get("output_tokens")),
             "cached_input_tokens": _valid_count(usage.get("cached_input_tokens")),
+            "reasoning_output_tokens": _valid_count(usage.get("reasoning_output_tokens")),
+            "total_tokens": _valid_count(usage.get("total_tokens")),
             "per_model": _usage_per_model(usage.get("per_model")),
             "usage_completeness": _usage_completeness(usage.get("usage_completeness")),
             "tool_calls": _valid_count(usage.get("tool_calls")),
@@ -135,6 +138,8 @@ def write_report_tree(
 ) -> Path:
     """Save a completed run's reports to ``save_path``; return the complete-report path."""
     save_path = Path(save_path)
+    if save_path.exists() and any(save_path.iterdir()):
+        raise FileExistsError("Report destination is not empty. Choose a new directory.")
     save_path.mkdir(parents=True, exist_ok=True)
     (save_path / "run_metadata.json").write_text(
         json.dumps(build_run_metadata(final_state, ticker, config), ensure_ascii=False, indent=2),
@@ -148,29 +153,31 @@ def write_report_tree(
             "prepared_data": final_state.get("prepared_data", {}),
         }, ensure_ascii=False, indent=2), encoding="utf-8")
     sections = []
+    split_files = (config or {}).get("report_split_files", False)
+
+    def write_section(path: Path, content: str) -> None:
+        if split_files:
+            path.parent.mkdir(exist_ok=True)
+            path.write_text(content, encoding="utf-8")
 
     # 1. Analysts
     analysts_dir = save_path / "1_analysts"
     analyst_parts = []
     if final_state.get("market_report"):
-        analysts_dir.mkdir(exist_ok=True)
-        (analysts_dir / "market.md").write_text(final_state["market_report"], encoding="utf-8")
+        write_section(analysts_dir / "market.md", final_state["market_report"])
         analyst_parts.append(("Market Analyst", final_state["market_report"]))
     if final_state.get("sentiment_report"):
-        analysts_dir.mkdir(exist_ok=True)
-        (analysts_dir / "sentiment.md").write_text(final_state["sentiment_report"], encoding="utf-8")
+        write_section(analysts_dir / "sentiment.md", final_state["sentiment_report"])
         analyst_parts.append(("Sentiment Analyst", final_state["sentiment_report"]))
     if final_state.get("news_report"):
-        analysts_dir.mkdir(exist_ok=True)
-        (analysts_dir / "news.md").write_text(final_state["news_report"], encoding="utf-8")
+        write_section(analysts_dir / "news.md", final_state["news_report"])
         analyst_parts.append(("News Analyst", final_state["news_report"]))
     if final_state.get("fundamentals_report"):
-        analysts_dir.mkdir(exist_ok=True)
-        (analysts_dir / "fundamentals.md").write_text(final_state["fundamentals_report"], encoding="utf-8")
+        write_section(analysts_dir / "fundamentals.md", final_state["fundamentals_report"])
         analyst_parts.append(("Fundamentals Analyst", final_state["fundamentals_report"]))
     if analyst_parts:
         content = "\n\n".join(f"### {name}\n{text}" for name, text in analyst_parts)
-        sections.append(f"## I. Analyst Team Reports\n\n{content}")
+        sections.append(f"## Analyst Team Reports\n\n{content}")
 
     # 2. Research
     if final_state.get("investment_debate_state"):
@@ -178,27 +185,23 @@ def write_report_tree(
         debate = final_state["investment_debate_state"]
         research_parts = []
         if debate.get("bull_history"):
-            research_dir.mkdir(exist_ok=True)
-            (research_dir / "bull.md").write_text(debate["bull_history"], encoding="utf-8")
+            write_section(research_dir / "bull.md", debate["bull_history"])
             research_parts.append(("Bull Researcher", debate["bull_history"]))
         if debate.get("bear_history"):
-            research_dir.mkdir(exist_ok=True)
-            (research_dir / "bear.md").write_text(debate["bear_history"], encoding="utf-8")
+            write_section(research_dir / "bear.md", debate["bear_history"])
             research_parts.append(("Bear Researcher", debate["bear_history"]))
         if debate.get("judge_decision"):
-            research_dir.mkdir(exist_ok=True)
-            (research_dir / "manager.md").write_text(debate["judge_decision"], encoding="utf-8")
+            write_section(research_dir / "manager.md", debate["judge_decision"])
             research_parts.append(("Research Manager", debate["judge_decision"]))
         if research_parts:
             content = "\n\n".join(f"### {name}\n{text}" for name, text in research_parts)
-            sections.append(f"## II. Research Team Decision\n\n{content}")
+            sections.append(f"## Research Team Decision\n\n{content}")
 
     # 3. Trading
     if final_state.get("trader_investment_plan"):
         trading_dir = save_path / "3_trading"
-        trading_dir.mkdir(exist_ok=True)
-        (trading_dir / "trader.md").write_text(final_state["trader_investment_plan"], encoding="utf-8")
-        sections.append(f"## III. Trading Team Plan\n\n### Trader\n{final_state['trader_investment_plan']}")
+        write_section(trading_dir / "trader.md", final_state["trader_investment_plan"])
+        sections.append(f"## Trading Team Plan\n\n### Trader\n{final_state['trader_investment_plan']}")
 
     # 4. Risk Management
     if final_state.get("risk_debate_state"):
@@ -206,27 +209,26 @@ def write_report_tree(
         risk = final_state["risk_debate_state"]
         risk_parts = []
         if risk.get("aggressive_history"):
-            risk_dir.mkdir(exist_ok=True)
-            (risk_dir / "aggressive.md").write_text(risk["aggressive_history"], encoding="utf-8")
+            write_section(risk_dir / "aggressive.md", risk["aggressive_history"])
             risk_parts.append(("Aggressive Analyst", risk["aggressive_history"]))
         if risk.get("conservative_history"):
-            risk_dir.mkdir(exist_ok=True)
-            (risk_dir / "conservative.md").write_text(risk["conservative_history"], encoding="utf-8")
+            write_section(risk_dir / "conservative.md", risk["conservative_history"])
             risk_parts.append(("Conservative Analyst", risk["conservative_history"]))
         if risk.get("neutral_history"):
-            risk_dir.mkdir(exist_ok=True)
-            (risk_dir / "neutral.md").write_text(risk["neutral_history"], encoding="utf-8")
+            write_section(risk_dir / "neutral.md", risk["neutral_history"])
             risk_parts.append(("Neutral Analyst", risk["neutral_history"]))
         if risk_parts:
             content = "\n\n".join(f"### {name}\n{text}" for name, text in risk_parts)
-            sections.append(f"## IV. Risk Management Team Decision\n\n{content}")
+            sections.append(f"## Risk Management Team Decision\n\n{content}")
 
         # 5. Portfolio Manager
         if risk.get("judge_decision"):
             portfolio_dir = save_path / "5_portfolio"
-            portfolio_dir.mkdir(exist_ok=True)
-            (portfolio_dir / "decision.md").write_text(risk["judge_decision"], encoding="utf-8")
-            sections.append(f"## V. Portfolio Manager Decision\n\n### Portfolio Manager\n{risk['judge_decision']}")
+            write_section(portfolio_dir / "decision.md", risk["judge_decision"])
+            sections.append(f"## Portfolio Manager Decision\n\n### Portfolio Manager\n{risk['judge_decision']}")
+
+    # Put the final decision first without shortening or re-generating analysis.
+    sections.sort(key=lambda section: not section.startswith("## Portfolio Manager Decision"))
 
     # Write consolidated report
     header = f"# Trading Analysis Report: {ticker}\n\nGenerated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"

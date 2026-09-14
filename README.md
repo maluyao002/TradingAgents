@@ -170,10 +170,11 @@ python -m cli.main     # alternative: run directly from source
 ```
 You will see a screen where you can select your desired tickers, analysis date, LLM provider, research depth, and more.
 
-On the Codex integration branch, startup first offers **API** (the existing analysis
-workflow) or **Codex subscription** (a setup preview). Use `tradingagents --backend api`
-to go straight to the existing workflow. The Codex preview checks sign-in and model
-settings; it does not yet run research. See [Codex setup and rollout](docs/CODEX-INTEGRATION.md).
+On the Codex integration branch, startup offers **API** or **Codex subscription**
+for the full research workflow. Use `tradingagents --backend api` or
+`tradingagents --backend codex --checkpoint` to select directly. Codex uses your
+separate ChatGPT sign-in, the existing model profiles and local data-provider tools;
+it never falls back to paid API calls. See [Codex setup and rollout](docs/CODEX-INTEGRATION.md).
 
 ### Markets and tickers
 

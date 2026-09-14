@@ -68,7 +68,7 @@ def test_fundamentals_prepares_once_and_preserves_evidence_in_same_call(monkeypa
     write_report_tree(state, "TEST", tmp_path)
     saved = json.loads((tmp_path / "evidence.json").read_text())
     assert saved["prepared_data"]["fundamentals"] == prepared
-    assert "Growth expectations require comparable inputs." in (tmp_path / "1_analysts/fundamentals.md").read_text()
+    assert "Growth expectations require comparable inputs." in (tmp_path / "complete_report.md").read_text()
 
 
 def test_market_can_investigate_history_without_repreparing_snapshot(monkeypatch):

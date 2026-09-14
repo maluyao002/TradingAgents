@@ -24,7 +24,7 @@ def test_api_route_preserves_run_analysis(monkeypatch, args):
     run = Mock()
     monkeypatch.setattr(main, "run_analysis", run)
     monkeypatch.setattr(main, "select_backend", lambda: backend.Backend.API)
-    monkeypatch.setattr(main, "run_codex_setup", Mock(side_effect=AssertionError("Codex started")))
+    monkeypatch.setattr(main, "run_codex_analysis", Mock(side_effect=AssertionError("Codex started")))
     result = CliRunner().invoke(main.app, args)
     assert result.exit_code == 0, result.output
     run.assert_called_once_with(checkpoint=None)
@@ -32,18 +32,18 @@ def test_api_route_preserves_run_analysis(monkeypatch, args):
 
 def test_codex_route_never_enters_api_flow(monkeypatch):
     setup = Mock()
-    monkeypatch.setattr(main, "run_codex_setup", setup)
+    monkeypatch.setattr(main, "run_codex_analysis", setup)
     monkeypatch.setattr(main, "run_analysis", Mock(side_effect=AssertionError("API flow entered")))
     result = CliRunner().invoke(main.app, ["--backend", "codex"])
     assert result.exit_code == 0, result.output
-    setup.assert_called_once_with(main.console)
+    setup.assert_called_once_with(checkpoint=None, clear_checkpoints=False)
 
 
 def test_explicit_flag_wins_over_backend_environment(monkeypatch):
     monkeypatch.setenv("TRADINGAGENTS_BACKEND", "codex")
     run = Mock()
     monkeypatch.setattr(main, "run_analysis", run)
-    monkeypatch.setattr(main, "run_codex_setup", Mock(side_effect=AssertionError("Codex started")))
+    monkeypatch.setattr(main, "run_codex_analysis", Mock(side_effect=AssertionError("Codex started")))
     result = CliRunner().invoke(main.app, ["--backend", "api", "--no-checkpoint"])
     assert result.exit_code == 0
     run.assert_called_once_with(checkpoint=False)
@@ -52,21 +52,25 @@ def test_explicit_flag_wins_over_backend_environment(monkeypatch):
 def test_backend_environment_skips_picker(monkeypatch):
     monkeypatch.setenv("TRADINGAGENTS_BACKEND", "codex")
     setup = Mock()
-    monkeypatch.setattr(main, "run_codex_setup", setup)
+    monkeypatch.setattr(main, "run_codex_analysis", setup)
     monkeypatch.setattr(main, "select_backend", Mock(side_effect=AssertionError("Unexpected prompt")))
     result = CliRunner().invoke(main.app, [])
     assert result.exit_code == 0
     setup.assert_called_once()
 
 
-@pytest.mark.parametrize("flag", ["--checkpoint", "--no-checkpoint", "--clear-checkpoints"])
-def test_codex_rejects_api_checkpoint_options_before_side_effects(monkeypatch, flag):
-    monkeypatch.setattr(main, "run_codex_setup", Mock(side_effect=AssertionError("Codex started")))
+@pytest.mark.parametrize("flag, checkpoint, clear", [
+    ("--checkpoint", True, False), ("--no-checkpoint", False, False),
+    ("--clear-checkpoints", None, True),
+])
+def test_codex_routes_checkpoint_options_to_codex_only(monkeypatch, flag, checkpoint, clear):
+    run = Mock()
+    monkeypatch.setattr(main, "run_codex_analysis", run)
     import tradingagents.graph.checkpointer as checkpointer
-    monkeypatch.setattr(checkpointer, "clear_all_checkpoints", Mock(side_effect=AssertionError("Deleted state")))
+    monkeypatch.setattr(checkpointer, "clear_all_checkpoints", Mock(side_effect=AssertionError("Deleted API state")))
     result = CliRunner().invoke(main.app, ["--backend", "codex", flag])
-    assert result.exit_code == 2
-    assert "Checkpoint options apply to API analysis" in result.output
+    assert result.exit_code == 0
+    run.assert_called_once_with(checkpoint=checkpoint, clear_checkpoints=clear)
 
 
 def test_unknown_backend_fails_before_any_analysis(monkeypatch):
@@ -100,7 +104,7 @@ def _fake_adapter(monkeypatch, *, available=True, fail_auth=False):
     class FakeAdapter:
         instances = []
 
-        def __init__(self, *, home):
+        def __init__(self, *, home, timeout=300):
             self.home = home
             self.closed = False
             self.selections = []
@@ -184,3 +188,66 @@ def test_cancel_codex_selection_closes_adapter(monkeypatch):
     with pytest.raises(typer.Exit):
         backend.run_codex_setup(Console(file=StringIO()))
     assert fake.instances[0].closed
+
+
+def test_codex_full_run_owns_runtime_and_clears_only_codex_checkpoints(monkeypatch, tmp_path):
+    fake = _fake_adapter(monkeypatch)
+    monkeypatch.setitem(main.DEFAULT_CONFIG, "data_cache_dir", str(tmp_path))
+    api_dir = tmp_path / "checkpoints"
+    codex_dir = tmp_path / "codex" / "checkpoints"
+    api_dir.mkdir()
+    codex_dir.mkdir(parents=True)
+    (api_dir / "AMD.db").write_text("API state")
+    (codex_dir / "AMD.db").write_text("Codex state")
+    selection = {"ticker": "AMD"}
+    monkeypatch.setattr(main, "get_user_selections", lambda **kwargs: selection)
+    run = Mock()
+    monkeypatch.setattr(main, "run_analysis", run)
+    main.run_codex_analysis(checkpoint=True, clear_checkpoints=True)
+    run.assert_called_once_with(checkpoint=True, selections=selection, codex_adapter=fake.instances[0])
+    assert fake.instances[0].closed
+    assert (api_dir / "AMD.db").read_text() == "API state"
+    assert not (codex_dir / "AMD.db").exists()
+
+
+def test_codex_runtime_closes_after_analysis_failure(monkeypatch):
+    fake = _fake_adapter(monkeypatch)
+    from tradingagents.codex.adapter import CodexAdapterError
+    monkeypatch.setattr(main, "get_user_selections", lambda **kwargs: {})
+    run = Mock(side_effect=CodexAdapterError("offline failure"))
+    monkeypatch.setattr(main, "run_analysis", run)
+    with pytest.raises(typer.Exit):
+        main.run_codex_analysis()
+    assert run.call_count == 1
+    assert fake.instances[0].closed
+
+
+def test_codex_research_profile_rejects_unsupported_catalog(monkeypatch):
+    fake = _fake_adapter(monkeypatch, available=False)
+    from tradingagents.codex.adapter import CodexAdapterError
+    with fake(home="unused") as adapter, pytest.raises(CodexAdapterError, match="No complete research profile"):
+        backend.select_codex_profile(adapter)
+
+
+def test_codex_selections_skip_api_settings(monkeypatch):
+    from cli.models import AnalystType
+    fake = _fake_adapter(monkeypatch)
+    for name in ("TRADINGAGENTS_OUTPUT_LANGUAGE",):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("TRADINGAGENTS_LLM_PROVIDER", "anthropic")
+    monkeypatch.setattr(main, "fetch_announcements", lambda: None)
+    monkeypatch.setattr(main, "display_announcements", lambda *a: None)
+    monkeypatch.setattr(main, "get_ticker", lambda: "AMD")
+    monkeypatch.setattr(main, "get_analysis_date", lambda: "2026-09-13")
+    monkeypatch.setattr(main, "ask_output_language", lambda: "English")
+    monkeypatch.setattr(main, "select_analysts", lambda *a: [AnalystType.FUNDAMENTALS])
+    monkeypatch.setattr(main, "ensure_api_key", Mock(side_effect=AssertionError("API key prompt")))
+    monkeypatch.setattr(main, "select_llm_provider", Mock(side_effect=AssertionError("API provider prompt")))
+    monkeypatch.setattr(backend, "_ask", lambda *a, **k: "balanced")
+    with fake(home="unused") as adapter:
+        selections = main.get_user_selections(codex_adapter=adapter)
+    config = main._build_run_config(selections, checkpoint=True)
+    assert config["llm_backend"] == "codex"
+    assert config["backend_url"] is None
+    assert config["checkpoint_enabled"] is True
+    assert config["agent_models"]["fundamentals"] == {"model": "gpt-5.6-sol", "reasoning_effort": "high"}

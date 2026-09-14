@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import re
@@ -47,6 +48,25 @@ class CodexModel:
     supported_efforts: tuple[str, ...]
     input_modalities: tuple[str, ...]
     is_default: bool
+
+
+@dataclass(frozen=True, slots=True)
+class CodexTokenUsage:
+    """Validated cumulative token usage for one ephemeral Codex invocation."""
+
+    input_tokens: int
+    output_tokens: int
+    cached_input_tokens: int
+    reasoning_output_tokens: int
+    total_tokens: int
+
+
+@dataclass(frozen=True, slots=True)
+class CodexCompletion:
+    """Text completion and optional protocol-reported token usage."""
+
+    text: str
+    usage: CodexTokenUsage | None
 
 
 _CLIENT_INFO = {
@@ -162,6 +182,112 @@ def _valid_text(value: object, *, limit: int) -> bool:
     if not isinstance(value, str) or not value or len(value) > limit:
         return False
     return all(character in "\t\n\r" or ord(character) >= 32 for character in value)
+
+
+def _token_usage_breakdown(value: object) -> tuple[CodexTokenUsage, int] | None:
+    """Parse one app-server TokenUsageBreakdown without JSON coercion."""
+
+    if not isinstance(value, dict):
+        return None
+    names = {
+        "inputTokens": "input_tokens",
+        "outputTokens": "output_tokens",
+        "cachedInputTokens": "cached_input_tokens",
+        "reasoningOutputTokens": "reasoning_output_tokens",
+        "totalTokens": "total_tokens",
+    }
+    parsed: dict[str, int] = {}
+    for protocol_name, field_name in names.items():
+        raw_value = value.get(protocol_name)
+        if type(raw_value) is not int or not 0 <= raw_value <= 2**63 - 1:
+            return None
+        parsed[field_name] = raw_value
+    raw_cache_write = value.get("cacheWriteInputTokens", 0)
+    if type(raw_cache_write) is not int or not 0 <= raw_cache_write <= 2**63 - 1:
+        return None
+    usage = CodexTokenUsage(**parsed)
+    if (
+        usage.cached_input_tokens > usage.input_tokens
+        or raw_cache_write > usage.input_tokens
+        or usage.reasoning_output_tokens > usage.output_tokens
+        or usage.total_tokens != usage.input_tokens + usage.output_tokens
+    ):
+        return None
+    return usage, raw_cache_write
+
+
+def _thread_token_usage(value: object) -> CodexTokenUsage | None:
+    """Validate a ThreadTokenUsage payload and return only its cumulative total."""
+
+    if not isinstance(value, dict):
+        return None
+    last = _token_usage_breakdown(value.get("last"))
+    total = _token_usage_breakdown(value.get("total"))
+    context_window = value.get("modelContextWindow")
+    if (
+        last is None
+        or total is None
+        or (
+            context_window is not None
+            and (
+                type(context_window) is not int
+                or not 0 <= context_window <= 2**63 - 1
+            )
+        )
+    ):
+        return None
+    last_usage, last_cache_write = last
+    total_usage, total_cache_write = total
+    if any(
+        total_value < last_value
+        for total_value, last_value in zip(
+            (
+                total_usage.input_tokens,
+                total_usage.output_tokens,
+                total_usage.cached_input_tokens,
+                total_usage.reasoning_output_tokens,
+                total_usage.total_tokens,
+                total_cache_write,
+            ),
+            (
+                last_usage.input_tokens,
+                last_usage.output_tokens,
+                last_usage.cached_input_tokens,
+                last_usage.reasoning_output_tokens,
+                last_usage.total_tokens,
+                last_cache_write,
+            ),
+            strict=True,
+        )
+    ):
+        return None
+    return total_usage
+
+
+def _usage_did_not_decrease(
+    previous: CodexTokenUsage,
+    current: CodexTokenUsage,
+) -> bool:
+    return all(
+        current_value >= previous_value
+        for current_value, previous_value in zip(
+            (
+                current.input_tokens,
+                current.output_tokens,
+                current.cached_input_tokens,
+                current.reasoning_output_tokens,
+                current.total_tokens,
+            ),
+            (
+                previous.input_tokens,
+                previous.output_tokens,
+                previous.cached_input_tokens,
+                previous.reasoning_output_tokens,
+                previous.total_tokens,
+            ),
+            strict=True,
+        )
+    )
 
 
 def _opaque_cursor(value: object) -> str | None:
@@ -569,13 +695,61 @@ class CodexAdapter:
             raise CodexAdapterError(str(exc)) from None
         self._inference_isolation_verified = True
 
-    def complete(self, instructions: str, prompt: str, model: str, effort: str) -> str:
-        """Run one text-only request in a fresh isolated ephemeral thread."""
+    def complete(
+        self,
+        instructions: str,
+        prompt: str,
+        model: str,
+        effort: str,
+        *,
+        output_schema: dict[str, object] | None = None,
+    ) -> str:
+        """Run one request in a fresh isolated ephemeral thread.
+
+        ``output_schema`` is forwarded to the official per-turn
+        ``outputSchema`` field.  The adapter still receives only final text;
+        callers own parsing and validation of that text.
+        """
+
+        return self.complete_with_usage(
+            instructions,
+            prompt,
+            model,
+            effort,
+            output_schema=output_schema,
+        ).text
+
+    def complete_with_usage(
+        self,
+        instructions: str,
+        prompt: str,
+        model: str,
+        effort: str,
+        *,
+        output_schema: dict[str, object] | None = None,
+    ) -> CodexCompletion:
+        """Run one isolated request and return text plus validated usage.
+
+        Usage is the latest cumulative ``tokenUsage.total`` snapshot for this
+        invocation. Missing or malformed telemetry is represented by ``None``
+        without changing successful inference behavior.
+        """
 
         if not _valid_text(instructions, limit=1_000_000):
             raise ValueError("instructions must be non-empty text")
         if not _valid_text(prompt, limit=4_000_000):
             raise ValueError("prompt must be non-empty text")
+        normalized_schema: dict[str, object] | None = None
+        if output_schema is not None:
+            if not isinstance(output_schema, dict) or not output_schema:
+                raise ValueError("output_schema must be a non-empty JSON schema object")
+            try:
+                serialized_schema = json.dumps(output_schema, allow_nan=False)
+                normalized_schema = json.loads(serialized_schema)
+            except (TypeError, ValueError):
+                raise ValueError("output_schema must be JSON serializable") from None
+            if len(serialized_schema) > 1_000_000:
+                raise ValueError("output_schema exceeded the adapter safety limit")
         self.validate_selection(model, effort)
         self._require_transport()
         try:
@@ -592,12 +766,17 @@ class CodexAdapter:
         thread_id: str | None = None
         turn_id: str | None = None
         turn_completed = False
-        result: str | None = None
+        result: CodexCompletion | None = None
         failure: BaseException | None = None
         try:
             thread_id = self._start_thread(instructions, model, deadline)
             turn_id, turn_is_valid = self._start_turn(
-                thread_id, prompt, model, effort, deadline
+                thread_id,
+                prompt,
+                model,
+                effort,
+                deadline,
+                output_schema=normalized_schema,
             )
             if not turn_is_valid:
                 raise CodexInferenceError("turn/start returned an invalid active turn")
@@ -686,20 +865,25 @@ class CodexAdapter:
         model: str,
         effort: str,
         deadline: float,
+        *,
+        output_schema: dict[str, object] | None = None,
     ) -> tuple[str, bool]:
+        params: dict[str, object] = {
+            "approvalPolicy": "never",
+            "approvalsReviewer": "user",
+            "cwd": str(self._workspace),
+            "effort": effort,
+            "environments": [],
+            "input": [{"type": "text", "text": prompt}],
+            "model": model,
+            "runtimeWorkspaceRoots": [],
+            "threadId": thread_id,
+        }
+        if output_schema is not None:
+            params["outputSchema"] = output_schema
         result = self._require_transport().request(
             "turn/start",
-            {
-                "approvalPolicy": "never",
-                "approvalsReviewer": "user",
-                "cwd": str(self._workspace),
-                "effort": effort,
-                "environments": [],
-                "input": [{"type": "text", "text": prompt}],
-                "model": model,
-                "runtimeWorkspaceRoots": [],
-                "threadId": thread_id,
-            },
+            params,
             timeout=self._remaining(deadline),
         )
         turn = result.get("turn") if isinstance(result, dict) else None
@@ -711,7 +895,15 @@ class CodexAdapter:
         )
         return turn_id, is_valid
 
-    def _wait_for_turn(self, thread_id: str, turn_id: str, deadline: float, *, model: str, effort: str) -> str:
+    def _wait_for_turn(
+        self,
+        thread_id: str,
+        turn_id: str,
+        deadline: float,
+        *,
+        model: str,
+        effort: str,
+    ) -> CodexCompletion:
         transport = self._require_transport()
         turn_started = False
         started_items: set[str] = set()
@@ -719,6 +911,8 @@ class CodexAdapter:
         final_messages: list[str] = []
         unphased_messages: list[str] = []
         output_chars = 0
+        usage: CodexTokenUsage | None = None
+        usage_is_invalid = False
         for _ in range(_MAX_TURN_EVENTS):
             notification = transport.wait_notification(timeout=self._remaining(deadline))
             method = notification.get("method")
@@ -752,6 +946,27 @@ class CodexAdapter:
                 if (any(settings.get(key) != value for key, value in expected.items())
                         or not isinstance(sandbox, dict) or sandbox.get("type") != "readOnly"):
                     raise CodexInferenceError("Codex thread settings differ from the requested isolated configuration")
+                continue
+            if method == "thread/tokenUsage/updated":
+                if isinstance(event_thread, str) and event_thread in self._retired_threads:
+                    continue
+                event_turn = params.get("turnId")
+                if event_thread != thread_id:
+                    raise CodexInferenceError("Codex emitted an event for an unknown thread")
+                if event_turn != turn_id:
+                    raise CodexInferenceError("Codex emitted an event for an unknown turn")
+                updated_usage = _thread_token_usage(params.get("tokenUsage"))
+                if (
+                    updated_usage is None
+                    or usage is not None
+                    and not _usage_did_not_decrease(usage, updated_usage)
+                ):
+                    usage = None
+                    usage_is_invalid = True
+                elif not usage_is_invalid:
+                    # Protocol totals are cumulative snapshots. Replace the
+                    # prior value; summing updates would double count tokens.
+                    usage = updated_usage
                 continue
             if method in _THREAD_ONLY_NOTIFICATIONS:
                 if method == "thread/started" and isinstance(params.get("thread"), dict):
@@ -840,7 +1055,7 @@ class CodexAdapter:
                 messages = final_messages or unphased_messages
                 if not messages or not any(message.strip() for message in messages):
                     raise CodexInferenceError("Codex completed without a final text response")
-                return "\n".join(messages)
+                return CodexCompletion("\n".join(messages), usage)
         raise CodexInferenceError("Codex turn exceeded the notification safety limit")
 
     def _cleanup_thread(

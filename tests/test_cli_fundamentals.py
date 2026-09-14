@@ -19,7 +19,7 @@ def test_explicit_pilot_routes_without_full_pipeline(monkeypatch, backend):
     run = Mock()
     monkeypatch.setattr(pilot, 'run_pilot', run)
     monkeypatch.setattr(main, 'run_analysis', Mock(side_effect=AssertionError('full pipeline')))
-    monkeypatch.setattr(main, 'run_codex_setup', Mock(side_effect=AssertionError('setup')))
+    monkeypatch.setattr(main, 'run_codex_analysis', Mock(side_effect=AssertionError('full Codex run')))
     result = CliRunner().invoke(main.app, ['--backend', backend, '--fundamentals'])
     assert result.exit_code == 0, result.output
     run.assert_called_once_with(main.console, Backend(backend))
