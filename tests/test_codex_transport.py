@@ -1,4 +1,6 @@
+import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -12,6 +14,7 @@ from tradingagents.codex.transport import (
     ProtocolError,
     ServerError,
     TransportClosed,
+    TransportError,
     TransportTimeout,
     UnexpectedServerRequest,
     build_app_server_command,
@@ -85,6 +88,44 @@ def _transport(tmp_path: Path, mode: str, **kwargs) -> CodexAppServerTransport:
     )
 
 
+def _install_fake_codex(
+    tmp_path: Path,
+    monkeypatch,
+    *,
+    version: str,
+    exit_code: int = 0,
+    stderr: str = "",
+    delay: float = 0,
+) -> Path:
+    log = tmp_path / "codex-invocations.jsonl"
+    version_script = tmp_path / "fake_codex_version.py"
+    version_script.write_text(
+        f"""import sys
+import time
+
+time.sleep({delay!r})
+sys.stdout.write({version!r})
+sys.stderr.write({stderr!r})
+raise SystemExit({exit_code!r})
+"""
+    )
+    app_command = tuple(_command(tmp_path, "blocked"))
+    real_popen = subprocess.Popen
+
+    def intercept_popen(command, *args, **kwargs):
+        with log.open("a") as stream:
+            stream.write(json.dumps(list(command)) + "\n")
+        if list(command) == [app_command[0], "--version"]:
+            return real_popen(
+                [sys.executable, "-u", str(version_script)], *args, **kwargs
+            )
+        return real_popen(command, *args, **kwargs)
+
+    monkeypatch.setattr(transport_module, "build_app_server_command", lambda: app_command)
+    monkeypatch.setattr(transport_module.subprocess, "Popen", intercept_popen)
+    return log
+
+
 def test_correlates_response_and_collects_notification(tmp_path):
     with _transport(tmp_path, "normal") as transport:
         assert transport.request("test", {}) == {"ok": True}
@@ -92,6 +133,37 @@ def test_correlates_response_and_collects_notification(tmp_path):
             {"method": "server/note", "params": {"ok": True}}
         ]
         assert transport.pop_notifications() == []
+
+
+def test_wait_notification_returns_queued_notification_in_wire_order(tmp_path):
+    with _transport(tmp_path, "normal") as transport:
+        assert transport.request("test", {}) == {"ok": True}
+        assert transport.wait_notification(timeout=0.1) == {
+            "method": "server/note",
+            "params": {"ok": True},
+        }
+        with pytest.raises(TransportTimeout):
+            transport.wait_notification(timeout=0.05)
+
+
+def test_wait_notification_revalidates_queued_message_shape(tmp_path):
+    with _transport(tmp_path, "normal") as transport:
+        transport._notifications.append({"method": 7, "params": {}})
+        with pytest.raises(ProtocolError, match="invalid method"):
+            transport.wait_notification(timeout=0.1)
+
+
+@pytest.mark.parametrize("timeout", [float("inf"), float("nan"), 0, -1])
+def test_rejects_non_finite_or_non_positive_deadlines(tmp_path, timeout):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    with pytest.raises(ValueError, match="positive"):
+        CodexAppServerTransport(
+            _command(tmp_path, "normal"),
+            home=tmp_path / "runtime",
+            cwd=workspace,
+            timeout=timeout,
+        )
 
 
 def test_child_environment_is_allowlisted_and_home_is_isolated(tmp_path, monkeypatch):
@@ -120,6 +192,143 @@ def test_safe_command_disables_discovery_and_uses_strict_config():
     assert "features.skip_host_skill_discovery=true" in joined
     assert "skills.include_instructions=false" in joined
     assert 'web_search="disabled"' in joined
+    assert 'cli_auth_credentials_store="file"' in joined
+    assert 'forced_login_method="chatgpt"' in joined
+    assert "features.hooks=false" in joined
+    assert "features.codex_hooks=false" in joined
+    assert "features.plugin_hooks=false" in joined
+    assert "hooks={}" in joined
+
+
+@pytest.mark.parametrize("version", ["codex-cli 0.153.4\n", "codex-cli 0.154.0\n", "codex-cli 1.0.0\n"])
+def test_default_command_accepts_supported_stable_cli_before_app_server(
+    tmp_path, monkeypatch, version
+):
+    log = _install_fake_codex(tmp_path, monkeypatch, version=version)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    transport = CodexAppServerTransport(
+        home=tmp_path / "runtime", cwd=workspace, timeout=0.2
+    ).start()
+    try:
+        assert transport.is_running
+        assert [json.loads(line) for line in log.read_text().splitlines()] == [
+            [transport.command[0], "--version"],
+            list(transport.command),
+        ]
+    finally:
+        transport.close(grace_seconds=0.05)
+
+
+def test_default_command_allows_bounded_stderr_with_valid_version(tmp_path, monkeypatch):
+    log = _install_fake_codex(
+        tmp_path,
+        monkeypatch,
+        version="codex-cli 0.153.4\n",
+        stderr="benign launcher warning\n",
+    )
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    transport = CodexAppServerTransport(
+        home=tmp_path / "runtime", cwd=workspace, timeout=0.2
+    ).start()
+    try:
+        assert transport.is_running
+        assert [json.loads(line) for line in log.read_text().splitlines()] == [
+            [transport.command[0], "--version"],
+            list(transport.command),
+        ]
+    finally:
+        transport.close(grace_seconds=0.05)
+
+
+@pytest.mark.parametrize(
+    "version",
+    [
+        "codex-cli 0.153.3\n",
+        "codex-cli 0.153.4-alpha.1\n",
+        "codex-cli 0.200.0-beta.2\n",
+    ],
+)
+def test_default_command_rejects_old_or_prerelease_cli_before_app_server(
+    tmp_path, monkeypatch, version
+):
+    log = _install_fake_codex(tmp_path, monkeypatch, version=version)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    transport = CodexAppServerTransport(
+        home=tmp_path / "runtime", cwd=workspace, timeout=0.2
+    )
+    with pytest.raises(TransportError, match=r"requires Codex CLI 0\.153\.4 or newer; update"):
+        transport.start()
+    assert [json.loads(line) for line in log.read_text().splitlines()] == [
+        [transport.command[0], "--version"]
+    ]
+    assert transport._process is None
+
+
+@pytest.mark.parametrize(
+    ("version", "exit_code", "stderr"),
+    [
+        ("private malformed /Users/example\n", 0, ""),
+        ("x" * 2048, 0, ""),
+        ("codex-cli 0.153.4\n", 1, "private failure /Users/example\n"),
+        ("codex-cli 0.153.4-alpha.1\n", 0, ""),
+    ],
+)
+def test_default_version_failures_are_actionable_and_redacted(
+    tmp_path, monkeypatch, version, exit_code, stderr
+):
+    _install_fake_codex(
+        tmp_path,
+        monkeypatch,
+        version=version,
+        exit_code=exit_code,
+        stderr=stderr,
+    )
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    transport = CodexAppServerTransport(
+        home=tmp_path / "runtime", cwd=workspace, timeout=0.2
+    )
+    with pytest.raises(TransportError) as caught:
+        transport.start()
+    rendered = str(caught.value)
+    assert rendered == (
+        "TradingAgents requires Codex CLI 0.153.4 or newer; "
+        "update the official Codex CLI"
+    )
+    assert "private" not in rendered
+    assert str(tmp_path) not in rendered
+
+
+def test_default_version_check_timeout_is_bounded_and_redacted(tmp_path, monkeypatch):
+    log = _install_fake_codex(
+        tmp_path, monkeypatch, version="codex-cli 0.153.4\n", delay=60
+    )
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    transport = CodexAppServerTransport(
+        home=tmp_path / "runtime", cwd=workspace, timeout=0.1
+    )
+    started = time.monotonic()
+    with pytest.raises(TransportError, match="requires Codex CLI"):
+        transport.start()
+    assert time.monotonic() - started < 1.0
+    assert [json.loads(line) for line in log.read_text().splitlines()] == [
+        [transport.command[0], "--version"]
+    ]
+    assert transport._process is None
+
+
+def test_injected_test_server_command_bypasses_version_detection(tmp_path, monkeypatch):
+    def fail_if_called(self):
+        raise AssertionError("version detection should be bypassed")
+
+    transport = _transport(tmp_path, "normal")
+    monkeypatch.setattr(transport, "_verify_default_cli_version", fail_if_called)
+    with transport:
+        assert transport.request("test") == {"ok": True}
 
 
 @pytest.mark.parametrize(

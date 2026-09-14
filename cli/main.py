@@ -5,6 +5,7 @@ import time
 from collections import deque
 from functools import wraps
 from pathlib import Path
+from typing import Annotated
 
 import typer
 from rich import box
@@ -20,6 +21,7 @@ from rich.table import Table
 from rich.text import Text
 
 from cli.announcements import display_announcements, fetch_announcements
+from cli.backend import Backend, run_codex_setup, select_backend
 from cli.stats_handler import StatsCallbackHandler
 from cli.utils import (
     ask_anthropic_effort,
@@ -1351,6 +1353,11 @@ def run_analysis(checkpoint: bool | None = None):
 
 @app.command()
 def analyze(
+    backend: Annotated[Backend | None, typer.Option(
+        "--backend",
+        envvar="TRADINGAGENTS_BACKEND",
+        help="Choose api or codex. Omit to choose at startup; Codex is a setup preview in stage 2.",
+    )] = None,
     checkpoint: bool | None = typer.Option(
         None,
         "--checkpoint/--no-checkpoint",
@@ -1363,11 +1370,17 @@ def analyze(
         help="Delete all saved checkpoints before running (force fresh start).",
     ),
 ):
-    if clear_checkpoints:
-        from tradingagents.graph.checkpointer import clear_all_checkpoints
-        n = clear_all_checkpoints(DEFAULT_CONFIG["data_cache_dir"])
-        console.print(f"[yellow]Cleared {n} checkpoint(s).[/yellow]")
     try:
+        selected_backend = backend if backend is not None else select_backend()
+        if selected_backend == Backend.CODEX:
+            if clear_checkpoints or checkpoint is not None:
+                raise typer.BadParameter("Checkpoint options apply to API analysis, not the Codex setup preview.")
+            run_codex_setup(console)
+            return
+        if clear_checkpoints:
+            from tradingagents.graph.checkpointer import clear_all_checkpoints
+            n = clear_all_checkpoints(DEFAULT_CONFIG["data_cache_dir"])
+            console.print(f"[yellow]Cleared {n} checkpoint(s).[/yellow]")
         run_analysis(checkpoint=checkpoint)
     except _NO_CONSOLE_ERRORS:
         # A terminal with no console buffer cannot host the interactive prompts.
