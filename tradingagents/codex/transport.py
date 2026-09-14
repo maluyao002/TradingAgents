@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import queue
 import re
@@ -23,6 +24,8 @@ DEFAULT_MESSAGE_LIMIT = 4 * 1024 * 1024
 # These switches keep the metadata-only probe from discovering host instructions,
 # tools, skills, apps, plugins, connectors, memories, or web capabilities.
 _DISABLED_CONFIG = (
+    'cli_auth_credentials_store="file"',
+    'forced_login_method="chatgpt"',
     "features.shell_tool=false",
     "features.unified_exec=false",
     "features.apply_patch_freeform=false",
@@ -64,6 +67,7 @@ _INHERITED_ENV = frozenset(
 )
 
 _SAFE_ERROR_CODE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
+_SAFE_METHOD = re.compile(r"^[A-Za-z0-9_.:/-]{1,128}$")
 
 
 class TransportError(RuntimeError):
@@ -185,7 +189,7 @@ class CodexAppServerTransport:
     ) -> None:
         if os.name != "posix":
             raise TransportError("The Codex compatibility probe currently supports macOS/Linux only")
-        if timeout <= 0:
+        if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("timeout must be positive")
         if stderr_limit < 0 or message_limit < 1:
             raise ValueError("buffer limits must be non-negative and message_limit positive")
@@ -346,7 +350,7 @@ class CodexAppServerTransport:
         if not method:
             raise ValueError("method must be non-empty")
         deadline_seconds = self.timeout if timeout is None else float(timeout)
-        if deadline_seconds <= 0:
+        if not math.isfinite(deadline_seconds) or deadline_seconds <= 0:
             raise ValueError("timeout must be positive")
 
         with self._request_lock:
@@ -371,6 +375,7 @@ class CodexAppServerTransport:
                 if "method" in message:
                     if "id" in message:
                         self._reject_server_request(message)
+                    self._validate_notification(message)
                     with self._notifications_lock:
                         self._notifications.append(message)
                     continue
@@ -405,11 +410,61 @@ class CodexAppServerTransport:
         safe_method = method if isinstance(method, str) and _SAFE_ERROR_CODE.fullmatch(method) else "unknown"
         raise UnexpectedServerRequest(f"Rejected unexpected server request: {safe_method}")
 
+    @staticmethod
+    def _validate_notification(message: Mapping[str, Any]) -> None:
+        method = message.get("method")
+        if not isinstance(method, str) or not _SAFE_METHOD.fullmatch(method):
+            raise ProtocolError("Codex app-server notification has an invalid method")
+        if "params" in message and not isinstance(message["params"], dict):
+            raise ProtocolError("Codex app-server notification has invalid params")
+
     def pop_notifications(self) -> list[dict[str, Any]]:
         with self._notifications_lock:
             notifications = self._notifications
             self._notifications = []
         return notifications
+
+    def wait_notification(self, *, timeout: float | None = None) -> dict[str, Any]:
+        """Return the next server notification within a bounded deadline.
+
+        This method must not run concurrently with :meth:`request`. Any
+        notifications observed while waiting for a response are returned first,
+        preserving their wire order. A response outside an active request is a
+        protocol error, and server-initiated requests remain unsupported.
+        """
+
+        deadline_seconds = self.timeout if timeout is None else float(timeout)
+        if not math.isfinite(deadline_seconds) or deadline_seconds <= 0:
+            raise ValueError("timeout must be positive")
+
+        with self._request_lock:
+            deadline = time.monotonic() + deadline_seconds
+            while True:
+                with self._notifications_lock:
+                    if self._notifications:
+                        notification = self._notifications.pop(0)
+                        self._validate_notification(notification)
+                        return notification
+
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TransportTimeout("Timed out waiting for an app-server notification")
+                try:
+                    message = self._messages.get(timeout=remaining)
+                except queue.Empty as exc:
+                    raise TransportTimeout(
+                        "Timed out waiting for an app-server notification"
+                    ) from exc
+                if isinstance(message, BaseException):
+                    raise message
+                if "method" not in message:
+                    raise ProtocolError(
+                        "Codex app-server emitted a response without an active request"
+                    )
+                if "id" in message:
+                    self._reject_server_request(message)
+                self._validate_notification(message)
+                return message
 
     def close(self, grace_seconds: float = 1.0) -> None:
         process = self._process

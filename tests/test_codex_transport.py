@@ -94,6 +94,37 @@ def test_correlates_response_and_collects_notification(tmp_path):
         assert transport.pop_notifications() == []
 
 
+def test_wait_notification_returns_queued_notification_in_wire_order(tmp_path):
+    with _transport(tmp_path, "normal") as transport:
+        assert transport.request("test", {}) == {"ok": True}
+        assert transport.wait_notification(timeout=0.1) == {
+            "method": "server/note",
+            "params": {"ok": True},
+        }
+        with pytest.raises(TransportTimeout):
+            transport.wait_notification(timeout=0.05)
+
+
+def test_wait_notification_revalidates_queued_message_shape(tmp_path):
+    with _transport(tmp_path, "normal") as transport:
+        transport._notifications.append({"method": 7, "params": {}})
+        with pytest.raises(ProtocolError, match="invalid method"):
+            transport.wait_notification(timeout=0.1)
+
+
+@pytest.mark.parametrize("timeout", [float("inf"), float("nan"), 0, -1])
+def test_rejects_non_finite_or_non_positive_deadlines(tmp_path, timeout):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    with pytest.raises(ValueError, match="positive"):
+        CodexAppServerTransport(
+            _command(tmp_path, "normal"),
+            home=tmp_path / "runtime",
+            cwd=workspace,
+            timeout=timeout,
+        )
+
+
 def test_child_environment_is_allowlisted_and_home_is_isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "must-not-leak")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://must-not-leak.invalid")
@@ -120,6 +151,8 @@ def test_safe_command_disables_discovery_and_uses_strict_config():
     assert "features.skip_host_skill_discovery=true" in joined
     assert "skills.include_instructions=false" in joined
     assert 'web_search="disabled"' in joined
+    assert 'cli_auth_credentials_store="file"' in joined
+    assert 'forced_login_method="chatgpt"' in joined
 
 
 @pytest.mark.parametrize(

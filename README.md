@@ -170,6 +170,11 @@ python -m cli.main     # alternative: run directly from source
 ```
 You will see a screen where you can select your desired tickers, analysis date, LLM provider, research depth, and more.
 
+On the Codex integration branch, startup first offers **API** (the existing analysis
+workflow) or **Codex subscription** (a setup preview). Use `tradingagents --backend api`
+to go straight to the existing workflow. The Codex preview checks sign-in and model
+settings; it does not yet run research. See [Codex setup and rollout](docs/CODEX-INTEGRATION.md).
+
 ### Markets and tickers
 
 TradingAgents works with any market Yahoo Finance covers, using the exchange-suffixed ticker. Company identity and the alpha benchmark resolve automatically per market.

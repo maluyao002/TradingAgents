@@ -31,13 +31,14 @@ with no conversation history. Main is not the target of these stage PRs.
 
 ## Stage 1: compatibility probe
 
-Implementation and fresh independent review complete in [PR #3](https://github.com/maluyao002/TradingAgents/pull/3).
+Merged into `feat/codex-integration` in [PR #3](https://github.com/maluyao002/TradingAgents/pull/3)
+after independent review and resolution of all four GitHub review threads.
 Validation: 35 focused tests, 897 full offline tests and 65 subtests passed; Ruff
 passed. Review corrections cover detached descendant cleanup, explicit POSIX
 support, strict authentication/isolation response validation, path-free filesystem
 failures, and detection of all workspace entry types. The Unix socket regression
 requires local IPC permission when tests run in a restricted sandbox. Live gates
-below remain pending. Stages 2–5 have not started.
+below remain pending. Stage 2 is in development; stages 3–5 have not started.
 
 The initial transport supports macOS/Linux only. It explicitly rejects Windows
 before launching a subprocess; the existing API backend remains cross-platform.
@@ -66,6 +67,58 @@ isolation, authentication with the dedicated runtime, structured output,
 cancellation during inference, model/effort adherence, and absence of research
 sessions in the normal desktop sidebar. A successful offline probe alone is not
 permission to enable the complete backend.
+
+## Stage 2: adapter and startup choice
+
+Implementation validation: 937 full offline tests and 65 subtests passed; Ruff
+passed. Independent review is in progress. No live research run has been performed.
+
+At startup, choose **API** for the existing research workflow or **Codex subscription**
+for the setup preview. You can skip this new picker with `tradingagents --backend api`
+or `tradingagents --backend codex`. `python -m cli.main` accepts the same options.
+`TRADINGAGENTS_BACKEND` supplies a default backend when no flag is given; a flag wins.
+The API provider, profile, key, checkpoint, and model environment settings keep their
+existing behavior. Programmatic `TradingAgentsGraph` callers continue to use the API.
+
+The Codex preview checks ChatGPT sign-in and reads the live model catalog. Quick,
+Balanced, and Deep profiles are available only when every research role's exact
+model and effort are advertised. Unsupported profiles are disabled and show the
+affected roles. Custom checks one advertised model/effort pair. This is a capability
+check, not proof of model entitlement, remaining quota, or research quality. The
+preview does not run inference, fetch market data, save model settings, or fall back
+to an API provider. API checkpoint flags are rejected on this path before any deletion.
+
+### One-time sign-in (user-run)
+
+Use the official Codex CLI on macOS/Linux and a dedicated runtime outside this
+repository. The default is `~/.tradingagents/codex`. Do not copy authentication files
+from the normal Codex home or put credentials in this repository.
+
+```sh
+export TRADINGAGENTS_CODEX_HOME="$HOME/.tradingagents/codex"
+CODEX_HOME="$TRADINGAGENTS_CODEX_HOME" codex login -c 'cli_auth_credentials_store="file"' -c 'forced_login_method="chatgpt"'
+tradingagents --backend codex
+```
+
+Complete the official browser sign-in with ChatGPT. API-key sign-in is not accepted
+by this backend. Keep the same `TRADINGAGENTS_CODEX_HOME` for later setup checks;
+the application deliberately ignores your normal `CODEX_HOME`. The CLI only provides
+guidance when sign-in is missing; it does not read, copy, or display credentials.
+
+Stage 2's adapter is standalone. Connecting the fundamentals analyst is stage 3;
+tool execution and the remaining graph are stage 4. Until then, choose API to run
+a research report. The stage 2 PR must be approved before it is merged.
+
+The adapter's text interface takes explicit role instructions, evidence/history,
+model, and effort for each call. Each call uses a new ephemeral thread, so the
+caller supplies any history it needs and roles do not share server-side context.
+Before inference it checks effective configuration, MCP availability, and tool
+feature settings; unverifiable isolation fails closed. Unexpected tool requests,
+model rerouting, unsuccessful turns, and timeouts fail the call. There is no
+automatic retry or API fallback. Structured output, TradingAgents tool dispatch,
+and graph callbacks are outside this stage. Fake-server tests establish client
+behavior; real model adherence, sidebar behavior, and research quality still need
+the later user-run checks.
 
 ## Sources
 
