@@ -20,6 +20,12 @@ from typing import Any, BinaryIO
 DEFAULT_TIMEOUT_SECONDS = 10.0
 DEFAULT_STDERR_LIMIT = 8 * 1024
 DEFAULT_MESSAGE_LIMIT = 4 * 1024 * 1024
+MIN_CODEX_CLI_VERSION = (0, 153, 4)
+_VERSION_OUTPUT_LIMIT = 1024
+_VERSION_ERROR = (
+    "TradingAgents requires Codex CLI 0.153.4 or newer; "
+    "update the official Codex CLI"
+)
 
 # These switches keep the metadata-only probe from discovering host instructions,
 # tools, skills, apps, plugins, connectors, memories, or web capabilities.
@@ -72,6 +78,11 @@ _INHERITED_ENV = frozenset(
 
 _SAFE_ERROR_CODE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
 _SAFE_METHOD = re.compile(r"^[A-Za-z0-9_.:/-]{1,128}$")
+_STABLE_CODEX_VERSION = re.compile(
+    r"^codex-cli (0|[1-9][0-9]{0,8})\."
+    r"(0|[1-9][0-9]{0,8})\."
+    r"(0|[1-9][0-9]{0,8})$"
+)
 
 
 class TransportError(RuntimeError):
@@ -173,6 +184,10 @@ class _StderrCapture:
         qualifier = "at least " if truncated else ""
         return f"stderr content redacted ({qualifier}{self.total_bytes} bytes)"
 
+    @property
+    def data(self) -> bytes:
+        return bytes(self._buffer)
+
 
 class CodexAppServerTransport:
     """One-at-a-time POSIX JSON-RPC client over a Codex app-server subprocess.
@@ -198,6 +213,7 @@ class CodexAppServerTransport:
         if stderr_limit < 0 or message_limit < 1:
             raise ValueError("buffer limits must be non-negative and message_limit positive")
 
+        self._uses_default_command = command is None
         chosen = build_app_server_command() if command is None else tuple(command)
         if not chosen or any(not isinstance(part, str) or not part or "\x00" in part for part in chosen):
             raise ValueError("command must contain non-empty string arguments")
@@ -241,6 +257,9 @@ class CodexAppServerTransport:
                 return self
             raise TransportClosed("Codex app-server transport cannot be restarted")
 
+        if self._uses_default_command:
+            self._verify_default_cli_version()
+
         try:
             process = subprocess.Popen(
                 self.command,
@@ -279,6 +298,76 @@ class CodexAppServerTransport:
         self._stdout_thread.start()
         self._stderr_thread.start()
         return self
+
+    def _verify_default_cli_version(self) -> None:
+        """Reject unsupported Codex binaries before app-server can start."""
+
+        try:
+            process = subprocess.Popen(
+                [self.command[0], "--version"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=self.cwd,
+                env=build_child_env(self.home),
+                shell=False,
+                start_new_session=True,
+            )
+        except (OSError, ValueError):
+            raise TransportError(_VERSION_ERROR) from None
+
+        if process.stdout is None or process.stderr is None:
+            self._terminate_version_process(process)
+            raise TransportError(_VERSION_ERROR)
+
+        stdout_capture = _StderrCapture(process.stdout, _VERSION_OUTPUT_LIMIT)
+        stderr_capture = _StderrCapture(process.stderr, _VERSION_OUTPUT_LIMIT)
+        stdout_thread = threading.Thread(target=stdout_capture.run, daemon=True)
+        stderr_thread = threading.Thread(target=stderr_capture.run, daemon=True)
+        stdout_thread.start()
+        stderr_thread.start()
+        return_code: int | None = None
+        try:
+            return_code = process.wait(timeout=self.timeout)
+        except subprocess.TimeoutExpired:
+            pass
+        finally:
+            self._terminate_version_process(process)
+            for thread in (stdout_thread, stderr_thread):
+                thread.join(timeout=min(0.5, self.timeout))
+            for stream, thread in (
+                (process.stdout, stdout_thread),
+                (process.stderr, stderr_thread),
+            ):
+                if not thread.is_alive() and not stream.closed:
+                    with suppress(OSError):
+                        stream.close()
+
+        output_is_bounded = (
+            stdout_capture.total_bytes <= _VERSION_OUTPUT_LIMIT
+            and stderr_capture.total_bytes <= _VERSION_OUTPUT_LIMIT
+        )
+        try:
+            rendered = stdout_capture.data.decode("ascii").rstrip("\r\n")
+        except UnicodeDecodeError:
+            rendered = ""
+        match = _STABLE_CODEX_VERSION.fullmatch(rendered)
+        if (
+            return_code != 0
+            or not output_is_bounded
+            or stdout_thread.is_alive()
+            or stderr_thread.is_alive()
+            or match is None
+            or tuple(int(part) for part in match.groups()) < MIN_CODEX_CLI_VERSION
+        ):
+            raise TransportError(_VERSION_ERROR)
+
+    @staticmethod
+    def _terminate_version_process(process: subprocess.Popen[bytes]) -> None:
+        with suppress(ProcessLookupError, PermissionError):
+            os.killpg(process.pid, signal.SIGKILL)
+        with suppress(subprocess.TimeoutExpired):
+            process.wait(timeout=0.5)
 
     def _read_stdout(self, stream: BinaryIO) -> None:
         try:

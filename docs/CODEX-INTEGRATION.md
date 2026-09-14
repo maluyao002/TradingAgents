@@ -71,7 +71,7 @@ permission to enable the complete backend.
 ## Stage 2: adapter and startup choice
 
 Implemented in [PR #4](https://github.com/maluyao002/TradingAgents/pull/4), awaiting approval.
-Validation: 955 full offline tests and 65 subtests passed; Ruff passed. Independent
+Validation: 986 full offline tests and 65 subtests passed; Ruff passed. Independent
 review and focused re-review are complete with no remaining findings. Review fixes
 require explicit effective configuration fields and retain known turn IDs for
 interruption after malformed responses. No live research run has been performed.
@@ -96,9 +96,14 @@ to an API provider. API checkpoint flags are rejected on this path before any de
 
 ### One-time sign-in (user-run)
 
-Use the official Codex CLI on macOS/Linux and a dedicated runtime outside this
+Use the official stable Codex CLI **0.153.4 or newer** on macOS/Linux and a dedicated runtime outside this
 repository. The default is `~/.tradingagents/codex`. Do not copy authentication files
 from the normal Codex home or put credentials in this repository.
+
+This integration uses the isolation controls verified on CLI 0.153.4. Older, prerelease, or
+unrecognized CLI versions are rejected before app-server startup with an upgrade
+message, rather than dropping isolation flags that older strict-config parsers
+cannot recognize. Newer versions must still pass the capability and isolation checks.
 
 ```sh
 export TRADINGAGENTS_CODEX_HOME="$HOME/.tradingagents/codex"
@@ -130,6 +135,15 @@ not retry or fall back to the API. Structured output, TradingAgents tool dispatc
 and graph callbacks are outside this stage. Fake-server tests establish client
 behavior; real model adherence, sidebar behavior, and research quality still need
 the later user-run checks.
+
+Feature discovery is not a complete list of configuration keys. Unadvertised
+connector, memory, and skill controls must be explicitly disabled in the effective
+configuration; any advertised conflicting state is rejected. Shell access must be
+disabled independently of the catalog's execution-backend preference. Skill and
+instruction discovery settings are also checked explicitly. The corrected
+`mcpServerStatus/list` request and isolation checks passed a metadata-only smoke
+check on CLI 0.153.4 with a temporary empty runtime, no authentication reads, and
+zero inference turns. This does not establish model execution or research quality.
 
 ## Sources
 

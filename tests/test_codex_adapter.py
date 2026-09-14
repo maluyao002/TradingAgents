@@ -45,10 +45,13 @@ def model(name, *, hidden=False, modalities=None, efforts=None):
     }
 
 features = [
-    "apply_patch_freeform", "apps", "code_mode", "connectors", "memories",
-    "memory_tool", "multi_agent", "plugins", "shell_tool", "skill_search",
+    "apply_patch_freeform", "apps", "code_mode", "memories",
+    "multi_agent", "plugins", "shell_tool",
     "unified_exec", "hooks", "plugin_hooks",
 ]
+config_features = {name: False for name in features}
+config_features.update(connectors=False, memory_tool=False, skill_search=False,
+                       skip_host_skill_discovery=True)
 
 for line in sys.stdin:
     request = json.loads(line)
@@ -104,6 +107,10 @@ for line in sys.stdin:
             "tools": None,
             "web_search": "disabled",
             "hooks": {},
+            "features": dict(config_features),
+            "skills": {"bundled": {"enabled": False}, "include_instructions": False},
+            "include_environment_context": False,
+            "project_doc_max_bytes": 0,
         }
         if scenario == "unsafe-config":
             config["instructions"] = "ambient instruction"
@@ -117,8 +124,17 @@ for line in sys.stdin:
             config["hooks"] = None
         elif scenario == "empty-hook-defaults":
             config["hooks"] = {"SessionStart": [], "state": {}}
+        elif scenario.startswith("missing-control-"):
+            config["features"].pop(scenario.removeprefix("missing-control-"))
+        elif scenario.startswith("unsafe-control-"):
+            key = scenario.removeprefix("unsafe-control-")
+            config["features"][key] = not config["features"][key]
+        elif scenario == "unsafe-skills":
+            config["skills"]["bundled"]["enabled"] = True
+        elif scenario == "unsafe-skill-instructions":
+            config["skills"]["include_instructions"] = True
         result = {"config": config, "origins": {}, "layers": []}
-    elif method == "mcpServer/status/list":
+    elif method == "mcpServerStatus/list":
         data = []
         if scenario == "mcp-server":
             data = [{"name": "ambient-server"}]
@@ -130,11 +146,17 @@ for line in sys.stdin:
         elif scenario.startswith("missing-hook-feature-"):
             advertised = [name for name in features if name != scenario.removeprefix("missing-hook-feature-")]
         data = [{"name": name, "enabled": False} for name in advertised]
+        # The official catalog advertises the execution backend as enabled even
+        # when its effective config is false and shell_tool is disabled.
+        for feature in data:
+            if feature["name"] == "unified_exec":
+                feature["enabled"] = True
         if scenario.startswith("enabled-hook-feature-"):
             for feature in data:
                 if feature["name"] == scenario.removeprefix("enabled-hook-feature-"):
                     feature["enabled"] = True
-        data.append({"name": "skip_host_skill_discovery", "enabled": True})
+        if scenario == "contradictory-catalog":
+            data.append({"name": "skill_search", "enabled": True})
         result = {"data": data, "nextCursor": None}
     elif method == "thread/start":
         thread_number += 1
@@ -328,6 +350,10 @@ def test_complete_fails_closed_when_effective_tool_isolation_is_unproved(tmp_pat
         "tools",
         "web_search",
         "hooks",
+        "features",
+        "skills",
+        "include_environment_context",
+        "project_doc_max_bytes",
     ],
 )
 def test_complete_rejects_omitted_effective_config_fields(tmp_path, field):
@@ -358,6 +384,34 @@ def test_empty_serialized_hook_defaults_allow_text_completion(tmp_path):
     adapter, _ = _adapter(tmp_path, "empty-hook-defaults")
     with adapter:
         assert adapter.complete("Role", "Evidence", "gpt-test-terra", "medium") == "final analysis"
+
+
+@pytest.mark.parametrize("name", [
+    "connectors", "memory_tool", "skill_search", "skip_host_skill_discovery", "unified_exec",
+])
+@pytest.mark.parametrize("kind", ["missing-control", "unsafe-control"])
+def test_unadvertised_controls_require_explicit_safe_config(tmp_path, name, kind):
+    adapter, log = _adapter(tmp_path, f"{kind}-{name}")
+    with adapter, pytest.raises(CodexAdapterError, match="feature controls"):
+        adapter.complete("Role", "Evidence", "gpt-test-terra", "medium")
+    assert "thread/start" not in [request.get("method") for request in _requests(log)]
+
+
+@pytest.mark.parametrize("scenario", ["unsafe-skills", "unsafe-skill-instructions", "contradictory-catalog"])
+def test_equivalent_isolation_controls_cannot_be_enabled(tmp_path, scenario):
+    adapter, log = _adapter(tmp_path, scenario)
+    with adapter, pytest.raises(CodexAdapterError):
+        adapter.complete("Role", "Evidence", "gpt-test-terra", "medium")
+    assert "thread/start" not in [request.get("method") for request in _requests(log)]
+
+
+def test_official_catalog_shape_and_mcp_method_allow_completion(tmp_path):
+    adapter, log = _adapter(tmp_path)
+    with adapter:
+        assert adapter.complete("Role", "Evidence", "gpt-test-terra", "medium") == "final analysis"
+    methods = [request.get("method") for request in _requests(log)]
+    assert "mcpServerStatus/list" in methods
+    assert "mcpServer/status/list" not in methods
 
 
 @pytest.mark.parametrize(
@@ -429,5 +483,5 @@ def test_reentering_adapter_repeats_server_scoped_isolation_checks(tmp_path):
             assert adapter.complete("Role", "Evidence", "gpt-test-terra", "medium") == "final analysis"
     methods = [request.get("method") for request in _requests(log)]
     assert methods.count("config/read") == 2
-    assert methods.count("mcpServer/status/list") == 2
+    assert methods.count("mcpServerStatus/list") == 2
     assert methods.count("experimentalFeature/list") == 2

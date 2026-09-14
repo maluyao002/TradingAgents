@@ -92,14 +92,18 @@ _EXPECTED_FEATURES = {
     "apply_patch_freeform": False,
     "apps": False,
     "code_mode": False,
-    "connectors": False,
     "hooks": False,
     "memories": False,
-    "memory_tool": False,
     "multi_agent": False,
     "plugins": False,
     "plugin_hooks": False,
     "shell_tool": False,
+}
+# These controls can be omitted from experimentalFeature/list. Require explicit
+# effective config values instead of mistaking catalog absence for enablement.
+_CONFIG_FEATURE_CONTROLS = {
+    "connectors": False,
+    "memory_tool": False,
     "skill_search": False,
     "skip_host_skill_discovery": True,
     "unified_exec": False,
@@ -476,6 +480,23 @@ class CodexAdapter:
                 raise CodexAdapterError("Codex effective configuration is not isolated")
             if "hooks" not in config or not _empty_hook_config(config["hooks"]):
                 raise CodexAdapterError("Codex effective hooks configuration is not isolated")
+            features = config.get("features")
+            if not isinstance(features, dict) or any(
+                features.get(name) is not expected
+                for name, expected in {**_EXPECTED_FEATURES, **_CONFIG_FEATURE_CONTROLS}.items()
+            ):
+                raise CodexAdapterError("Codex effective feature controls are not isolated")
+            skills = config.get("skills")
+            if (
+                not isinstance(skills, dict)
+                or skills.get("include_instructions") is not False
+                or not isinstance(skills.get("bundled"), dict)
+                or skills["bundled"].get("enabled") is not False
+                or config.get("include_environment_context") is not False
+                or type(config.get("project_doc_max_bytes")) is not int
+                or config["project_doc_max_bytes"] != 0
+            ):
+                raise CodexAdapterError("Codex effective instruction controls are not isolated")
 
             mcp_cursor: str | None = None
             seen_mcp_cursors: set[str] = set()
@@ -484,7 +505,7 @@ class CodexAdapter:
                 if mcp_cursor is not None:
                     params["cursor"] = mcp_cursor
                 mcp_result = transport.request(
-                    "mcpServer/status/list", params, timeout=self._remaining(deadline)
+                    "mcpServerStatus/list", params, timeout=self._remaining(deadline)
                 )
                 if not isinstance(mcp_result, dict) or mcp_result.get("data") != []:
                     raise CodexAdapterError("Codex reported an available MCP server")
@@ -532,6 +553,15 @@ class CodexAdapter:
                 raise CodexAdapterError("Codex feature inventory exceeded the page limit")
             if any(feature_values.get(name) is not expected for name, expected in _EXPECTED_FEATURES.items()):
                 raise CodexAdapterError("Codex tool feature isolation could not be verified")
+            # unified_exec selects the shell implementation, not shell access:
+            # current CLIs can advertise it as enabled even with its config false.
+            # shell_tool must still be explicitly disabled in both responses.
+            if any(
+                name in feature_values and feature_values[name] is not expected
+                for name, expected in _CONFIG_FEATURE_CONTROLS.items()
+                if name != "unified_exec"
+            ):
+                raise CodexAdapterError("Codex feature inventory contradicts its isolation controls")
         except TransportError as exc:
             raise CodexAdapterError(str(exc)) from None
         self._inference_isolation_verified = True
