@@ -11,9 +11,11 @@ claim. Deterministic, no LLM involved.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from importlib.metadata import version
+from typing import Any
 
 import pandas as pd
-from stockstats import wrap
+from stockstats import StockDataFrame, dft_windows, wrap
 
 from tradingagents.dataflows.stockstats_utils import load_ohlcv
 
@@ -23,6 +25,17 @@ DEFAULT_SNAPSHOT_INDICATORS: tuple[str, ...] = (
     "rsi", "boll", "boll_ub", "boll_lb",
     "macd", "macds", "macdh", "atr",
 )
+
+_TREND_INDICATORS = {"close_10_ema", "close_50_sma", "close_200_sma", "macd"}
+
+
+def _indicator_method(name: str) -> str:
+    family = {"boll_ub": "boll", "boll_lb": "boll", "macds": "macd", "macdh": "macd"}.get(name, name)
+    windows = dft_windows(family)
+    parameters = f"; configured windows={windows}" if windows else ""
+    if family == "boll":
+        parameters += f"; standard-deviation multiplier={StockDataFrame.BOLL_STD_TIMES}"
+    return f"stockstats {version('stockstats')}; indicator={name}{parameters}; computed on supplied daily OHLCV"
 
 
 def _verified_rows(symbol: str, curr_date: str) -> pd.DataFrame:
@@ -59,35 +72,103 @@ def _fmt(value) -> str:
     return str(value)
 
 
-def build_verified_market_snapshot(
+def _plain_number(value: Any) -> int | float | None:
+    """Return JSON-friendly exact numeric data, or ``None`` for an absent value."""
+    if value is None or pd.isna(value):
+        return None
+    if hasattr(value, "item"):
+        value = value.item()
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def build_verified_market_snapshot_data(
     symbol: str,
     curr_date: str,
-    look_back_days: int = 30,
     indicators: Iterable[str] | None = None,
-) -> str:
-    """Render a ground-truth snapshot: latest OHLCV row, indicators, recent closes."""
-    # `df` keeps the original capitalized OHLCV columns (Open/High/Low/Close/
-    # Volume); stockstats `wrap()` lowercases columns and adds indicator
-    # columns, so read raw prices from `df` and indicators from `stock_df`.
+) -> dict[str, Any]:
+    """Compute the verified OHLCV and indicator snapshot once as numeric data.
+
+    The complete in-range OHLCV frame is retained in ``rows`` so callers that
+    need exact arithmetic or dates are not limited by the compact Markdown
+    renderer's 30-row display cap.
+    """
     df = _verified_rows(symbol, curr_date)
     stock_df = wrap(df.copy())
-
     selected = tuple(indicators or DEFAULT_SNAPSHOT_INDICATORS)
-    indicator_values: dict[str, str] = {}
+
+    indicator_values: dict[str, dict[str, Any]] = {}
+    comparisons = []
     for name in selected:
         try:
             stock_df[name]  # triggers stockstats calculation
-            indicator_values[name] = _fmt(stock_df.iloc[-1][name])
-        except Exception as exc:  # noqa: BLE001 — one bad indicator shouldn't sink the snapshot
-            indicator_values[name] = f"N/A ({type(exc).__name__})"
+            indicator_values[name] = {
+                "value": _plain_number(stock_df.iloc[-1][name]),
+                "error": None,
+                "method": _indicator_method(name),
+            }
+            if name in _TREND_INDICATORS and len(df) >= 6:
+                before = _plain_number(stock_df.iloc[-6][name])
+                latest = indicator_values[name]["value"]
+                if before is not None and latest is not None:
+                    comparisons.append({
+                        "indicator": name, "start_date": _fmt(df.iloc[-6]["Date"]),
+                        "end_date": _fmt(df.iloc[-1]["Date"]), "start_value": before,
+                        "end_value": latest, "change": latest - before,
+                        "method": indicator_values[name]["method"],
+                    })
+        except Exception as exc:  # noqa: BLE001 — preserve partial verified output
+            indicator_values[name] = {
+                "value": None,
+                "error": type(exc).__name__,
+            }
 
-    latest = df.iloc[-1]
-    latest_date = _fmt(latest["Date"])
+    rows = []
+    for _, row in df.iterrows():
+        rows.append({
+            "date": _fmt(row["Date"]),
+            "open": _plain_number(row.get("Open")),
+            "high": _plain_number(row.get("High")),
+            "low": _plain_number(row.get("Low")),
+            "close": _plain_number(row.get("Close")),
+            "volume": _plain_number(row.get("Volume")),
+        })
+
+    return {
+        "symbol": symbol.upper(),
+        "requested_date": curr_date,
+        "latest_date": rows[-1]["date"],
+        "latest_ohlcv": {
+            field: rows[-1][field.lower()]
+            for field in ("Open", "High", "Low", "Close", "Volume")
+        },
+        "indicators": indicator_values,
+        "indicator_comparisons": comparisons,
+        "rows": rows,
+    }
+
+
+def render_verified_market_snapshot(
+    snapshot: dict[str, Any],
+    look_back_days: int = 30,
+) -> str:
+    """Render numeric snapshot data in the long-standing Markdown format."""
+    symbol = snapshot["symbol"]
+    curr_date = snapshot["requested_date"]
+    latest_date = snapshot["latest_date"]
+    latest = snapshot["latest_ohlcv"]
+    indicator_values = snapshot["indicators"]
     window = max(1, min(int(look_back_days), 30))
-    recent = df.tail(window)
+    recent = snapshot["rows"][-window:]
 
     lines = [
-        f"## Verified market data snapshot for {symbol.upper()}",
+        f"## Verified market data snapshot for {symbol}",
         "",
         f"- Requested analysis date: {curr_date}",
         f"- Latest trading row used: {latest_date}",
@@ -103,13 +184,32 @@ def build_verified_market_snapshot(
 
     lines += ["", "### Verified technical indicators (latest row)", "",
               "| Indicator | Value |", "|---|---:|"]
-    for name, value in indicator_values.items():
-        lines.append(f"| {name} | {value} |")
+    for name, item in indicator_values.items():
+        value = item.get("value")
+        rendered = _fmt(value) if value is not None else (
+            f"N/A ({item['error']})" if item.get("error") else "N/A"
+        )
+        lines.append(f"| {name} | {rendered} |")
+
+    methods = [item["method"] for item in indicator_values.values() if item.get("method")]
+    if methods:
+        lines += ["", "### Calculation provenance", *[f"- {method}" for method in methods]]
+        lines.append("- Quote currency and price-adjustment policy are not supplied by this snapshot; do not invent them.")
+    if snapshot.get("indicator_comparisons"):
+        lines += ["", "### Change across five trading-row intervals", "",
+                  "| Indicator | Start date | Start | End date | End | Absolute change |",
+                  "|---|---|---:|---|---:|---:|"]
+        for item in snapshot["indicator_comparisons"]:
+            lines.append(
+                f"| {item['indicator']} | {item['start_date']} | {_fmt(item['start_value'])} "
+                f"| {item['end_date']} | {_fmt(item['end_value'])} | {_fmt(item['change'])} |"
+            )
+        lines.append("These endpoint changes do not establish a monotonic trend or an exact crossover date.")
 
     lines += ["", f"### Recent verified closes (last {len(recent)} rows)", "",
               "| Date | Close |", "|---|---:|"]
-    for _, row in recent.iterrows():
-        lines.append(f"| {_fmt(row['Date'])} | {_fmt(row.get('Close'))} |")
+    for row in recent:
+        lines.append(f"| {row['date']} | {_fmt(row.get('close'))} |")
 
     lines += [
         "",
@@ -121,3 +221,14 @@ def build_verified_market_snapshot(
         "dates and prices.",
     ]
     return "\n".join(lines)
+
+
+def build_verified_market_snapshot(
+    symbol: str,
+    curr_date: str,
+    look_back_days: int = 30,
+    indicators: Iterable[str] | None = None,
+) -> str:
+    """Render a ground-truth snapshot: latest OHLCV row, indicators, recent closes."""
+    snapshot = build_verified_market_snapshot_data(symbol, curr_date, indicators)
+    return render_verified_market_snapshot(snapshot, look_back_days)

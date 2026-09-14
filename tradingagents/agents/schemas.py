@@ -107,13 +107,19 @@ class ResearchPlan(BaseModel):
         description=(
             "Conversational summary of the key points from both sides of the "
             "debate, ending with which arguments led to the recommendation. "
-            "Speak naturally, as if to a teammate."
+            "Preserve source references, accounting-basis caveats, unresolved "
+            "disputes and confidence; distinguish balanced evidence from "
+            "insufficient information."
         ),
     )
     strategic_actions: str = Field(
         description=(
             "Concrete steps for the trader to implement the recommendation, "
-            "including position sizing guidance consistent with the rating."
+            "including conditional steps and missing prerequisites. For every "
+            "material trigger, provide its rationale, as-of date, applicable "
+            "horizon, refresh or expiry rule, and invalidation condition. Do "
+            "not assume ownership or a target allocation when portfolio context "
+            "is absent; label illustrative sensitivities and proposed horizons."
         ),
     )
 
@@ -149,7 +155,9 @@ class TraderProposal(BaseModel):
     reasoning: str = Field(
         description=(
             "The case for this action, anchored in the analysts' reports and "
-            "the research plan. Two to four sentences."
+            "the research plan. For every material trigger, state its rationale, "
+            "as-of date, applicable horizon, refresh or expiry rule, and "
+            "invalidation condition."
         ),
     )
     entry_price: float | None = Field(
@@ -165,12 +173,12 @@ class TraderProposal(BaseModel):
         description=(
             "Optional stop-loss as an absolute price in the instrument's quote "
             "currency (e.g. 172.0), never a percentage. Convert a percentage "
-            "distance to the price level it implies, or omit it."
+            "distance to the price level it implies only when an executable stop is justified. Omit for a closing-price review/reduction trigger; describe that conditional trigger in reasoning instead. Do not invent a stop when ownership, horizon or risk prerequisites are missing."
         ),
     )
     position_sizing: str | None = Field(
         default=None,
-        description="Optional sizing guidance, e.g. '5% of portfolio'.",
+        description="Optional sizing guidance grounded in supplied portfolio context; omit when ownership, target allocation or risk budget is unknown.",
     )
 
     @field_validator("entry_price", "stop_loss", mode="before")
@@ -183,8 +191,7 @@ def render_trader_proposal(proposal: TraderProposal) -> str:
     """Render a TraderProposal to markdown.
 
     The trailing ``FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**`` line is
-    preserved for backward compatibility with the analyst stop-signal text
-    and any external code that greps for it.
+    preserved for backward compatibility with external consumers.
     """
     parts = [
         f"**Action**: {proposal.action.value}",
@@ -230,23 +237,28 @@ class PortfolioDecision(BaseModel):
     executive_summary: str = Field(
         description=(
             "A concise action plan covering entry strategy, position sizing, "
-            "key risk levels, and time horizon. Two to four sentences."
+            "key risk levels, and time horizon. Identify missing portfolio "
+            "context, and distinguish insufficient evidence from a supported "
+            "decision to maintain exposure."
         ),
     )
     investment_thesis: str = Field(
         description=(
             "Detailed reasoning anchored in specific evidence from the analysts' "
             "debate. If prior lessons are referenced in the prompt context, "
-            "incorporate them; otherwise rely solely on the current analysis."
+            "incorporate them; otherwise rely solely on the current analysis. "
+            "Retain material source caveats, explain why competing claims were "
+            "accepted or rejected, and separate fact, assumption, sensitivity "
+            "and action."
         ),
     )
     price_target: float | None = Field(
         default=None,
-        description="Optional target price in the instrument's quote currency.",
+        description="Optional supported target price in the instrument's quote currency; omit if only an arbitrary sensitivity multiple is available.",
     )
     time_horizon: str | None = Field(
         default=None,
-        description="Optional recommended holding period, e.g. '3-6 months'.",
+        description="Supplied investment horizon, or an explicitly labeled proposed assumption; never imply an unspecified horizon was approved.",
     )
 
     @field_validator("price_target", mode="before")
@@ -313,7 +325,7 @@ class SentimentReport(BaseModel):
             "Overall sentiment direction. Exactly one of: "
             "Bullish / Mildly Bullish / Neutral / Mixed / Mildly Bearish / Bearish. "
             "Use Mixed when sources point in clearly different directions. "
-            "Use Neutral only when all sources are genuinely silent or non-committal."
+            "Use Neutral when available evidence lacks a directional balance, even when discussion exists. Absent evidence requires low confidence and explicit disclosure; it does not establish neutral market sentiment."
         ),
     )
     overall_score: float = Field(
@@ -331,14 +343,12 @@ class SentimentReport(BaseModel):
     confidence: Literal["low", "medium", "high"] = Field(
         description=(
             "Confidence in the assessment based on data quality and sample size. "
-            "Use 'low' when one or more sources returned a placeholder or fewer "
-            "than 5 data points; 'medium' when data is present but sparse; "
-            "'high' when all three sources returned substantive data."
+            "Assess relevance, representativeness, independence, freshness and sample size. Use low for absent or very sparse evidence. Three populated sources alone do not justify high confidence; syndicated articles and repeated posts are not independent corroboration."
         ),
     )
     narrative: str = Field(
         description=(
-            "Full sentiment report covering, in order: "
+            "Concise sentiment report, including a compact evidence table where useful, covering: "
             "(1) source-by-source breakdown with specific evidence (cite message "
             "counts, ratios, notable posts); "
             "(2) cross-source divergences and alignments; "
@@ -346,8 +356,7 @@ class SentimentReport(BaseModel):
             "(4) catalysts and risks surfaced by the data; "
             "(5) a markdown table summarising key sentiment signals, their "
             "direction, source, and supporting evidence. "
-            "Keep it informative and substantive: develop each section thoroughly "
-            "with concrete evidence so every point adds new signal for the trader."
+            "Preserve source IDs/URLs and dates when supplied; disclose missing metadata without inventing it. Describe sample counts without implying predictive accuracy. Do not issue transaction instructions or repeat the full news report."
         ),
     )
 

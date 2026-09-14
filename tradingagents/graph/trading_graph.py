@@ -29,7 +29,9 @@ from tradingagents.agents.utils.agent_utils import (
     resolve_instrument_identity,
 )
 from tradingagents.agents.utils.memory import TradingMemoryLog
+from tradingagents.agents.utils.prompt_policy import PROMPT_POLICY_VERSION
 from tradingagents.dataflows.config import set_config
+from tradingagents.dataflows.request_cache import run_data_scope
 from tradingagents.dataflows.utils import safe_ticker_component
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.llm_clients import create_llm_client
@@ -412,6 +414,7 @@ class TradingAgentsGraph:
             f"debate={self.config['max_debate_rounds']}",
             f"risk={self.config['max_risk_discuss_rounds']}",
             f"asset={asset_type}",
+            f"prompts={PROMPT_POLICY_VERSION}",
             "models=" + json.dumps({
                 "provider": self.config.get("llm_provider"),
                 "backend": self.config.get("backend_url"),
@@ -422,6 +425,7 @@ class TradingAgentsGraph:
             }, sort_keys=True),
         ])
 
+    @run_data_scope
     def propagate(self, company_name, trade_date, asset_type: str = "stock"):
         """Run the trading agents graph for a company on a specific date.
 
@@ -525,7 +529,7 @@ class TradingAgentsGraph:
                 / "reports"
                 / f"{safe_ticker_component(ticker)}_{stamp}"
             )
-        return write_report_tree(final_state, ticker, save_path)
+        return write_report_tree(final_state, ticker, save_path, config=self.config if self else None)
 
     def _run_graph(self, company_name, trade_date, asset_type: str = "stock",
                    checkpoint_thread_id: str | None = None):
@@ -599,6 +603,8 @@ class TradingAgentsGraph:
         self.log_states_dict[str(trade_date)] = {
             "company_of_interest": final_state["company_of_interest"],
             "trade_date": final_state["trade_date"],
+            "evidence_packets": final_state.get("evidence_packets", {}),
+            "prepared_data": final_state.get("prepared_data", {}),
             "market_report": final_state["market_report"],
             "sentiment_report": final_state["sentiment_report"],
             "news_report": final_state["news_report"],

@@ -80,7 +80,8 @@ class VendorRoutingTests(unittest.TestCase):
             result = interface.route_to_vendor("get_stock_data", "AAPL", "2026-01-01", "2026-01-10")
         self.assertIn("NO_DATA_AVAILABLE", result)
         joined = "\n".join(cm.output)
-        self.assertIn("boom", joined)            # the real error surfaced in logs
+        self.assertIn("ValueError", joined)      # safe error category remains visible
+        self.assertNotIn("boom", joined)         # raw text may contain credentials
         self.assertIn("yfinance", joined)
 
     def test_unknown_configured_vendor_raises(self):

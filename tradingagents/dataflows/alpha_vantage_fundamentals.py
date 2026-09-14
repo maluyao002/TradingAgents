@@ -72,3 +72,10 @@ def get_income_statement(ticker: str, freq: str = "quarterly", curr_date: str = 
     result = _make_api_request("INCOME_STATEMENT", {"symbol": ticker})
     return _filter_reports_by_date(result, curr_date)
 
+
+# Alpha Vantage returns annualReports and quarterlyReports together from each
+# statement endpoint.  ``freq`` is retained for tool compatibility, but it does
+# not change the request or response, so annual and quarterly calls can share
+# one run-local response without spending provider quota twice.
+for _statement_getter in (get_balance_sheet, get_cashflow, get_income_statement):
+    _statement_getter.__request_cache_ignore__ = frozenset({"freq"})
