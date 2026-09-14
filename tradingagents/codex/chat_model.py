@@ -27,7 +27,7 @@ from langchain_core.utils.function_calling import (
 )
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, model_validator
 
-from tradingagents.codex.adapter import CodexInferenceError
+from tradingagents.codex.adapter import CodexCompletion, CodexInferenceError
 
 _MAX_ROLE_CHARS = 256
 _MAX_MESSAGE_CHARS = 4_000_000
@@ -410,16 +410,18 @@ class CodexChatModel(BaseChatModel):
         instructions: str,
         prompt: str,
         output_schema: dict[str, Any] | None,
-    ) -> str:
+    ) -> CodexCompletion:
         with self._call_lock:
-            if output_schema is None:
-                return self.adapter.complete(instructions, prompt, self.model, self.effort)
-            return self.adapter.complete(
-                instructions,
-                prompt,
-                self.model,
-                self.effort,
-                output_schema=output_schema,
+            kwargs = {} if output_schema is None else {"output_schema": output_schema}
+            complete_with_usage = getattr(self.adapter, "complete_with_usage", None)
+            if callable(complete_with_usage):
+                result = complete_with_usage(instructions, prompt, self.model, self.effort, **kwargs)
+                if not isinstance(result, CodexCompletion):
+                    raise CodexInferenceError("Codex returned an invalid completion result")
+                return result
+            # Text-only custom adapters remain supported without inventing usage.
+            return CodexCompletion(
+                self.adapter.complete(instructions, prompt, self.model, self.effort, **kwargs), None,
             )
 
     def _tool_message(self, response: str) -> AIMessage:
@@ -497,7 +499,8 @@ class CodexChatModel(BaseChatModel):
         output_schema = self._structured.output_schema if self._structured else None
         if self._bound_tools:
             output_schema = _tool_output_schema(self._bound_tools)
-        response = self._adapter_complete(self._instructions(policies), prompt, output_schema)
+        completion = self._adapter_complete(self._instructions(policies), prompt, output_schema)
+        response = completion.text
         if self._bound_tools:
             message = self._tool_message(response)
         else:
@@ -513,6 +516,15 @@ class CodexChatModel(BaseChatModel):
                     "reasoning_effort": self.effort,
                 },
             )
+        if completion.usage is not None:
+            usage = completion.usage
+            message.usage_metadata = {
+                "input_tokens": usage.input_tokens,
+                "output_tokens": usage.output_tokens,
+                "total_tokens": usage.total_tokens,
+                "input_token_details": {"cache_read": usage.cached_input_tokens},
+                "output_token_details": {"reasoning": usage.reasoning_output_tokens},
+            }
         return ChatResult(generations=[ChatGeneration(message=message)])
 
 

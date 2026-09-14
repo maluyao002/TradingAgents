@@ -10,8 +10,10 @@ from tradingagents.codex.adapter import (
     CodexAdapter,
     CodexAdapterError,
     CodexAuthenticationError,
+    CodexCompletion,
     CodexInferenceError,
     CodexSelectionError,
+    CodexTokenUsage,
 )
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="Codex adapter is POSIX-only")
@@ -43,6 +45,30 @@ def model(name, *, hidden=False, modalities=None, efforts=None):
         "isDefault": name == "gpt-test-terra",
         "hidden": hidden,
     }
+
+def usage_breakdown(input_tokens, output_tokens, cached_input_tokens,
+                    reasoning_output_tokens, total_tokens=None):
+    return {
+        "inputTokens": input_tokens,
+        "outputTokens": output_tokens,
+        "cachedInputTokens": cached_input_tokens,
+        "reasoningOutputTokens": reasoning_output_tokens,
+        "totalTokens": input_tokens + output_tokens if total_tokens is None else total_tokens,
+    }
+
+def send_usage(thread_id, turn_id, total, last=None):
+    send({
+        "method": "thread/tokenUsage/updated",
+        "params": {
+            "threadId": thread_id,
+            "turnId": turn_id,
+            "tokenUsage": {
+                "last": total if last is None else last,
+                "total": total,
+                "modelContextWindow": 100000,
+            },
+        },
+    })
 
 features = [
     "apply_patch_freeform", "apps", "code_mode", "memories",
@@ -215,6 +241,87 @@ for line in sys.stdin:
             "method": "turn/started",
             "params": {"threadId": thread_id, "turn": {"id": turn_id, "status": "inProgress", "items": []}},
         })
+        first_usage = usage_breakdown(10, 5, 4, 2)
+        if scenario == "usage-cumulative":
+            send_usage(
+                thread_id,
+                turn_id,
+                first_usage,
+                usage_breakdown(8, 3, 2, 1),
+            )
+            send_usage(
+                thread_id,
+                turn_id,
+                first_usage,
+                usage_breakdown(8, 3, 2, 1),
+            )
+            send_usage(
+                thread_id,
+                turn_id,
+                usage_breakdown(20, 8, 6, 3),
+                usage_breakdown(7, 3, 1, 2),
+            )
+        elif scenario == "usage-first-only" and thread_number == 1:
+            send_usage(thread_id, turn_id, first_usage)
+        elif scenario == "usage-later-invalid":
+            send_usage(thread_id, turn_id, first_usage)
+            invalid = usage_breakdown(20, 8, 6, 3)
+            invalid["inputTokens"] = "20"
+            send_usage(thread_id, turn_id, invalid)
+        elif scenario == "usage-decreasing":
+            send_usage(thread_id, turn_id, usage_breakdown(20, 8, 6, 3))
+            send_usage(thread_id, turn_id, first_usage)
+        elif scenario == "usage-malformed-thread-identity":
+            send({
+                "method": "thread/tokenUsage/updated",
+                "params": {"threadId": None, "turnId": turn_id, "tokenUsage": {}},
+            })
+        elif scenario == "usage-malformed-turn-identity":
+            send({
+                "method": "thread/tokenUsage/updated",
+                "params": {"threadId": thread_id, "turnId": None, "tokenUsage": {}},
+            })
+        elif scenario.startswith("usage-malformed-"):
+            malformed = usage_breakdown(10, 5, 4, 2)
+            malformed_kind = scenario.removeprefix("usage-malformed-")
+            if malformed_kind == "missing":
+                malformed.pop("inputTokens")
+            elif malformed_kind == "bool":
+                malformed["outputTokens"] = True
+            elif malformed_kind == "string":
+                malformed["inputTokens"] = "10"
+            elif malformed_kind == "negative":
+                malformed["reasoningOutputTokens"] = -1
+            elif malformed_kind == "cached":
+                malformed["cachedInputTokens"] = 11
+            elif malformed_kind == "reasoning":
+                malformed["reasoningOutputTokens"] = 6
+            elif malformed_kind == "total":
+                malformed["totalTokens"] = 16
+            payload = {
+                "last": malformed,
+                "total": malformed,
+                "modelContextWindow": 100000,
+            }
+            if malformed_kind == "last":
+                payload.pop("last")
+            send({
+                "method": "thread/tokenUsage/updated",
+                "params": {"threadId": thread_id, "turnId": turn_id, "tokenUsage": payload},
+            })
+        elif scenario == "usage-other-thread":
+            send_usage("unknown-thread", turn_id, first_usage)
+        elif scenario == "usage-other-turn":
+            send_usage(thread_id, "unknown-turn", first_usage)
+        elif scenario == "usage-retired":
+            if thread_number > 1:
+                send({
+                    "method": "thread/tokenUsage/updated",
+                    "params": {"threadId": "thread-1", "turnId": None, "tokenUsage": {}},
+                })
+                send_usage(thread_id, turn_id, usage_breakdown(4, 2, 1, 1))
+            else:
+                send_usage(thread_id, turn_id, first_usage)
         if scenario == "tool-item":
             item = {"id": "tool-1", "type": "commandExecution", "command": "secret"}
             send({"method": "item/started", "params": {"threadId": thread_id, "turnId": turn_id, "item": item}})
@@ -373,6 +480,108 @@ def test_complete_forwards_a_copied_output_schema_only_to_turn_start(tmp_path):
     assert turn["params"]["outputSchema"] == expected
     assert "outputSchema" not in thread["params"]
     assert schema == expected
+
+
+def test_complete_with_usage_replaces_cumulative_snapshots_and_uses_total(tmp_path):
+    adapter, _ = _adapter(tmp_path, "usage-cumulative")
+    with adapter:
+        completion = adapter.complete_with_usage(
+            "Role", "Evidence", "gpt-test-terra", "medium"
+        )
+
+    assert completion == CodexCompletion(
+        text="final analysis",
+        usage=CodexTokenUsage(
+            input_tokens=20,
+            output_tokens=8,
+            cached_input_tokens=6,
+            reasoning_output_tokens=3,
+            total_tokens=28,
+        ),
+    )
+
+
+def test_usage_is_local_to_each_ephemeral_completion(tmp_path):
+    adapter, _ = _adapter(tmp_path, "usage-first-only")
+    with adapter:
+        first = adapter.complete_with_usage(
+            "Role", "Evidence", "gpt-test-terra", "medium"
+        )
+        second = adapter.complete_with_usage(
+            "Role", "More evidence", "gpt-test-terra", "medium"
+        )
+
+    assert first.usage == CodexTokenUsage(10, 5, 4, 2, 15)
+    assert second.usage is None
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        "normal",
+        "usage-malformed-missing",
+        "usage-malformed-bool",
+        "usage-malformed-string",
+        "usage-malformed-negative",
+        "usage-malformed-cached",
+        "usage-malformed-reasoning",
+        "usage-malformed-total",
+        "usage-malformed-last",
+        "usage-later-invalid",
+        "usage-decreasing",
+    ],
+)
+def test_absent_or_malformed_usage_is_unknown_without_losing_text(tmp_path, scenario):
+    adapter, _ = _adapter(tmp_path, scenario)
+    with adapter:
+        completion = adapter.complete_with_usage(
+            "Role", "Evidence", "gpt-test-terra", "medium"
+        )
+
+    assert completion.text == "final analysis"
+    assert completion.usage is None
+
+
+@pytest.mark.parametrize(
+    ("scenario", "match"),
+    [
+        ("usage-other-thread", "unknown thread"),
+        ("usage-other-turn", "unknown turn"),
+        ("usage-malformed-thread-identity", "unknown thread"),
+        ("usage-malformed-turn-identity", "unknown turn"),
+    ],
+)
+def test_usage_for_unrelated_active_identity_is_rejected(tmp_path, scenario, match):
+    adapter, log = _adapter(tmp_path, scenario)
+    with adapter, pytest.raises(CodexInferenceError, match=match):
+        adapter.complete_with_usage("Role", "Evidence", "gpt-test-terra", "medium")
+
+    methods = [request["method"] for request in _requests(log)]
+    assert "turn/interrupt" in methods
+    assert "thread/unsubscribe" in methods
+
+
+def test_retired_thread_usage_is_ignored_without_tainting_active_usage(tmp_path):
+    adapter, _ = _adapter(tmp_path, "usage-retired")
+    with adapter:
+        first = adapter.complete_with_usage(
+            "Role", "Evidence", "gpt-test-terra", "medium"
+        )
+        second = adapter.complete_with_usage(
+            "Role", "More evidence", "gpt-test-terra", "medium"
+        )
+
+    assert first.usage == CodexTokenUsage(10, 5, 4, 2, 15)
+    assert second.usage == CodexTokenUsage(4, 2, 1, 1, 6)
+
+
+def test_complete_keeps_string_return_contract_when_usage_is_available(tmp_path):
+    adapter, _ = _adapter(tmp_path, "usage-cumulative")
+    with adapter:
+        result = adapter.complete("Role", "Evidence", "gpt-test-terra", "medium")
+
+    assert result == "final analysis"
+    assert type(result) is str
 
 
 @pytest.mark.parametrize("schema", [{}, {"minimum": float("nan")}, {"type": object()}])

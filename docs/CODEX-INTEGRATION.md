@@ -252,8 +252,8 @@ Research Manager, Trader, Portfolio Manager, and Sentiment Analyst keep their ty
 output schemas and local validation. Model calls are serialized within the shared
 runtime. Invalid protocol responses, unsupported calls, timeouts, and cancellations
 fail without switching backends. The same graph emits node/tool progress into the
-existing dashboard; call counts are observed, while unavailable token usage or costs
-remain unknown. Final report metadata records the selected backend and role settings,
+existing dashboard. Token usage is captured when reported by the runtime; missing
+usage and billed costs remain unknown. Final report metadata records the selected backend and role settings,
 without runtime paths, credentials, or Codex thread IDs.
 
 ### Recovery
@@ -307,3 +307,11 @@ Reports now default to one `complete_report.md`, with the portfolio decision fir
 FRED uses `FRED_API_KEY` when set. On macOS, an existing Keychain item can instead be selected with `FRED_KEYCHAIN_SERVICE` or `FRED_KEYCHAIN_LABEL`, and optionally `FRED_KEYCHAIN_ACCOUNT` (default `api-key`). Service takes precedence over label if both are set. No item names are guessed. Unavailable keys leave macro data explicitly unavailable. Keychain lookup results are cached for the process lifetime; restart after changing or unlocking credentials.
 
 Recent daily prices carry a provisional warning through prepared facts and downstream evidence. Without exchange-session metadata, the conservative date boundary includes any day that could still be current in UTC-12; it does not certify an official closing auction. Observation time is snapshot preparation time and does not guarantee a fresh provider response.
+
+### Token usage for backend comparisons
+
+Both CLI backends save observed input, output, cached-input, reasoning-output and total tokens in `run_metadata.json`, including a per-model breakdown. Reasoning is a subset of output, and cached input is a subset of input; neither is added again to the total. API reporting continues to use provider response usage.
+
+Codex uses the official [`thread/tokenUsage/updated`](https://learn.chatgpt.com/docs/app-server) event for the active thread and turn. Each model invocation creates a fresh ephemeral thread, so the latest cumulative `tokenUsage.total` snapshot belongs to that invocation. Repeated updates replace the prior snapshot; they are not summed. The adapter passes text and usage together under the existing call lock. The text-only `complete()` interface remains available; `complete_with_usage()` returns both. No extra inference or account-wide polling is needed.
+
+Absent or malformed telemetry is recorded as unknown (`null`), not zero. Aggregate values are sums of observed usage, which can be partial: inspect `usage_completeness` and `calls_missing_usage` before comparing runs. Completeness tracks calls with valid input/output counts; optional cached, reasoning and total fields can still be unavailable for API providers. Counts are runtime-reported usage, not an invoice or a measurement of Codex subscription allowance. The initial implementation is verified with offline protocol fixtures; your next live run will confirm what this runtime reports.

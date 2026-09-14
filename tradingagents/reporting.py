@@ -35,7 +35,7 @@ def _usage_per_model(value: Any) -> dict[str, dict[str, int | None]]:
             continue
         safe[model_id] = {
             key: _valid_count(metrics.get(key))
-            for key in ("input_tokens", "output_tokens", "cached_input_tokens")
+            for key in ("input_tokens", "output_tokens", "cached_input_tokens", "reasoning_output_tokens", "total_tokens")
         }
         safe[model_id].update({
             key: _valid_count(metrics.get(key))
@@ -120,6 +120,8 @@ def build_run_metadata(
             "input_tokens": _valid_count(usage.get("input_tokens")),
             "output_tokens": _valid_count(usage.get("output_tokens")),
             "cached_input_tokens": _valid_count(usage.get("cached_input_tokens")),
+            "reasoning_output_tokens": _valid_count(usage.get("reasoning_output_tokens")),
+            "total_tokens": _valid_count(usage.get("total_tokens")),
             "per_model": _usage_per_model(usage.get("per_model")),
             "usage_completeness": _usage_completeness(usage.get("usage_completeness")),
             "tool_calls": _valid_count(usage.get("tool_calls")),

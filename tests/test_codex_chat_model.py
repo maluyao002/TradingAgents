@@ -264,3 +264,96 @@ def test_strict_output_rejects_missing_default_fields_and_unvalidated_dict_schem
         model.with_structured_output(OptionalDecision).invoke("decide")
     with pytest.raises(ValueError, match="requires a Pydantic model"):
         model.with_structured_output({"type": "object"})
+
+
+@pytest.mark.parametrize("mode", ["plain", "tool", "structured"])
+def test_codex_usage_reaches_callbacks_and_saved_report(tmp_path, mode):
+    from tradingagents.codex.adapter import CodexCompletion, CodexTokenUsage
+    from tradingagents.reporting import write_report_tree
+
+    responses = {
+        "plain": "answer",
+        "tool": '{"content":"Look up data", "tool_calls":[{"name":"lookup","arguments":{"symbol":"AMD"}}]}',
+        "structured": '{"action":"Hold","confidence":80}',
+    }
+
+    class UsageAdapter(_FakeAdapter):
+        def complete(self, *args, **kwargs):
+            raise AssertionError("usage-aware bridge must not invoke the text-only method")
+
+        def complete_with_usage(self, *args, **kwargs):
+            self.calls.append((args, kwargs))
+            return CodexCompletion(responses[mode], CodexTokenUsage(
+                input_tokens=120, cached_input_tokens=70, output_tokens=40,
+                reasoning_output_tokens=25, total_tokens=160,
+            ))
+
+    adapter = UsageAdapter()
+    handler = StatsCallbackHandler()
+    model = _model(adapter, callbacks=[handler])
+    runnable = model.bind_tools([lookup]) if mode == "tool" else (
+        model.with_structured_output(_Decision, include_raw=True) if mode == "structured" else model
+    )
+    result = runnable.invoke("question")
+    message = result["raw"] if mode == "structured" else result
+    assert message.usage_metadata["input_token_details"] == {"cache_read": 70}
+    assert message.usage_metadata["output_token_details"] == {"reasoning": 25}
+    stats = handler.get_persistence_stats()
+    expected = {"input_tokens": 120, "output_tokens": 40, "cached_input_tokens": 70,
+                "reasoning_output_tokens": 25, "total_tokens": 160}
+    assert stats.items() >= expected.items()
+    assert stats["per_model"]["gpt-test-sol"].items() >= expected.items()
+    assert stats["usage_completeness"]["usage_complete"] is True
+    assert len(adapter.calls) == 1
+    if mode != "plain":
+        assert adapter.calls[0][1]["output_schema"]
+    write_report_tree({"_run_metadata": {"usage": stats}}, "AMD", tmp_path, {"llm_backend": "codex"})
+    saved = json.loads((tmp_path / "run_metadata.json").read_text())
+    assert saved["usage"].items() >= expected.items()
+    assert saved["usage"]["per_model"]["gpt-test-sol"].items() >= expected.items()
+    assert saved["usage"]["billed_cost"] is None
+
+
+def test_usage_is_not_reused_for_a_later_response_without_telemetry():
+    from tradingagents.codex.adapter import CodexCompletion, CodexTokenUsage
+
+    class UsageAdapter(_FakeAdapter):
+        def complete_with_usage(self, *args, **kwargs):
+            return self.responses.pop(0)
+
+    adapter = UsageAdapter(
+        CodexCompletion("first", CodexTokenUsage(12, 4, 7, 2, 16)),
+        CodexCompletion("second", None),
+    )
+    handler = StatsCallbackHandler()
+    model = _model(adapter, callbacks=[handler])
+    assert model.invoke("one").usage_metadata["input_tokens"] == 12
+    assert model.invoke("two").usage_metadata is None
+    stats = handler.get_persistence_stats()
+    assert stats["input_tokens"] == 12
+    assert stats["usage_completeness"]["calls_missing_usage"] == 1
+    assert stats["usage_completeness"]["usage_complete"] is False
+
+
+def test_usage_aware_adapters_remain_serialized_and_results_stay_paired():
+    from concurrent.futures import ThreadPoolExecutor
+
+    from tradingagents.codex.adapter import CodexCompletion, CodexTokenUsage
+
+    class ConcurrentAdapter(_FakeAdapter):
+        active = 0
+
+        def complete_with_usage(self, instructions, prompt, model, effort, **kwargs):
+            del instructions, model, effort, kwargs
+            self.active += 1
+            assert self.active == 1
+            count = int(json.loads(prompt)["messages"][0]["content"])
+            time.sleep(0.01)
+            self.active -= 1
+            return CodexCompletion(str(count), CodexTokenUsage(count, 2, 0, 1, count + 2))
+
+    adapter = ConcurrentAdapter()
+    models = [_model(adapter), _model(adapter)]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda pair: pair[0].invoke(str(pair[1])), zip(models, [10, 20], strict=True)))
+    assert [(msg.content, msg.usage_metadata["input_tokens"]) for msg in results] == [("10", 10), ("20", 20)]
