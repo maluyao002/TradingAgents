@@ -211,6 +211,15 @@ private warning text; unrelated-thread warnings, malformed payloads, unknown
 active-turn events, and tool activity remain rejected. All 59 adapter tests pass,
 including five focused warning/unknown-event regression cases.
 
+A follow-up tiny, user-authorized Codex diagnostic identified
+`thread/settings/updated` during turn startup. The adapter now validates its
+model, effort, provider, workspace, approval settings, and read-only sandbox before
+continuing. A repeat diagnostic using Sol/low received a final text response and
+completed cleanup; no market data or API backend was used. This verifies the live
+protocol path, not AMD research quality or the Balanced/high workload. Unexpected
+known protocol events now include their public method name in diagnostics, never
+their payload. Unknown names stay redacted.
+
 ## Sources
 
 - [Official app-server protocol](https://learn.chatgpt.com/docs/app-server)

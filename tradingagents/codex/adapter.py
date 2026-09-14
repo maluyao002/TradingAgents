@@ -85,6 +85,9 @@ _TURN_EVENT_METHODS = frozenset(
 _THREAD_ONLY_NOTIFICATIONS = frozenset(
     {"thread/started", "thread/status/changed", "thread/tokenUsage/updated"}
 )
+# Public method names from the official CLI schema; never expose unknown names
+# or notification payloads in error messages.
+_PROTOCOL_NOTIFICATION_NAMES = frozenset(["account/login/completed", "account/rateLimits/updated", "account/updated", "app/list/updated", "autoApprovalReview/strictReviewRequired", "command/exec/outputDelta", "configWarning", "deprecationNotice", "error", "externalAgentConfig/import/completed", "externalAgentConfig/import/progress", "fs/changed", "fuzzyFileSearch/sessionCompleted", "fuzzyFileSearch/sessionUpdated", "guardianWarning", "hook/completed", "hook/started", "item/agentMessage/delta", "item/autoApprovalReview/completed", "item/autoApprovalReview/started", "item/commandExecution/outputDelta", "item/commandExecution/terminalInteraction", "item/completed", "item/fileChange/outputDelta", "item/fileChange/patchUpdated", "item/mcpToolCall/progress", "item/plan/delta", "item/reasoning/summaryPartAdded", "item/reasoning/summaryTextDelta", "item/reasoning/textDelta", "item/started", "mcpServer/event/stream/notification", "mcpServer/oauthLogin/completed", "mcpServer/startupStatus/updated", "model/rerouted", "model/safetyBuffering/updated", "model/verification", "modelProvider/authRecoveryCompleted", "modelProvider/authRecoveryStarted", "process/exited", "process/outputDelta", "project/changed", "remoteControl/status/changed", "serverRequest/resolved", "skills/changed", "thread/archived", "thread/closed", "thread/compacted", "thread/deleted", "thread/environment/connected", "thread/environment/disconnected", "thread/goal/cleared", "thread/goal/updated", "thread/name/updated", "thread/project/updated", "thread/queue/changed", "thread/realtime/closed", "thread/realtime/error", "thread/realtime/item/completed", "thread/realtime/item/started", "thread/realtime/item/transcript/delta", "thread/realtime/itemAdded", "thread/realtime/outputAudio/delta", "thread/realtime/sdp", "thread/realtime/started", "thread/realtime/transcript/delta", "thread/realtime/transcript/done", "thread/reverted", "thread/settings/updated", "thread/started", "thread/status/changed", "thread/tokenUsage/updated", "thread/unarchived", "turn/completed", "turn/diff/updated", "turn/moderationMetadata", "turn/plan/updated", "turn/started", "warning", "windows/worldWritableWarning", "windowsSandbox/setupCompleted"])
 _FORBIDDEN_RUNTIME_NAMES = frozenset({"AGENTS.md", "config.toml"})
 _MAX_TURN_EVENTS = 10_000
 _MAX_OUTPUT_CHARS = 4_000_000
@@ -598,7 +601,7 @@ class CodexAdapter:
             )
             if not turn_is_valid:
                 raise CodexInferenceError("turn/start returned an invalid active turn")
-            result = self._wait_for_turn(thread_id, turn_id, deadline)
+            result = self._wait_for_turn(thread_id, turn_id, deadline, model=model, effort=effort)
             turn_completed = True
         except BaseException as exc:
             failure = exc
@@ -708,7 +711,7 @@ class CodexAdapter:
         )
         return turn_id, is_valid
 
-    def _wait_for_turn(self, thread_id: str, turn_id: str, deadline: float) -> str:
+    def _wait_for_turn(self, thread_id: str, turn_id: str, deadline: float, *, model: str, effort: str) -> str:
         transport = self._require_transport()
         turn_started = False
         started_items: set[str] = set()
@@ -734,6 +737,22 @@ class CodexAdapter:
                 if event_thread not in (None, thread_id) and event_thread not in self._retired_threads:
                     raise CodexInferenceError("Codex emitted a warning for an unknown thread")
                 continue
+            if method == "thread/settings/updated":
+                if isinstance(event_thread, str) and event_thread in self._retired_threads:
+                    continue
+                settings = params.get("threadSettings")
+                if event_thread != thread_id or not isinstance(settings, dict):
+                    raise CodexInferenceError("Codex emitted an invalid thread settings notification")
+                expected = {
+                    "model": model, "effort": effort, "modelProvider": "openai",
+                    "cwd": str(self._workspace), "approvalPolicy": "never",
+                    "approvalsReviewer": "user",
+                }
+                sandbox = settings.get("sandboxPolicy")
+                if (any(settings.get(key) != value for key, value in expected.items())
+                        or not isinstance(sandbox, dict) or sandbox.get("type") != "readOnly"):
+                    raise CodexInferenceError("Codex thread settings differ from the requested isolated configuration")
+                continue
             if method in _THREAD_ONLY_NOTIFICATIONS:
                 if method == "thread/started" and isinstance(params.get("thread"), dict):
                     event_thread = params["thread"].get("id")
@@ -746,7 +765,8 @@ class CodexAdapter:
                 continue
             if method not in _TURN_EVENT_METHODS:
                 if event_thread == thread_id or params.get("turnId") == turn_id:
-                    raise CodexInferenceError("Codex emitted an unexpected active-turn notification")
+                    label = method if method in _PROTOCOL_NOTIFICATION_NAMES else "unrecognized method"
+                    raise CodexInferenceError(f"Codex emitted an unexpected active-turn notification ({label})")
                 continue
             event_turn = params.get("turnId")
             if event_thread != thread_id:
