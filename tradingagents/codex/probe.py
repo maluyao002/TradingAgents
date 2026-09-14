@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from collections.abc import Sequence
 from pathlib import Path
@@ -30,6 +31,14 @@ def _safe_value(value: object) -> str:
     return "unknown"
 
 
+def _resolve_path(path: str | Path) -> Path:
+    try:
+        return Path(path).expanduser().resolve()
+    except (OSError, RuntimeError):
+        # Path.resolve reports symlink loops as RuntimeError on Python 3.10–3.12.
+        raise ProbeError("Unable to resolve the isolated probe directories") from None
+
+
 def _empty_directory(path: Path, label: str) -> None:
     if path.exists():
         if not path.is_dir():
@@ -41,9 +50,9 @@ def _empty_directory(path: Path, label: str) -> None:
 
 
 def _prepare_paths(home: str | Path, cwd: str | Path) -> tuple[Path, Path]:
-    resolved_home = Path(home).expanduser().resolve()
-    resolved_cwd = Path(cwd).expanduser().resolve()
-    if resolved_home == (Path.home() / ".codex").resolve():
+    resolved_home = _resolve_path(home)
+    resolved_cwd = _resolve_path(cwd)
+    if resolved_home == _resolve_path("~/.codex"):
         raise ProbeError("Refusing to use the shared ~/.codex runtime home")
     if resolved_home == resolved_cwd or resolved_home in resolved_cwd.parents or resolved_cwd in resolved_home.parents:
         raise ProbeError("Probe runtime home and workspace must be separate directories")
@@ -52,12 +61,18 @@ def _prepare_paths(home: str | Path, cwd: str | Path) -> tuple[Path, Path]:
     return resolved_home, resolved_cwd
 
 
-def _relative_files(root: Path) -> set[str]:
-    return {
-        path.relative_to(root).as_posix()
-        for path in root.rglob("*")
-        if path.is_file() or path.is_symlink()
-    }
+def _relative_entries(root: Path) -> set[str]:
+    """Inventory every entry without following symlinks or hiding scan errors."""
+    entries: set[str] = set()
+    pending = [root]
+    while pending:
+        with os.scandir(pending.pop()) as directory:
+            for entry in directory:
+                path = Path(entry.path)
+                entries.add(path.relative_to(root).as_posix())
+                if entry.is_dir(follow_symlinks=False):
+                    pending.append(path)
+    return entries
 
 
 def _sanitize_account(result: Any) -> dict[str, object]:
@@ -144,7 +159,7 @@ def _probe_thread(
     model_provider: str | None,
 ) -> dict[str, object]:
     selected_model = _choose_model(raw_models, model)
-    before_files = _relative_files(cwd)
+    before_entries = _relative_entries(cwd)
     params: dict[str, object] = {
         "allowProviderModelFallback": False,
         "cwd": str(cwd),
@@ -182,8 +197,8 @@ def _probe_thread(
         "notSubscribed",
     }:
         raise ProbeError("thread/unsubscribe returned an invalid result")
-    if _relative_files(cwd) != before_files:
-        raise ProbeError("Ephemeral thread created an unexpected workspace file")
+    if _relative_entries(cwd) != before_entries:
+        raise ProbeError("Ephemeral thread created an unexpected workspace entry")
     return {
         **checks,
         "absent_from_persisted_list": True,
@@ -193,7 +208,7 @@ def _probe_thread(
     }
 
 
-def run_probe(
+def _run_probe(
     *,
     home: str | Path,
     cwd: str | Path,
@@ -235,7 +250,7 @@ def run_probe(
         )
         if not isinstance(initialized, dict):
             raise ProbeError("initialize returned an invalid result")
-        if Path(str(initialized.get("codexHome", ""))).resolve() != probe_home:
+        if _resolve_path(str(initialized.get("codexHome", ""))) != probe_home:
             raise ProbeError("app-server did not use the isolated runtime home")
         transport.notify("initialized")
         output["server"] = {
@@ -257,18 +272,38 @@ def run_probe(
                 model_provider=model_provider,
             )
 
-    workspace_files = _relative_files(probe_cwd)
-    if workspace_files:
-        raise ProbeError("Probe created an unexpected workspace file")
-    runtime_files = _relative_files(probe_home)
-    if any(Path(name).name in {"auth.json", "config.toml", "AGENTS.md"} for name in runtime_files):
+    workspace_entries = _relative_entries(probe_cwd)
+    if workspace_entries:
+        raise ProbeError("Probe created an unexpected workspace entry")
+    runtime_entries = _relative_entries(probe_home)
+    if any(Path(name).name in {"auth.json", "config.toml", "AGENTS.md"} for name in runtime_entries):
         raise ProbeError("Probe runtime contains an unexpected credential or instruction file")
     output["filesystem"] = {
         "workspace_clean": True,
-        "runtime_file_count": len(runtime_files),
+        "runtime_entry_count": len(runtime_entries),
         "credential_or_instruction_files": False,
     }
     return output
+
+
+def run_probe(
+    *,
+    home: str | Path,
+    cwd: str | Path,
+    command: Sequence[str] | None = None,
+    timeout: float = DEFAULT_TIMEOUT_SECONDS,
+    include_thread: bool = False,
+    model: str | None = None,
+    model_provider: str | None = None,
+) -> dict[str, object]:
+    """Run the probe without exposing filesystem paths on access failures."""
+    try:
+        return _run_probe(
+            home=home, cwd=cwd, command=command, timeout=timeout,
+            include_thread=include_thread, model=model, model_provider=model_provider,
+        )
+    except OSError:
+        raise ProbeError("Unable to prepare or inspect the isolated probe directories") from None
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -286,9 +321,9 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
-    home = args.home.expanduser().resolve()
-    cwd = args.cwd if args.cwd is not None else home.parent / f"{home.name}-workspace"
     try:
+        home = _resolve_path(args.home)
+        cwd = args.cwd if args.cwd is not None else home.parent / f"{home.name}-workspace"
         result = run_probe(
             home=home,
             cwd=cwd,
@@ -298,8 +333,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             model=args.model,
             model_provider=args.model_provider,
         )
-    except (ProbeError, TransportError, OSError, ValueError) as exc:
+    except (ProbeError, TransportError) as exc:
         parser.exit(1, f"probe failed: {exc}\n")
+    except (OSError, ValueError):
+        parser.exit(1, "probe failed: unable to prepare the probe configuration or directories\n")
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 

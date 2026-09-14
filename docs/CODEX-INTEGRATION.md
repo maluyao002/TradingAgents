@@ -32,9 +32,11 @@ with no conversation history. Main is not the target of these stage PRs.
 ## Stage 1: compatibility probe
 
 Implementation and fresh independent review complete in [PR #3](https://github.com/maluyao002/TradingAgents/pull/3).
-Validation: 22 focused tests, 884 full offline tests and 65 subtests passed; Ruff
+Validation: 35 focused tests, 897 full offline tests and 65 subtests passed; Ruff
 passed. Review corrections cover detached descendant cleanup, explicit POSIX
-support, and strict authentication/isolation response validation. Live gates
+support, strict authentication/isolation response validation, path-free filesystem
+failures, and detection of all workspace entry types. The Unix socket regression
+requires local IPC permission when tests run in a restricted sandbox. Live gates
 below remain pending. Stages 2–5 have not started.
 
 The initial transport supports macOS/Linux only. It explicitly rejects Windows
