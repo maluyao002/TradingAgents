@@ -153,6 +153,10 @@ def test_safe_command_disables_discovery_and_uses_strict_config():
     assert 'web_search="disabled"' in joined
     assert 'cli_auth_credentials_store="file"' in joined
     assert 'forced_login_method="chatgpt"' in joined
+    assert "features.hooks=false" in joined
+    assert "features.codex_hooks=false" in joined
+    assert "features.plugin_hooks=false" in joined
+    assert "hooks={}" in joined
 
 
 @pytest.mark.parametrize(

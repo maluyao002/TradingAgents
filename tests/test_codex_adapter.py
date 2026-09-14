@@ -47,7 +47,7 @@ def model(name, *, hidden=False, modalities=None, efforts=None):
 features = [
     "apply_patch_freeform", "apps", "code_mode", "connectors", "memories",
     "memory_tool", "multi_agent", "plugins", "shell_tool", "skill_search",
-    "unified_exec",
+    "unified_exec", "hooks", "plugin_hooks",
 ]
 
 for line in sys.stdin:
@@ -103,11 +103,20 @@ for line in sys.stdin:
             "instructions": None,
             "tools": None,
             "web_search": "disabled",
+            "hooks": {},
         }
         if scenario == "unsafe-config":
             config["instructions"] = "ambient instruction"
         elif scenario.startswith("missing-config-"):
             config.pop(scenario.removeprefix("missing-config-"))
+        elif scenario == "configured-hooks":
+            config["hooks"] = {"SessionStart": [{"hooks": [{"type": "command", "command": "unexpected-hook"}]}]}
+        elif scenario == "hook-trust-state":
+            config["hooks"] = {"state": {"external-hook": {"enabled": True}}}
+        elif scenario == "invalid-hooks":
+            config["hooks"] = None
+        elif scenario == "empty-hook-defaults":
+            config["hooks"] = {"SessionStart": [], "state": {}}
         result = {"config": config, "origins": {}, "layers": []}
     elif method == "mcpServer/status/list":
         data = []
@@ -118,7 +127,13 @@ for line in sys.stdin:
         advertised = features
         if scenario == "missing-feature":
             advertised = [name for name in features if name != "shell_tool"]
+        elif scenario.startswith("missing-hook-feature-"):
+            advertised = [name for name in features if name != scenario.removeprefix("missing-hook-feature-")]
         data = [{"name": name, "enabled": False} for name in advertised]
+        if scenario.startswith("enabled-hook-feature-"):
+            for feature in data:
+                if feature["name"] == scenario.removeprefix("enabled-hook-feature-"):
+                    feature["enabled"] = True
         data.append({"name": "skip_host_skill_discovery", "enabled": True})
         result = {"data": data, "nextCursor": None}
     elif method == "thread/start":
@@ -312,6 +327,7 @@ def test_complete_fails_closed_when_effective_tool_isolation_is_unproved(tmp_pat
         "instructions",
         "tools",
         "web_search",
+        "hooks",
     ],
 )
 def test_complete_rejects_omitted_effective_config_fields(tmp_path, field):
@@ -319,6 +335,29 @@ def test_complete_rejects_omitted_effective_config_fields(tmp_path, field):
     with adapter, pytest.raises(CodexAdapterError, match="not isolated"):
         adapter.complete("Role", "Evidence", "gpt-test-terra", "medium")
     assert "thread/start" not in [request.get("method") for request in _requests(log)]
+
+
+@pytest.mark.parametrize("scenario", [
+    "configured-hooks", "hook-trust-state", "invalid-hooks",
+    "enabled-hook-feature-hooks", "enabled-hook-feature-plugin_hooks",
+    "missing-hook-feature-hooks", "missing-hook-feature-plugin_hooks",
+])
+def test_hooks_fail_closed_before_starting_a_thread(tmp_path, scenario):
+    adapter, log = _adapter(tmp_path, scenario)
+    with adapter:
+        with pytest.raises(CodexAdapterError):
+            adapter.complete("Role", "Evidence", "gpt-test-terra", "medium")
+        with pytest.raises(CodexAdapterError, match="context manager"):
+            adapter.list_models()
+    methods = [request.get("method") for request in _requests(log)]
+    assert "thread/start" not in methods
+    assert "turn/start" not in methods
+
+
+def test_empty_serialized_hook_defaults_allow_text_completion(tmp_path):
+    adapter, _ = _adapter(tmp_path, "empty-hook-defaults")
+    with adapter:
+        assert adapter.complete("Role", "Evidence", "gpt-test-terra", "medium") == "final analysis"
 
 
 @pytest.mark.parametrize(

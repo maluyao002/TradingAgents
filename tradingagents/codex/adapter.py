@@ -93,10 +93,12 @@ _EXPECTED_FEATURES = {
     "apps": False,
     "code_mode": False,
     "connectors": False,
+    "hooks": False,
     "memories": False,
     "memory_tool": False,
     "multi_agent": False,
     "plugins": False,
+    "plugin_hooks": False,
     "shell_tool": False,
     "skill_search": False,
     "skip_host_skill_discovery": True,
@@ -105,6 +107,20 @@ _EXPECTED_FEATURES = {
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 _SAFE_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+:/-]{0,255}$")
 _SAFE_DISPLAY_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._+:/()'\N{EN DASH}-]{0,127}$")
+
+_HOOK_EVENTS = frozenset({
+    "Interrupt", "PermissionRequest", "PostCompact", "PostToolUse", "PreCompact",
+    "PreToolUse", "SessionEnd", "SessionStart", "Stop", "SubagentStart",
+    "SubagentStop", "UserPromptSubmit",
+})
+
+
+def _empty_hook_config(value: object) -> bool:
+    """Accept empty TOML or serialized defaults, never handlers or trust state."""
+    return isinstance(value, dict) and all(
+        (key == "state" and entry == {}) or (key in _HOOK_EVENTS and entry == [])
+        for key, entry in value.items()
+    )
 
 
 def _resolve_path(path: str | os.PathLike[str]) -> Path:
@@ -458,6 +474,8 @@ class CodexAdapter:
                 for key, value in expected_config.items()
             ):
                 raise CodexAdapterError("Codex effective configuration is not isolated")
+            if "hooks" not in config or not _empty_hook_config(config["hooks"]):
+                raise CodexAdapterError("Codex effective hooks configuration is not isolated")
 
             mcp_cursor: str | None = None
             seen_mcp_cursors: set[str] = set()

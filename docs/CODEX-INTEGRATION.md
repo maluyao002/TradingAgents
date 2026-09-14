@@ -71,10 +71,13 @@ permission to enable the complete backend.
 ## Stage 2: adapter and startup choice
 
 Implemented in [PR #4](https://github.com/maluyao002/TradingAgents/pull/4), awaiting approval.
-Validation: 946 full offline tests and 65 subtests passed; Ruff passed. Independent
+Validation: 955 full offline tests and 65 subtests passed; Ruff passed. Independent
 review and focused re-review are complete with no remaining findings. Review fixes
 require explicit effective configuration fields and retain known turn IDs for
 interruption after malformed responses. No live research run has been performed.
+The GitHub hooks finding is also addressed: startup disables lifecycle and plugin
+hooks, and inference requires verified disabled hook features and explicitly empty
+effective hook configuration, including configuration inherited from system layers.
 
 At startup, choose **API** for the existing research workflow or **Codex subscription**
 for the setup preview. You can skip this new picker with `tradingagents --backend api`
