@@ -89,6 +89,7 @@ def build_run_metadata(
         usage = {}
     return {
         "schema_version": 1,
+        "backend": "codex" if config.get("llm_backend") == "codex" else "api",
         "ticker": ticker,
         "analysis_date": final_state.get("trade_date"),
         "model_profile": next(

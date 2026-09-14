@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import re
@@ -569,13 +570,37 @@ class CodexAdapter:
             raise CodexAdapterError(str(exc)) from None
         self._inference_isolation_verified = True
 
-    def complete(self, instructions: str, prompt: str, model: str, effort: str) -> str:
-        """Run one text-only request in a fresh isolated ephemeral thread."""
+    def complete(
+        self,
+        instructions: str,
+        prompt: str,
+        model: str,
+        effort: str,
+        *,
+        output_schema: dict[str, object] | None = None,
+    ) -> str:
+        """Run one request in a fresh isolated ephemeral thread.
+
+        ``output_schema`` is forwarded to the official per-turn
+        ``outputSchema`` field.  The adapter still receives only final text;
+        callers own parsing and validation of that text.
+        """
 
         if not _valid_text(instructions, limit=1_000_000):
             raise ValueError("instructions must be non-empty text")
         if not _valid_text(prompt, limit=4_000_000):
             raise ValueError("prompt must be non-empty text")
+        normalized_schema: dict[str, object] | None = None
+        if output_schema is not None:
+            if not isinstance(output_schema, dict) or not output_schema:
+                raise ValueError("output_schema must be a non-empty JSON schema object")
+            try:
+                serialized_schema = json.dumps(output_schema, allow_nan=False)
+                normalized_schema = json.loads(serialized_schema)
+            except (TypeError, ValueError):
+                raise ValueError("output_schema must be JSON serializable") from None
+            if len(serialized_schema) > 1_000_000:
+                raise ValueError("output_schema exceeded the adapter safety limit")
         self.validate_selection(model, effort)
         self._require_transport()
         try:
@@ -597,7 +622,12 @@ class CodexAdapter:
         try:
             thread_id = self._start_thread(instructions, model, deadline)
             turn_id, turn_is_valid = self._start_turn(
-                thread_id, prompt, model, effort, deadline
+                thread_id,
+                prompt,
+                model,
+                effort,
+                deadline,
+                output_schema=normalized_schema,
             )
             if not turn_is_valid:
                 raise CodexInferenceError("turn/start returned an invalid active turn")
@@ -686,20 +716,25 @@ class CodexAdapter:
         model: str,
         effort: str,
         deadline: float,
+        *,
+        output_schema: dict[str, object] | None = None,
     ) -> tuple[str, bool]:
+        params: dict[str, object] = {
+            "approvalPolicy": "never",
+            "approvalsReviewer": "user",
+            "cwd": str(self._workspace),
+            "effort": effort,
+            "environments": [],
+            "input": [{"type": "text", "text": prompt}],
+            "model": model,
+            "runtimeWorkspaceRoots": [],
+            "threadId": thread_id,
+        }
+        if output_schema is not None:
+            params["outputSchema"] = output_schema
         result = self._require_transport().request(
             "turn/start",
-            {
-                "approvalPolicy": "never",
-                "approvalsReviewer": "user",
-                "cwd": str(self._workspace),
-                "effort": effort,
-                "environments": [],
-                "input": [{"type": "text", "text": prompt}],
-                "model": model,
-                "runtimeWorkspaceRoots": [],
-                "threadId": thread_id,
-            },
+            params,
             timeout=self._remaining(deadline),
         )
         turn = result.get("turn") if isinstance(result, dict) else None

@@ -38,7 +38,7 @@ passed. Review corrections cover detached descendant cleanup, explicit POSIX
 support, strict authentication/isolation response validation, path-free filesystem
 failures, and detection of all workspace entry types. The Unix socket regression
 requires local IPC permission when tests run in a restricted sandbox. Live gates
-below remain pending. Stage 2 is merged; stage 3 is in development; stages 4–5 have not started.
+below remain pending. Stages 2–3 are merged; stage 4 is in development; stage 5 has not started.
 
 The initial transport supports macOS/Linux only. It explicitly rejects Windows
 before launching a subprocess; the existing API backend remains cross-platform.
@@ -80,11 +80,11 @@ hooks, and inference requires verified disabled hook features and explicitly emp
 effective hook configuration, including configuration inherited from system layers.
 
 At startup, choose **API** for the existing research workflow or **Codex subscription**
-for the setup preview. You can skip this new picker with `tradingagents --backend api`
+for the full research workflow (stage 4). You can skip this picker with `tradingagents --backend api`
 or `tradingagents --backend codex`. `python -m cli.main` accepts the same options.
 `TRADINGAGENTS_BACKEND` supplies a default backend when no flag is given; a flag wins.
 The API provider, profile, key, checkpoint, and model environment settings keep their
-existing behavior. Programmatic `TradingAgentsGraph` callers continue to use the API.
+existing behavior. Programmatic `TradingAgentsGraph` callers continue to use the API unless they explicitly select the Codex backend and supply an open adapter.
 
 The Codex preview checks ChatGPT sign-in and reads the live model catalog. Quick,
 Balanced, and Deep profiles are available only when every research role's exact
@@ -147,8 +147,7 @@ zero inference turns. This does not establish model execution or research qualit
 
 ## Stage 3: fundamentals-only pilot
 
-Implemented in [PR #5](https://github.com/maluyao002/TradingAgents/pull/5),
-awaiting user approval. Branch: `feat/codex-stage-3`, based on merged stage 2. This pilot
+Merged in [PR #5](https://github.com/maluyao002/TradingAgents/pull/5). This pilot
 reuses the existing fundamentals analyst, prepared financial calculations, prompt,
 and evidence-packet validation. It does not change the API research graph.
 
@@ -219,6 +218,82 @@ completed cleanup; no market data or API backend was used. This verifies the liv
 protocol path, not AMD research quality or the Balanced/high workload. Unexpected
 known protocol events now include their public method name in diagnostics, never
 their payload. Unknown names stay redacted.
+
+## Stage 4: full research pipeline
+
+The Codex startup choice now runs the same analyst → research debate → trader →
+risk debate → portfolio manager graph as the API. The fundamentals-only pilot
+remains available with `--fundamentals`. Quick/Balanced/Deep preserve their exact
+per-agent models and reasoning efforts and 1/2/3 rounds; explicit round environment
+overrides retain their existing precedence. Unsupported profiles are disabled;
+there is no model downgrade or API fallback. The full Codex flow currently offers
+these three profiles, while custom API settings retain their existing behavior.
+
+```sh
+tradingagents --backend codex --checkpoint
+tradingagents --backend api
+```
+
+Codex sign-in covers model access only. Existing market-data provider credentials
+are still needed. The workflow produces research reports and proposed decisions;
+it does not submit orders. Full live research tests remain user-run.
+
+### Tools, roles, and structured decisions
+
+Each LangChain model invocation opens a fresh ephemeral Codex thread. TradingAgents
+passes that role's explicit instructions and message history; the Codex runtime does
+not retain conversations across nodes. Tool requests use app-server's `outputSchema`
+structured response, converted into validated LangChain tool calls. Only tools bound
+by the current analyst and arguments matching their schemas are accepted. The existing
+local ToolNode executes them; Codex's shell, browser, MCP, and workspace tools remain
+disabled. Experimental native dynamic-tool execution is not enabled.
+
+Research Manager, Trader, Portfolio Manager, and Sentiment Analyst keep their typed
+output schemas and local validation. Model calls are serialized within the shared
+runtime. Invalid protocol responses, unsupported calls, timeouts, and cancellations
+fail without switching backends. The same graph emits node/tool progress into the
+existing dashboard; call counts are observed, while unavailable token usage or costs
+remain unknown. Final report metadata records the selected backend and role settings,
+without runtime paths, credentials, or Codex thread IDs.
+
+### Recovery
+
+`--checkpoint` saves TradingAgents graph state after completed nodes. Run again with
+the same ticker/date/profile/rounds/analysts to resume. Recovery creates fresh Codex
+threads from the saved application state; it does not depend on Codex session history.
+An interrupted model call may be repeated when its graph node is retried.
+
+Codex checkpoints live in the `codex/checkpoints` subdirectory of the configured data
+cache; API checkpoints keep their existing location and fingerprints. Codex fingerprints
+include a bridge version. On the Codex path, `--clear-checkpoints` clears only Codex
+checkpoints. The dedicated app-server context closes on success, error, or cancellation.
+
+For programmatic use, supply an explicit profile and own the adapter lifetime:
+
+```python
+from tradingagents.codex.adapter import CodexAdapter
+from tradingagents.default_config import DEFAULT_CONFIG
+from tradingagents.graph.trading_graph import TradingAgentsGraph
+from tradingagents.model_profiles import apply_model_profile
+
+config = apply_model_profile(DEFAULT_CONFIG, "balanced")
+config["llm_backend"] = "codex"
+with CodexAdapter(home="~/.tradingagents/codex", timeout=300) as adapter:
+    graph = TradingAgentsGraph(config=config, codex_adapter=adapter)
+    # This invokes the subscription models and configured data providers.
+    state, signal = graph.propagate("AMD", "YYYY-MM-DD")
+```
+
+Validation: focused adapter/bridge and end-to-end graph tests passed, along with
+API/CLI profile, pilot, checkpoint, and reporting regressions. A fresh independent
+review identified structured-output coercion and an unstructured-retry path; both
+are fixed. Codex now strictly validates the full typed response and emits a redacted
+error on failure, without the API helper's free-text recovery. A regression verifies
+that rejected private values do not enter warning logs. The reviewer also found an
+unused import, which was removed. Ruff and whitespace checks passed.
+
+Stage 5 remains the repeated matched quality/latency/usage evaluation. Offline
+integration tests establish routing, validation and recovery, not model quality.
 
 ## Sources
 

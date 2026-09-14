@@ -349,6 +349,44 @@ def test_complete_uses_isolated_fresh_threads_and_explicit_text_context(tmp_path
     assert len([request for request in requests if request.get("method") == "thread/unsubscribe"]) == 2
 
 
+def test_complete_forwards_a_copied_output_schema_only_to_turn_start(tmp_path):
+    adapter, log = _adapter(tmp_path)
+    schema = {
+        "type": "object",
+        "properties": {"answer": {"type": "string"}},
+        "required": ["answer"],
+        "additionalProperties": False,
+    }
+    expected = json.loads(json.dumps(schema))
+    with adapter:
+        assert adapter.complete(
+            "Role",
+            "Evidence",
+            "gpt-test-terra",
+            "medium",
+            output_schema=schema,
+        ) == "final analysis"
+
+    requests = _requests(log)
+    turn = next(request for request in requests if request.get("method") == "turn/start")
+    thread = next(request for request in requests if request.get("method") == "thread/start")
+    assert turn["params"]["outputSchema"] == expected
+    assert "outputSchema" not in thread["params"]
+    assert schema == expected
+
+
+@pytest.mark.parametrize("schema", [{}, {"minimum": float("nan")}, {"type": object()}])
+def test_complete_rejects_invalid_output_schema_before_protocol_calls(tmp_path, schema):
+    adapter, log = _adapter(tmp_path)
+    with adapter, pytest.raises(ValueError, match="output_schema"):
+        adapter.complete(
+            "Role", "Evidence", "gpt-test-terra", "medium", output_schema=schema
+        )
+    methods = [request.get("method") for request in _requests(log)]
+    assert "model/list" not in methods
+    assert "turn/start" not in methods
+
+
 @pytest.mark.parametrize(
     ("scenario", "match"),
     [

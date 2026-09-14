@@ -87,6 +87,7 @@ class TradingAgentsGraph:
         debug=False,
         config: dict[str, Any] = None,
         callbacks: list | None = None,
+        codex_adapter: Any | None = None,
     ):
         """Initialize the trading agents graph and components.
 
@@ -99,6 +100,13 @@ class TradingAgentsGraph:
         self.debug = debug
         self.config = config or DEFAULT_CONFIG
         self.callbacks = callbacks or []
+        backend = self.config.get("llm_backend", "api")
+        if backend not in {"api", "codex"}:
+            raise ValueError("llm_backend must be api or codex")
+        if backend == "api" and codex_adapter is not None:
+            raise ValueError("codex_adapter requires the Codex backend")
+        if backend == "codex" and codex_adapter is None:
+            raise ValueError("Codex backend requires an open CodexAdapter context")
 
         # Update the interface's config
         set_config(self.config)
@@ -107,40 +115,43 @@ class TradingAgentsGraph:
         os.makedirs(self.config["data_cache_dir"], exist_ok=True)
         os.makedirs(self.config["results_dir"], exist_ok=True)
 
-        # Initialize LLMs with provider-specific thinking configuration
-        llm_kwargs = self._get_provider_kwargs()
-
-        # Add callbacks to kwargs if provided (passed to LLM constructor)
-        if self.callbacks:
-            llm_kwargs["callbacks"] = self.callbacks
-
-        # Clients are stateless transports; conversation state stays in each node.
-        # Reuse equal model/effort clients without sharing agent conversations.
-        self.agent_llms = {}
-        if self.config.get("agent_models"):
-            if self.config["llm_provider"].lower() != "openai":
-                raise ValueError("Per-agent model profiles require the OpenAI provider")
-            client_cache = {}
-            for role, setting in self.config["agent_models"].items():
-                key = (setting["model"], setting["reasoning_effort"])
-                if key not in client_cache:
-                    kwargs = dict(llm_kwargs, reasoning_effort=setting["reasoning_effort"])
-                    client_cache[key] = create_llm_client(
-                        provider=self.config["llm_provider"], model=setting["model"],
-                        base_url=self.config.get("backend_url"), **kwargs,
-                    ).get_llm()
-                self.agent_llms[role] = client_cache[key]
-            self.deep_thinking_llm = self.agent_llms["portfolio_manager"]
-            self.quick_thinking_llm = self.agent_llms["signal"]
+        if backend == "codex":
+            self._initialize_codex_models(codex_adapter, selected_analysts)
         else:
-            self.deep_thinking_llm = create_llm_client(
-                provider=self.config["llm_provider"], model=self.config["deep_think_llm"],
-                base_url=self.config.get("backend_url"), **llm_kwargs,
-            ).get_llm()
-            self.quick_thinking_llm = create_llm_client(
-                provider=self.config["llm_provider"], model=self.config["quick_think_llm"],
-                base_url=self.config.get("backend_url"), **llm_kwargs,
-            ).get_llm()
+            # Initialize LLMs with provider-specific thinking configuration
+            llm_kwargs = self._get_provider_kwargs()
+
+            # Add callbacks to kwargs if provided (passed to LLM constructor)
+            if self.callbacks:
+                llm_kwargs["callbacks"] = self.callbacks
+
+            # Clients are stateless transports; conversation state stays in each node.
+            # Reuse equal model/effort clients without sharing agent conversations.
+            self.agent_llms = {}
+            if self.config.get("agent_models"):
+                if self.config["llm_provider"].lower() != "openai":
+                    raise ValueError("Per-agent model profiles require the OpenAI provider")
+                client_cache = {}
+                for role, setting in self.config["agent_models"].items():
+                    key = (setting["model"], setting["reasoning_effort"])
+                    if key not in client_cache:
+                        kwargs = dict(llm_kwargs, reasoning_effort=setting["reasoning_effort"])
+                        client_cache[key] = create_llm_client(
+                            provider=self.config["llm_provider"], model=setting["model"],
+                            base_url=self.config.get("backend_url"), **kwargs,
+                        ).get_llm()
+                    self.agent_llms[role] = client_cache[key]
+                self.deep_thinking_llm = self.agent_llms["portfolio_manager"]
+                self.quick_thinking_llm = self.agent_llms["signal"]
+            else:
+                self.deep_thinking_llm = create_llm_client(
+                    provider=self.config["llm_provider"], model=self.config["deep_think_llm"],
+                    base_url=self.config.get("backend_url"), **llm_kwargs,
+                ).get_llm()
+                self.quick_thinking_llm = create_llm_client(
+                    provider=self.config["llm_provider"], model=self.config["quick_think_llm"],
+                    base_url=self.config.get("backend_url"), **llm_kwargs,
+                ).get_llm()
 
         self.memory_log = TradingMemoryLog(self.config)
 
@@ -179,6 +190,38 @@ class TradingAgentsGraph:
         self.graph = self.workflow.compile()
         self._checkpointer_ctx = None
         self._resuming = False
+
+    def _initialize_codex_models(self, adapter, selected_analysts):
+        from tradingagents.codex.chat_model import CodexChatModel
+        from tradingagents.model_profiles import MODEL_PROFILES
+
+        settings = self.config.get("agent_models")
+        required = set(MODEL_PROFILES["balanced"]["agents"])
+        if not isinstance(settings, dict) or not required.issubset(settings):
+            raise ValueError("Codex requires a complete per-agent model profile")
+        active = set(selected_analysts) | (required - {
+            "market", "social", "news", "fundamentals", "signal", "reflection",
+        })
+        for role in sorted(active):
+            setting = settings[role]
+            adapter.validate_selection(setting["model"], setting["reasoning_effort"])
+        self.agent_llms = {
+            role: CodexChatModel(
+                adapter=adapter, model=setting["model"],
+                effort=setting["reasoning_effort"], role=role,
+                callbacks=self.callbacks,
+            )
+            for role, setting in settings.items()
+        }
+        self.deep_thinking_llm = self.agent_llms["portfolio_manager"]
+        self.quick_thinking_llm = self.agent_llms["signal"]
+
+    def _checkpoint_data_dir(self):
+        # Separate storage also keeps Codex checkpoint deletion away from API runs.
+        directory = self.config["data_cache_dir"]
+        if self.config.get("llm_backend", "api") == "codex":
+            return os.path.join(directory, "codex")
+        return directory
 
     def _get_provider_kwargs(self) -> dict[str, Any]:
         """Get provider-specific kwargs for LLM client creation."""
@@ -409,7 +452,8 @@ class TradingAgentsGraph:
         selection, debate/risk depth, or asset mode starts fresh instead of
         silently continuing the previous graph (#1089).
         """
-        return "|".join([
+        prefix = "codex-bridge-v1|" if self.config.get("llm_backend", "api") == "codex" else ""
+        return prefix + "|".join([
             "analysts=" + ",".join(self.selected_analysts),
             f"debate={self.config['max_debate_rounds']}",
             f"risk={self.config['max_risk_discuss_rounds']}",
@@ -468,12 +512,12 @@ class TradingAgentsGraph:
         if not self.config.get("checkpoint_enabled"):
             return None
         signature = self._run_signature(asset_type)
-        self._checkpointer_ctx = get_checkpointer(self.config["data_cache_dir"], company_name)
+        self._checkpointer_ctx = get_checkpointer(self._checkpoint_data_dir(), company_name)
         saver = self._checkpointer_ctx.__enter__()
         self.graph = self.workflow.compile(checkpointer=saver)
 
         step = checkpoint_step(
-            self.config["data_cache_dir"], company_name, str(trade_date), signature
+            self._checkpoint_data_dir(), company_name, str(trade_date), signature
         )
         self._resuming = step is not None
         if step is not None:
@@ -512,7 +556,7 @@ class TradingAgentsGraph:
         """Drop a completed run's checkpoint so a later run starts fresh (#1249)."""
         if self.config.get("checkpoint_enabled"):
             clear_checkpoint(
-                self.config["data_cache_dir"], company_name, str(trade_date),
+                self._checkpoint_data_dir(), company_name, str(trade_date),
                 self._run_signature(asset_type),
             )
 

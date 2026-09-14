@@ -31,7 +31,7 @@ def select_backend() -> Backend:
         "How would you like to use TradingAgents?",
         [
             questionary.Choice("API — run analysis with your existing provider", value="api"),
-            questionary.Choice("Codex subscription — setup / fundamentals pilot", value="codex"),
+            questionary.Choice("Codex subscription — run analysis with ChatGPT sign-in", value="codex"),
         ],
         default="api",
     ))
@@ -113,3 +113,22 @@ def run_codex_setup(console: Console) -> None:
         "Model access and available usage still need a user-run inference check. "
         "Use --backend codex --fundamentals for the pilot, or --backend api for the full pipeline."
     )
+
+
+def select_codex_profile(adapter) -> str:
+    """Offer only complete, advertised research profiles; never downgrade a role."""
+    from tradingagents.codex.adapter import CodexAdapterError
+
+    issues = {name: _profile_issues(adapter, name) for name in MODEL_PROFILES}
+    available = [name for name in MODEL_PROFILES if not issues[name]]
+    if not available:
+        raise CodexAdapterError("No complete research profile is supported by this catalog")
+    choices = [questionary.Choice(
+        f"{profile['label']} — {PROFILE_MENU_DESCRIPTIONS[name]}", value=name,
+        disabled=("Unavailable for: " + ", ".join(issues[name])) if issues[name] else None,
+    ) for name, profile in MODEL_PROFILES.items()]
+    selected = _ask("Codex Agent Profile", choices,
+                    default="balanced" if "balanced" in available else available[0])
+    if selected not in available:
+        raise CodexAdapterError("The selected profile is not supported by this catalog")
+    return selected
