@@ -1,4 +1,7 @@
 import json
+import os
+import subprocess
+import sys
 from io import StringIO
 from unittest.mock import Mock
 
@@ -91,3 +94,26 @@ def test_codex_failure_never_saves_or_falls_back(monkeypatch, tmp_path):
     assert 'secret detail' not in result.output
     run.assert_not_called()
     assert not list(tmp_path.iterdir())
+
+
+def test_unicode_artifacts_round_trip_under_ascii_locale(tmp_path):
+    # Run outside this interpreter's UTF-8 locale to reproduce the real failure.
+    script = """
+import json
+import sys
+from pathlib import Path
+from cli.fundamentals import save_result, load_evidence
+result = json.loads(sys.argv[2])
+folder = save_result(result, Path(sys.argv[1]))
+assert load_evidence(folder / 'result.json', 'AMD', '2026-09-13') == result['prepared_data']
+assert (folder / 'fundamentals_report.md').read_text(encoding='utf-8') == result['fundamentals_report']
+"""
+    result = {'ticker': 'AMD', 'analysis_date': '2026-09-13',
+              'prepared_data': {'caveats': ['现金流缺少披露']},
+              'fundamentals_report': '现金流分析 — €100'}
+    completed = subprocess.run(
+        [sys.executable, '-c', script, str(tmp_path), json.dumps(result)],
+        env={**os.environ, 'LC_ALL': 'C', 'PYTHONUTF8': '0', 'PYTHONCOERCECLOCALE': '0'},
+        capture_output=True, timeout=15,
+    )
+    assert completed.returncode == 0, completed.stderr.decode('utf-8', errors='replace')

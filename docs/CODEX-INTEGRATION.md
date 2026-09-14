@@ -147,7 +147,8 @@ zero inference turns. This does not establish model execution or research qualit
 
 ## Stage 3: fundamentals-only pilot
 
-Development branch: `feat/codex-stage-3`, based on merged stage 2. This pilot
+Implemented in [PR #5](https://github.com/maluyao002/TradingAgents/pull/5),
+awaiting user approval. Branch: `feat/codex-stage-3`, based on merged stage 2. This pilot
 reuses the existing fundamentals analyst, prepared financial calculations, prompt,
 and evidence-packet validation. It does not change the API research graph.
 
@@ -194,6 +195,14 @@ caveats. Validation status and citation coverage are structural checks, not proo
 of factual correctness or equivalent research quality. No live model comparison
 has been performed during implementation. Full pipeline/progress/checkpoint work
 remains stage 4, and repeated quality/latency/usage evaluation remains stage 5.
+
+Validation uses focused offline checks: 19 new core pilot cases, nine pilot CLI
+cases, and the affected existing CLI, prepared-data, reconciliation, citation, and
+prompt tests. No full-suite rerun or real research inference was needed for this
+stage. Live matched comparison remains pending the user's run. A fresh independent
+read-only review found one portability issue: locale-dependent artifact encoding.
+All artifact reads/writes now use explicit UTF-8, verified by a Unicode round-trip
+test with UTF-8 mode disabled and the C locale. No other actionable findings were reported.
 
 ## Sources
 

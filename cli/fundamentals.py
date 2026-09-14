@@ -25,7 +25,7 @@ def load_evidence(path: Path, ticker: str, date: str) -> dict:
     try:
         if path.stat().st_size > 32 * 1024 * 1024:
             raise ValueError
-        bundle = json.loads(path.read_text())
+        bundle = json.loads(path.read_text(encoding="utf-8"))
         if (not isinstance(bundle, dict) or bundle.get('ticker') != ticker
                 or bundle.get('analysis_date') != date
                 or not isinstance(bundle.get('prepared_data'), dict)):
@@ -41,8 +41,8 @@ def save_result(result: dict, root: Path) -> Path:
     stamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
     directory = root / f"fundamentals_{stamp}_{uuid4().hex[:8]}"
     directory.mkdir(parents=True, mode=0o700)
-    (directory / 'result.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
-    (directory / 'fundamentals_report.md').write_text(result['fundamentals_report'])
+    (directory / 'result.json').write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+    (directory / 'fundamentals_report.md').write_text(result['fundamentals_report'], encoding="utf-8")
     return directory
 
 
