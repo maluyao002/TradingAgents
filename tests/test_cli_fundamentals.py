@@ -70,12 +70,19 @@ def test_api_pilot_never_starts_codex(monkeypatch, tmp_path):
     assert run.call_args.kwargs['effort'] == 'high'
 
 
-def test_invalid_inputs_fail_before_codex_start(monkeypatch, tmp_path):
+@pytest.mark.parametrize("ticker, analysis_date", [
+    ("../private", "2026-09-13"),
+    ("BTCUSD", "2026-09-13"),
+    ("GC=F", "2026-09-13"),
+    ("^GSPC", "2026-09-13"),
+    ("AMD", "9999-12-31"),
+])
+def test_invalid_inputs_fail_before_codex_start(monkeypatch, tmp_path, ticker, analysis_date):
     import tradingagents.codex.adapter as adapter
     constructor = Mock(side_effect=AssertionError('Codex started'))
     monkeypatch.setattr(adapter, 'CodexAdapter', constructor)
-    result = CliRunner().invoke(pilot.app, ['--backend', 'codex', '--ticker', '../private',
-                                          '--date', '2026-09-13', '--output', str(tmp_path)])
+    result = CliRunner().invoke(pilot.app, ['--backend', 'codex', '--ticker', ticker,
+                                          '--date', analysis_date, '--output', str(tmp_path)])
     assert result.exit_code == 1
     constructor.assert_not_called()
     assert not list(tmp_path.iterdir())

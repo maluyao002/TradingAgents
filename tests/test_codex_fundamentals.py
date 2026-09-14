@@ -1,6 +1,7 @@
 """Offline coverage for the fundamentals-only backend pilot."""
 
 import json
+from datetime import date, timedelta
 from copy import deepcopy
 from unittest.mock import MagicMock
 
@@ -74,6 +75,9 @@ class _Adapter:
 
 
 def test_matched_api_and_codex_use_same_analyst_prompt_and_snapshot(monkeypatch):
+    monkeypatch.delenv("TRADINGAGENTS_LLM_BACKEND_URL", raising=False)
+    from tradingagents.codex.fundamentals import DEFAULT_CONFIG
+    monkeypatch.setitem(DEFAULT_CONFIG, "backend_url", None)
     snapshot = _prepared()
     prepare = MagicMock(side_effect=AssertionError("replay must not fetch"))
     monkeypatch.setattr("tradingagents.codex.fundamentals.prepare_fundamentals", prepare)
@@ -99,7 +103,7 @@ def test_matched_api_and_codex_use_same_analyst_prompt_and_snapshot(monkeypatch)
     )
 
     factory.assert_called_once_with(
-        provider="openai", model="gpt-5.6-sol", reasoning_effort="high", max_retries=0,
+        provider="openai", model="gpt-5.6-sol", reasoning_effort="high", max_retries=0, base_url=None,
     )
     assert prepare.call_count == 0
     assert api["prepared_data"] == codex["prepared_data"] == snapshot
@@ -252,3 +256,56 @@ def test_validate_inputs_rejects_invalid_date_and_profile_before_fetch(monkeypat
             "AMD", "2026-09-13", backend="api", model="custom", effort="ultra"
         )
     prepare.assert_not_called()
+
+
+@pytest.mark.parametrize("backend", ["api", "codex"])
+@pytest.mark.parametrize("ticker", ["BTC-USD", "BTCUSD", "GC=F", "XAUUSD", "^GSPC", "US500", "EURUSD", "ETH-USDT"])
+def test_non_stock_symbols_rejected_before_external_work(monkeypatch, backend, ticker):
+    prepare = MagicMock()
+    factory = MagicMock()
+    adapter = _Adapter()
+    monkeypatch.setattr("tradingagents.codex.fundamentals.prepare_fundamentals", prepare)
+    monkeypatch.setattr("tradingagents.llm_clients.factory.create_llm_client", factory)
+    with pytest.raises(ValueError, match="stock symbols only"):
+        run_fundamentals(ticker, "2026-09-13", backend=backend,
+                         model="gpt-5.6-sol", effort="high",
+                         adapter=adapter if backend == "codex" else None)
+    prepare.assert_not_called()
+    factory.assert_not_called()
+    assert not adapter.selections and not adapter.calls
+
+
+@pytest.mark.parametrize("backend", ["api", "codex"])
+def test_future_date_rejected_before_external_work(monkeypatch, backend):
+    prepare = MagicMock()
+    factory = MagicMock()
+    adapter = _Adapter()
+    monkeypatch.setattr("tradingagents.codex.fundamentals.prepare_fundamentals", prepare)
+    monkeypatch.setattr("tradingagents.llm_clients.factory.create_llm_client", factory)
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    with pytest.raises(ValueError, match="future"):
+        run_fundamentals("AMD", tomorrow, backend=backend,
+                         model="gpt-5.6-sol", effort="high",
+                         adapter=adapter if backend == "codex" else None)
+    prepare.assert_not_called()
+    factory.assert_not_called()
+    assert not adapter.selections and not adapter.calls
+
+
+@pytest.mark.parametrize("ticker", ["AMD", "BRK-B", "0700.HK"])
+def test_equity_symbols_and_today_remain_valid(ticker):
+    assert validate_inputs(ticker, date.today().isoformat())[:2] == (
+        ticker, date.today().isoformat())
+
+
+@pytest.mark.parametrize("override", [None, "https://gateway.example/v1"])
+def test_api_pilot_honors_configured_endpoint(monkeypatch, override):
+    import tradingagents.codex.fundamentals as pilot
+    monkeypatch.setitem(pilot.DEFAULT_CONFIG, "backend_url", "https://configured.example/v1")
+    monkeypatch.delenv("TRADINGAGENTS_LLM_BACKEND_URL", raising=False)
+    if override:
+        monkeypatch.setenv("TRADINGAGENTS_LLM_BACKEND_URL", override)
+    factory = MagicMock()
+    monkeypatch.setattr("tradingagents.llm_clients.factory.create_llm_client", factory)
+    pilot._api_model("gpt-5.6-sol", "high")
+    assert factory.call_args.kwargs["base_url"] == (override or "https://configured.example/v1")

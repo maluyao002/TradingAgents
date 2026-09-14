@@ -18,7 +18,9 @@ from tradingagents.agents.analysts.fundamentals_analyst import (
 )
 from tradingagents.agents.utils.evidence import _normalize_prepared
 from tradingagents.dataflows.preparation import prepare_fundamentals
+from tradingagents.dataflows.symbol_utils import normalize_symbol
 from tradingagents.dataflows.utils import safe_ticker_component
+from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.model_profiles import MODEL_PROFILES
 
 
@@ -35,6 +37,8 @@ def _canonical_date(value: object) -> str:
         raise ValueError("analysis date must use YYYY-MM-DD") from None
     if parsed.isoformat() != value:
         raise ValueError("analysis date must use YYYY-MM-DD")
+    if parsed > date_type.today():
+        raise ValueError("analysis date cannot be in the future")
     return value
 
 
@@ -76,6 +80,11 @@ def validate_inputs(
     if not isinstance(ticker, str):
         raise ValueError("ticker must be a non-empty string")
     normalized_ticker = safe_ticker_component(ticker.strip().upper())
+    canonical = normalize_symbol(normalized_ticker)
+    if canonical.startswith("^") or "=" in canonical or canonical.endswith(
+        ("-USD", "-USDT", "-USDC", "-BTC", "-ETH")
+    ):
+        raise ValueError("fundamentals pilot supports stock symbols only")
     normalized_date = _canonical_date(analysis_date)
     snapshot = (
         _validate_prepared(prepared, normalized_ticker, normalized_date)
@@ -197,6 +206,8 @@ def _api_model(model: str, effort: str) -> Any:
         return create_llm_client(
             provider="openai",
             model=model,
+            base_url=(os.environ.get("TRADINGAGENTS_LLM_BACKEND_URL")
+                      or DEFAULT_CONFIG.get("backend_url")),
             reasoning_effort=effort,
             max_retries=0,
         ).get_llm()
