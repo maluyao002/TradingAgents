@@ -106,6 +106,8 @@ for line in sys.stdin:
         }
         if scenario == "unsafe-config":
             config["instructions"] = "ambient instruction"
+        elif scenario.startswith("missing-config-"):
+            config.pop(scenario.removeprefix("missing-config-"))
         result = {"config": config, "origins": {}, "layers": []}
     elif method == "mcpServer/status/list":
         data = []
@@ -141,8 +143,10 @@ for line in sys.stdin:
         thread_id = params["threadId"]
         turn_id = "turn-%s" % thread_number
         result = {"turn": {"id": turn_id, "status": "inProgress", "items": []}}
+        if scenario == "malformed-turn-start":
+            result["turn"]["items"] = None
         send({"id": request_id, "result": result})
-        if scenario == "timeout":
+        if scenario in {"timeout", "malformed-turn-start"}:
             continue
         send({
             "method": "turn/started",
@@ -298,6 +302,26 @@ def test_complete_fails_closed_when_effective_tool_isolation_is_unproved(tmp_pat
 
 
 @pytest.mark.parametrize(
+    "field",
+    [
+        "apps",
+        "browser_use",
+        "computer_use",
+        "developer_instructions",
+        "forced_login_method",
+        "instructions",
+        "tools",
+        "web_search",
+    ],
+)
+def test_complete_rejects_omitted_effective_config_fields(tmp_path, field):
+    adapter, log = _adapter(tmp_path, f"missing-config-{field}")
+    with adapter, pytest.raises(CodexAdapterError, match="not isolated"):
+        adapter.complete("Role", "Evidence", "gpt-test-terra", "medium")
+    assert "thread/start" not in [request.get("method") for request in _requests(log)]
+
+
+@pytest.mark.parametrize(
     ("scenario", "match"),
     [
         ("tool-item", "unexpected tool"),
@@ -327,6 +351,26 @@ def test_turn_timeout_is_bounded_interrupted_unsubscribed_and_invalidated(tmp_pa
     assert time.monotonic() - started < 1.5
     methods = [request.get("method") for request in _requests(log)]
     assert methods[-2:] == ["turn/interrupt", "thread/unsubscribe"]
+
+
+def test_malformed_started_turn_is_interrupted_before_unsubscribe(tmp_path):
+    adapter, log = _adapter(tmp_path, "malformed-turn-start")
+    with adapter:
+        with pytest.raises(CodexInferenceError, match="invalid active turn"):
+            adapter.complete("Role", "Evidence", "gpt-test-terra", "medium")
+        with pytest.raises(CodexAdapterError, match="context manager"):
+            adapter.list_models()
+    requests = _requests(log)
+    cleanup = [
+        request
+        for request in requests
+        if request.get("method") in {"turn/interrupt", "thread/unsubscribe"}
+    ]
+    assert [request["method"] for request in cleanup] == [
+        "turn/interrupt",
+        "thread/unsubscribe",
+    ]
+    assert cleanup[0]["params"] == {"threadId": "thread-1", "turnId": "turn-1"}
 
 
 def test_reused_ephemeral_thread_id_invalidates_adapter(tmp_path):

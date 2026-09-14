@@ -38,7 +38,7 @@ passed. Review corrections cover detached descendant cleanup, explicit POSIX
 support, strict authentication/isolation response validation, path-free filesystem
 failures, and detection of all workspace entry types. The Unix socket regression
 requires local IPC permission when tests run in a restricted sandbox. Live gates
-below remain pending. Stage 2 is in development; stages 3–5 have not started.
+below remain pending. Stage 2 awaits approval; stages 3–5 have not started.
 
 The initial transport supports macOS/Linux only. It explicitly rejects Windows
 before launching a subprocess; the existing API backend remains cross-platform.
@@ -70,8 +70,11 @@ permission to enable the complete backend.
 
 ## Stage 2: adapter and startup choice
 
-Implementation validation: 937 full offline tests and 65 subtests passed; Ruff
-passed. Independent review is in progress. No live research run has been performed.
+Implemented in [PR #4](https://github.com/maluyao002/TradingAgents/pull/4), awaiting approval.
+Validation: 946 full offline tests and 65 subtests passed; Ruff passed. Independent
+review and focused re-review are complete with no remaining findings. Review fixes
+require explicit effective configuration fields and retain known turn IDs for
+interruption after malformed responses. No live research run has been performed.
 
 At startup, choose **API** for the existing research workflow or **Codex subscription**
 for the setup preview. You can skip this new picker with `tradingagents --backend api`
@@ -114,8 +117,8 @@ model, and effort for each call. Each call uses a new ephemeral thread, so the
 caller supplies any history it needs and roles do not share server-side context.
 Before inference it checks effective configuration, MCP availability, and tool
 feature settings; unverifiable isolation fails closed. Unexpected tool requests,
-model rerouting, unsuccessful turns, and timeouts fail the call. There is no
-automatic retry or API fallback. Structured output, TradingAgents tool dispatch,
+model rerouting, unsuccessful turns, and timeouts fail the call. The adapter does
+not retry or fall back to the API. Structured output, TradingAgents tool dispatch,
 and graph callbacks are outside this stage. Fake-server tests establish client
 behavior; real model adherence, sidebar behavior, and research quality still need
 the later user-run checks.

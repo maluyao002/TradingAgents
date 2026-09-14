@@ -453,7 +453,10 @@ class CodexAdapter:
                 "tools": None,
                 "web_search": "disabled",
             }
-            if any(config.get(key) != value for key, value in expected_config.items()):
+            if any(
+                key not in config or config[key] != value
+                for key, value in expected_config.items()
+            ):
                 raise CodexAdapterError("Codex effective configuration is not isolated")
 
             mcp_cursor: str | None = None
@@ -542,7 +545,11 @@ class CodexAdapter:
         failure: BaseException | None = None
         try:
             thread_id = self._start_thread(instructions, model, deadline)
-            turn_id = self._start_turn(thread_id, prompt, model, effort, deadline)
+            turn_id, turn_is_valid = self._start_turn(
+                thread_id, prompt, model, effort, deadline
+            )
+            if not turn_is_valid:
+                raise CodexInferenceError("turn/start returned an invalid active turn")
             result = self._wait_for_turn(thread_id, turn_id, deadline)
             turn_completed = True
         except BaseException as exc:
@@ -628,7 +635,7 @@ class CodexAdapter:
         model: str,
         effort: str,
         deadline: float,
-    ) -> str:
+    ) -> tuple[str, bool]:
         result = self._require_transport().request(
             "turn/start",
             {
@@ -646,13 +653,12 @@ class CodexAdapter:
         )
         turn = result.get("turn") if isinstance(result, dict) else None
         turn_id = _safe_identifier(turn.get("id")) if isinstance(turn, dict) else None
-        if (
-            turn_id is None
-            or turn.get("status") != "inProgress"
-            or not isinstance(turn.get("items"), list)
-        ):
+        if turn_id is None:
             raise CodexInferenceError("turn/start returned an invalid active turn")
-        return turn_id
+        is_valid = turn.get("status") == "inProgress" and isinstance(
+            turn.get("items"), list
+        )
+        return turn_id, is_valid
 
     def _wait_for_turn(self, thread_id: str, turn_id: str, deadline: float) -> str:
         transport = self._require_transport()
