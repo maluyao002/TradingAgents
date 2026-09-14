@@ -723,6 +723,17 @@ class CodexAdapter:
             if not isinstance(method, str) or not isinstance(params, dict):
                 raise CodexInferenceError("Codex emitted an invalid turn notification")
             event_thread = params.get("threadId")
+            # Official warning notifications are advisory thread metadata, not
+            # turn lifecycle events or permission to execute tools. Do not echo
+            # their free-form text: it may contain private runtime details.
+            if method == "warning":
+                if not isinstance(params.get("message"), str) or (
+                    event_thread is not None and not isinstance(event_thread, str)
+                ):
+                    raise CodexInferenceError("Codex emitted an invalid warning notification")
+                if event_thread not in (None, thread_id) and event_thread not in self._retired_threads:
+                    raise CodexInferenceError("Codex emitted a warning for an unknown thread")
+                continue
             if method in _THREAD_ONLY_NOTIFICATIONS:
                 if method == "thread/started" and isinstance(params.get("thread"), dict):
                     event_thread = params["thread"].get("id")

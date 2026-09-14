@@ -204,6 +204,13 @@ read-only review found one portability issue: locale-dependent artifact encoding
 All artifact reads/writes now use explicit UTF-8, verified by a Unicode round-trip
 test with UTF-8 mode disabled and the C locale. No other actionable findings were reported.
 
+A user-run pilot exposed a documented `warning` notification associated with the
+active thread. An empty-thread metadata check reproduced this event without
+inference. The adapter now accepts well-formed advisory warnings without echoing
+private warning text; unrelated-thread warnings, malformed payloads, unknown
+active-turn events, and tool activity remain rejected. All 59 adapter tests pass,
+including five focused warning/unknown-event regression cases.
+
 ## Sources
 
 - [Official app-server protocol](https://learn.chatgpt.com/docs/app-server)

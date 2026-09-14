@@ -174,6 +174,17 @@ for line in sys.stdin:
             "modelProvider": params["modelProvider"],
             "instructionSources": [],
         }
+        if scenario.startswith("warning-"):
+            warning_params = {"message": "private runtime detail", "threadId": thread_id}
+            if scenario == "warning-global":
+                warning_params.pop("threadId")
+            elif scenario == "warning-other-thread":
+                warning_params["threadId"] = "unknown-thread"
+            elif scenario == "warning-malformed":
+                warning_params["message"] = {"private": "detail"}
+            send({"method": "warning", "params": warning_params})
+        if scenario == "unknown-active-event":
+            send({"method": "future/unsafe", "params": {"threadId": thread_id}})
         if scenario == "reused-thread":
             result["thread"]["id"] = "thread-1"
     elif method == "turn/start":
@@ -485,3 +496,26 @@ def test_reentering_adapter_repeats_server_scoped_isolation_checks(tmp_path):
     assert methods.count("config/read") == 2
     assert methods.count("mcpServerStatus/list") == 2
     assert methods.count("experimentalFeature/list") == 2
+
+
+@pytest.mark.parametrize("scenario", ["warning-thread", "warning-global"])
+def test_advisory_warnings_do_not_abort_text_analysis(tmp_path, scenario):
+    adapter, log = _adapter(tmp_path, scenario)
+    with adapter:
+        assert adapter.complete("Role", "Evidence", "gpt-test-terra", "medium") == "final analysis"
+    assert "turn/interrupt" not in [request["method"] for request in _requests(log)]
+
+
+@pytest.mark.parametrize("scenario,match", [
+    ("warning-other-thread", "unknown thread"),
+    ("warning-malformed", "invalid warning"),
+    ("unknown-active-event", "unexpected active-turn"),
+])
+def test_warning_support_keeps_unknown_and_invalid_events_rejected(tmp_path, scenario, match):
+    adapter, log = _adapter(tmp_path, scenario)
+    with adapter, pytest.raises(CodexInferenceError, match=match) as caught:
+        adapter.complete("Role", "Evidence", "gpt-test-terra", "medium")
+    assert "private" not in str(caught.value)
+    methods = [request["method"] for request in _requests(log)]
+    assert "turn/interrupt" in methods
+    assert "thread/unsubscribe" in methods
