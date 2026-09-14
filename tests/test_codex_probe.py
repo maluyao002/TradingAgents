@@ -1,10 +1,13 @@
 import json
+import os
 import sys
 from pathlib import Path
 
 import pytest
 
 from tradingagents.codex.probe import ProbeError, run_probe
+
+pytestmark = pytest.mark.skipif(os.name != "posix", reason="Codex probe is POSIX-only")
 
 FAKE_PROBE_SERVER = r"""
 import json
@@ -46,11 +49,39 @@ for line in sys.stdin:
 """
 
 
-def _command(tmp_path: Path) -> tuple[list[str], Path]:
+def _command(tmp_path: Path, response_patch: str = "") -> tuple[list[str], Path]:
     script = tmp_path / "fake_probe_server.py"
     log = tmp_path / "methods.log"
-    script.write_text(FAKE_PROBE_SERVER)
+    script.write_text(FAKE_PROBE_SERVER.replace(
+        '    print(json.dumps({"id": request_id, "result": result}), flush=True)',
+        response_patch + '\n    print(json.dumps({"id": request_id, "result": result}), flush=True)',
+    ))
     return [sys.executable, "-u", str(script), str(log)], log
+
+
+@pytest.mark.parametrize("change", [
+    'result["modelProvider"] = "other-provider"',
+    'result.pop("instructionSources")',
+    'result["instructionSources"] = ["unexpected-instructions"]',
+    'result["thread"]["ephemeral"] = False',
+    'result["model"] = "other-model"',
+])
+def test_probe_rejects_unverified_thread_isolation(tmp_path, change):
+    command, _ = _command(tmp_path, f'    if method == "thread/start":\n        {change}')
+    with pytest.raises(ProbeError, match="isolation checks failed"):
+        run_probe(home=tmp_path / "runtime", cwd=tmp_path / "workspace",
+                  command=command, include_thread=True, timeout=1)
+
+
+@pytest.mark.parametrize("change", [
+    'result.pop("requiresOpenaiAuth")',
+    'result["requiresOpenaiAuth"] = "false"',
+])
+def test_probe_rejects_unknown_authentication_requirement(tmp_path, change):
+    command, _ = _command(tmp_path, f'    if method == "account/read":\n        {change}')
+    with pytest.raises(ProbeError, match="boolean authentication requirement"):
+        run_probe(home=tmp_path / "runtime", cwd=tmp_path / "workspace",
+                  command=command, timeout=1)
 
 
 def test_probe_is_paginated_sanitized_and_never_starts_a_turn(tmp_path):

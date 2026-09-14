@@ -167,7 +167,7 @@ class _StderrCapture:
 
 
 class CodexAppServerTransport:
-    """One-at-a-time JSON-RPC client over a Codex app-server subprocess.
+    """One-at-a-time POSIX JSON-RPC client over a Codex app-server subprocess.
 
     The wire format is one JSON object per line. Notifications are retained for
     inspection while server-initiated requests are rejected immediately.
@@ -183,6 +183,8 @@ class CodexAppServerTransport:
         stderr_limit: int = DEFAULT_STDERR_LIMIT,
         message_limit: int = DEFAULT_MESSAGE_LIMIT,
     ) -> None:
+        if os.name != "posix":
+            raise TransportError("The Codex compatibility probe currently supports macOS/Linux only")
         if timeout <= 0:
             raise ValueError("timeout must be positive")
         if stderr_limit < 0 or message_limit < 1:
@@ -426,11 +428,10 @@ class CodexAppServerTransport:
                 self._signal_process_tree(signal.SIGKILL)
                 process.wait(timeout=max(0.1, grace_seconds))
 
-        # A descendant can inherit the pipes after its parent exits. Terminate the
-        # process group before joining so buffered stream close cannot wait on a
-        # reader that will never see EOF.
-        if any(thread is not None and thread.is_alive() for thread in (self._stdout_thread, self._stderr_thread)):
-            self._signal_process_tree(signal.SIGTERM)
+        # The direct child has exited. Its private group can still contain
+        # descendants, including ones with all stdio redirected. Clean the group
+        # regardless of pipe state; it belongs only to this subprocess session.
+        self._signal_process_tree(signal.SIGKILL)
         for thread in (self._stdout_thread, self._stderr_thread):
             if thread is not None:
                 thread.join(timeout=max(0.0, grace_seconds))

@@ -31,6 +31,17 @@ with no conversation history. Main is not the target of these stage PRs.
 
 ## Stage 1: compatibility probe
 
+Implementation and fresh independent review complete in [PR #3](https://github.com/maluyao002/TradingAgents/pull/3).
+Validation: 22 focused tests, 884 full offline tests and 65 subtests passed; Ruff
+passed. Review corrections cover detached descendant cleanup, explicit POSIX
+support, and strict authentication/isolation response validation. Live gates
+below remain pending. Stages 2–5 have not started.
+
+The initial transport supports macOS/Linux only. It explicitly rejects Windows
+before launching a subprocess; the existing API backend remains cross-platform.
+Process groups and nonblocking POSIX pipe writes provide bounded cleanup and
+write deadlines, including descendants that redirect their standard streams.
+
 The installed CLI used for schema inspection was `codex-cli 0.153.4`. Its generated
 protocol schema exposes `thread/start.ephemeral`, `baseInstructions`,
 `developerInstructions`, `allowProviderModelFallback`, and per-turn `outputSchema`

@@ -2,9 +2,11 @@ import os
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from tradingagents.codex import transport as transport_module
 from tradingagents.codex.transport import (
     CodexAppServerTransport,
     ProtocolError,
@@ -15,6 +17,13 @@ from tradingagents.codex.transport import (
     build_app_server_command,
     build_child_env,
 )
+
+
+@pytest.fixture(autouse=True)
+def _posix_transport_tests(request):
+    if os.name != "posix" and request.node.name != "test_unsupported_platform_fails_before_launch":
+        pytest.skip("Codex transport currently supports macOS/Linux only")
+
 
 FAKE_SERVER = r"""
 import json
@@ -28,6 +37,16 @@ if mode == "blocked":
     time.sleep(60)
 elif mode == "descendant":
     subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+elif mode == "redirected-descendant":
+    code = "from pathlib import Path\nimport time\ni=0\nwhile True:\n Path('heartbeat').write_text(str(i))\n i+=1\n time.sleep(0.01)"
+    child = subprocess.Popen([sys.executable, "-c", code],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+    for _ in range(100):
+        if os.path.exists('heartbeat'):
+            break
+        time.sleep(0.01)
+    print(json.dumps({"id": 1, "result": {"pid": child.pid}}), flush=True)
 else:
     for line in sys.stdin:
         request = json.loads(line)
@@ -144,3 +163,26 @@ def test_close_terminates_descendants_holding_stdio(tmp_path):
     started = time.monotonic()
     transport.close(grace_seconds=0.1)
     assert time.monotonic() - started < 1.0
+
+
+def test_close_cleans_private_group_even_after_all_pipes_close(tmp_path):
+    transport = _transport(tmp_path, "redirected-descendant").start()
+    # Receive the child PID before the fake server exits, then let the readers
+    # reach EOF. The cleanup must not depend on reader-thread liveness.
+    reply = transport._messages.get(timeout=1)
+    assert reply["result"]["pid"] > 0
+    transport._process.wait(timeout=1)
+    transport._stdout_thread.join(timeout=1)
+    transport._stderr_thread.join(timeout=1)
+    transport.close(grace_seconds=0.1)
+    heartbeat = tmp_path / "workspace" / "heartbeat"
+    time.sleep(0.05)  # Allow delivery of the process-group kill.
+    after_close = heartbeat.read_text()
+    time.sleep(0.1)
+    assert heartbeat.read_text() == after_close, "Descendant survived transport cleanup"
+
+
+def test_unsupported_platform_fails_before_launch(tmp_path, monkeypatch):
+    monkeypatch.setattr(transport_module, "os", SimpleNamespace(name="nt"))
+    with pytest.raises(transport_module.TransportError, match="macOS/Linux"):
+        CodexAppServerTransport(home=tmp_path / "runtime", cwd=tmp_path)

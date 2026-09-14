@@ -63,6 +63,8 @@ def _relative_files(root: Path) -> set[str]:
 def _sanitize_account(result: Any) -> dict[str, object]:
     if not isinstance(result, dict):
         raise ProbeError("account/read returned an invalid result")
+    if not isinstance(result.get("requiresOpenaiAuth"), bool):
+        raise ProbeError("account/read did not report a boolean authentication requirement")
     account = result.get("account")
     account_type: object = None
     if isinstance(account, dict):
@@ -70,7 +72,7 @@ def _sanitize_account(result: Any) -> dict[str, object]:
     allowed = {"apiKey", "chatgpt", "amazonBedrock"}
     return {
         "auth_type": account_type if account_type in allowed else None,
-        "requires_openai_auth": bool(result.get("requiresOpenaiAuth")),
+        "requires_openai_auth": result["requiresOpenaiAuth"],
     }
 
 
@@ -164,9 +166,8 @@ def _probe_thread(
         "no_persisted_path": thread.get("path") is None,
         "cwd_matches": result.get("cwd") == str(cwd),
         "model_matches": result.get("model") == selected_model,
-        "provider_matches": isinstance(result.get("modelProvider"), str)
-        and (model_provider is None or result.get("modelProvider") == model_provider),
-        "instruction_sources_empty": result.get("instructionSources", []) == [],
+        "provider_matches": result.get("modelProvider") == params["modelProvider"],
+        "instruction_sources_empty": result.get("instructionSources") == [],
     }
     if not isinstance(thread_id, str) or not all(checks.values()):
         raise ProbeError("Ephemeral thread isolation checks failed")
