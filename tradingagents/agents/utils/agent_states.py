@@ -60,6 +60,10 @@ class AgentState(MessagesState):
     ]
     fundamentals_report: Annotated[str, "Report from the Fundamentals Researcher"]
 
+    # Source data and compact handoffs stay separate from each agent's messages.
+    prepared_data: Annotated[dict, "Prepared source data keyed by specialist role"]
+    evidence_packets: Annotated[dict, "Validated evidence handoffs keyed by specialist role"]
+
     # researcher team discussion step
     investment_debate_state: Annotated[
         InvestDebateState, "Current state of the debate on if to invest or not"

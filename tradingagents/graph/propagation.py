@@ -38,6 +38,8 @@ class Propagator:
             "instrument_context": instrument_context,
             "trade_date": str(trade_date),
             "past_context": past_context,
+            "prepared_data": {},
+            "evidence_packets": {},
             "investment_debate_state": InvestDebateState(
                 {
                     "bull_history": "",

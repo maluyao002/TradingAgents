@@ -1,4 +1,7 @@
+import json
 import logging
+from dataclasses import dataclass
+from typing import Any
 
 from .alpha_vantage import (
     get_balance_sheet as get_alpha_vantage_balance_sheet,
@@ -19,6 +22,7 @@ from .errors import (
 )
 from .fred import get_macro_data as get_fred_macro_data
 from .polymarket import get_prediction_markets as get_polymarket_prediction_markets
+from .request_cache import cache_request, canonical_request_key, get_cached_request
 from .y_finance import (
     get_balance_sheet as get_yfinance_balance_sheet,
     get_cashflow as get_yfinance_cashflow,
@@ -83,6 +87,15 @@ VENDOR_LIST = [
     "polymarket",
     "alpha_vantage",
 ]
+
+
+@dataclass(frozen=True)
+class RoutedVendorResult:
+    """A routed value together with the provider that actually returned it."""
+
+    value: Any
+    vendor: str
+    method: str
 
 # Optional enrichment categories. These add macro/event context to the news
 # analyst but are not core to a decision, so a vendor failure here degrades to a
@@ -165,8 +178,50 @@ def get_vendor(category: str, method: str = None) -> str:
     # Fall back to category-level configuration
     return config.get("data_vendors", {}).get(category, "default")
 
-def route_to_vendor(method: str, *args, **kwargs):
-    """Route method calls to appropriate vendor implementation with fallback support."""
+def _cacheable_vendor_result(value: Any) -> bool:
+    """Avoid persisting provider error prose as if it were a successful response."""
+    if not isinstance(value, str):
+        return True
+    normalized = value.lstrip().lower()
+    return not normalized.startswith((
+        "error ",
+        "error:",
+        "data_unavailable:",
+        "no_data_available:",
+    ))
+
+
+def _provider_failure(value: Any, vendor: str) -> str | None:
+    """Classify explicit provider failures without retaining their raw text."""
+    if value is None:
+        return "empty response"
+    parsed = value
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return "empty response"
+        if stripped.lower().startswith(("error ", "error:")):
+            return "provider returned an error response"
+        if vendor == "alpha_vantage" and stripped[:1] in "{[":
+            try:
+                parsed = json.loads(stripped)
+            except json.JSONDecodeError:
+                parsed = value
+
+    if vendor != "alpha_vantage":
+        return None
+    if parsed in ({}, []):
+        return "empty Alpha Vantage payload"
+    if isinstance(parsed, dict):
+        for key in ("Error Message", "Information", "Note"):
+            message = parsed.get(key)
+            if message:
+                return f"Alpha Vantage {key} response"
+    return None
+
+
+def route_to_vendor_with_metadata(method: str, *args, **kwargs) -> RoutedVendorResult:
+    """Route a call and return its value plus the provider that served it."""
     category = get_category_for_method(method)
     vendor_config = get_vendor(category, method)
     primary_vendors = [v.strip() for v in vendor_config.split(',')]
@@ -197,9 +252,22 @@ def route_to_vendor(method: str, *args, **kwargs):
     for vendor in vendor_chain:
         vendor_impl = VENDOR_METHODS[method][vendor]
         impl_func = vendor_impl[0] if isinstance(vendor_impl, list) else vendor_impl
+        cache_key = canonical_request_key(method, vendor, impl_func, args, kwargs)
+        found, cached = get_cached_request(cache_key)
+        if found:
+            return RoutedVendorResult(cached, vendor, method)
 
         try:
-            return impl_func(*args, **kwargs)
+            value = impl_func(*args, **kwargs)
+            failure = _provider_failure(value, vendor)
+            if failure is not None:
+                logger.warning("Vendor %r failed for %s: %s", vendor, method, failure)
+                if first_error is None:
+                    first_error = ValueError(failure)
+                continue
+            if _cacheable_vendor_result(value):
+                cache_request(cache_key, value)
+            return RoutedVendorResult(value, vendor, method)
         except VendorRateLimitError:
             logger.warning("Vendor %r rate-limited for %s; trying next vendor.", vendor, method)
             continue
@@ -215,7 +283,12 @@ def route_to_vendor(method: str, *args, **kwargs):
             # Don't let one vendor's failure crash the call when another can
             # serve it, but never swallow silently: a broken primary must be
             # visible in the logs (#989), not hidden behind a fallback's verdict.
-            logger.warning("Vendor %r failed for %s: %s", vendor, method, e)
+            logger.warning(
+                "Vendor %r failed for %s (%s); trying next vendor.",
+                vendor,
+                method,
+                type(e).__name__,
+            )
             if first_error is None:
                 first_error = e
             continue
@@ -229,8 +302,9 @@ def route_to_vendor(method: str, *args, **kwargs):
             # A vendor also hit a real error; surface it in logs so the no-data
             # verdict can't hide a broken primary (network/auth/etc.).
             logger.warning(
-                "Returning NO_DATA for %s, but a vendor errored earlier: %s",
-                method, first_error,
+                "Returning NO_DATA for %s, but a vendor errored earlier (%s).",
+                method,
+                type(first_error).__name__,
             )
         sym = last_no_data.symbol
         canonical = last_no_data.canonical
@@ -239,12 +313,12 @@ def route_to_vendor(method: str, *args, **kwargs):
         # stale") so the agent sees the specific reason — invalid symbol, no
         # coverage, or stale data — not just a generic "unavailable".
         reason = f" ({last_no_data.detail})" if last_no_data.detail else ""
-        return (
+        return RoutedVendorResult((
             f"NO_DATA_AVAILABLE: No usable market data for '{sym}'{resolved} from "
             f"any configured vendor{reason}. The symbol may be invalid, delisted, "
             f"not covered, or the vendor returned stale data. Do not estimate or "
             f"fabricate values — report that data is unavailable for this symbol."
-        )
+        ), "unknown", method)
 
     # No vendor returned data and none reported clean "no data" — surface the
     # first real error (e.g. the primary vendor's network failure). Optional
@@ -252,11 +326,22 @@ def route_to_vendor(method: str, *args, **kwargs):
     # abort the run.
     if first_error is not None:
         if category in OPTIONAL_CATEGORIES:
-            logger.warning("Optional %s unavailable for %s: %s", category, method, first_error)
-            return (
-                f"DATA_UNAVAILABLE: optional {category} could not be retrieved "
-                f"({first_error}). Proceed without it; do not fabricate values."
+            error_type = type(first_error).__name__
+            logger.warning(
+                "Optional %s unavailable for %s (%s).",
+                category,
+                method,
+                error_type,
             )
+            return RoutedVendorResult((
+                f"DATA_UNAVAILABLE: optional {category} could not be retrieved "
+                f"({error_type}). Proceed without it; do not fabricate values."
+            ), "unknown", method)
         raise first_error
 
     raise RuntimeError(f"No available vendor for '{method}'")
+
+
+def route_to_vendor(method: str, *args, **kwargs):
+    """Route a method call while preserving the long-standing value-only API."""
+    return route_to_vendor_with_metadata(method, *args, **kwargs).value

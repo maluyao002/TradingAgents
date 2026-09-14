@@ -35,6 +35,12 @@ REQUEST_TIMEOUT = 30
 # the trend and the year-over-year base for most monthly/quarterly series.
 DEFAULT_LOOKBACK_DAYS = 365
 
+# Monthly price indexes need enough calendar history to include the observation
+# exactly 12 months before the latest release.  A 365-day request ending late in
+# a month can otherwise begin after the prior-year observation on the first.
+TWELVE_MONTH_LOOKBACK_DAYS = 550
+MONTHLY_PRICE_INDEX_SERIES = frozenset({"CPIAUCSL", "CPILFESL", "PCEPI", "PCEPILFE"})
+
 # Rows cap for the rendered table: recent values matter most for a decision, and
 # daily series (yields, VIX) over a long window would otherwise flood context.
 MAX_ROWS = 40
@@ -150,6 +156,14 @@ def _request(path: str, params: dict) -> dict:
     return response.json()
 
 
+def _same_date_previous_year(date_string: str) -> str:
+    value = datetime.strptime(date_string, "%Y-%m-%d")
+    try:
+        return value.replace(year=value.year - 1).strftime("%Y-%m-%d")
+    except ValueError:  # February 29 has no exact counterpart in a non-leap year.
+        return f"{value.year - 1}-02-28"
+
+
 def get_macro_data(
     indicator: str,
     curr_date: str,
@@ -176,7 +190,7 @@ def get_macro_data(
         look_back_days = DEFAULT_LOOKBACK_DAYS
 
     end_dt = datetime.strptime(curr_date, "%Y-%m-%d")
-    start_date = (end_dt - timedelta(days=look_back_days)).strftime("%Y-%m-%d")
+    requested_start_date = (end_dt - timedelta(days=look_back_days)).strftime("%Y-%m-%d")
 
     # Pin the data vintage. FRED defaults both realtime bounds to today, serving
     # the LATEST revision of every observation; a single-day realtime interval
@@ -196,6 +210,11 @@ def get_macro_data(
         series_id = _resolve_series_id(indicator)
     except ValueError as e:
         return f"FRED: {e}"
+
+    effective_lookback = look_back_days
+    if series_id in MONTHLY_PRICE_INDEX_SERIES:
+        effective_lookback = max(look_back_days, TWELVE_MONTH_LOOKBACK_DAYS)
+    start_date = (end_dt - timedelta(days=effective_lookback)).strftime("%Y-%m-%d")
 
     meta = _request("series", {"series_id": series_id, **realtime}).get("seriess") or []
     if not meta:
@@ -221,11 +240,15 @@ def get_macro_data(
     ).get("observations", [])
 
     # FRED encodes a missing observation as ".".
-    points = [
+    all_points = [
         (o["date"], o["value"])
         for o in observations
         if o.get("value") not in (".", None, "")
     ]
+    # Extended price-index history exists only to locate the exact year-ago
+    # comparison. Keep the requested-window change and displayed table scoped
+    # to the caller's actual lookback.
+    points = [point for point in all_points if point[0] >= requested_start_date]
 
     header = (
         f"## FRED: {title} ({series_id})\n"
@@ -234,6 +257,11 @@ def get_macro_data(
         f"{f' ({seasonal})' if seasonal else ''}\n"
         f"- Window: {start_date} to {curr_date}\n"
     )
+    if start_date != requested_start_date:
+        header += (
+            f"- Requested window began {requested_start_date}; history was extended "
+            "only to support an exact 12-month index comparison.\n"
+        )
 
     if not points:
         return header + (
@@ -256,6 +284,38 @@ def get_macro_data(
         )
     except ValueError:
         summary = f"\n**Latest:** {last_val} ({last_date})\n"
+
+    if series_id in MONTHLY_PRICE_INDEX_SERIES:
+        comparison_date = _same_date_previous_year(last_date)
+        comparison_value = dict(all_points).get(comparison_date)
+        if comparison_value is None:
+            summary += (
+                f"**Exact 12-month change:** unavailable; no observation dated "
+                f"{comparison_date} is present at the {pit} vintage.\n"
+            )
+        else:
+            try:
+                latest_number = float(last_val)
+                comparison_number = float(comparison_value)
+                change = latest_number - comparison_number
+                if comparison_number == 0:
+                    summary += (
+                        f"**Exact 12-month change:** {change:+.2f} index points from "
+                        f"{comparison_value} ({comparison_date}); percent change is "
+                        "undefined because the comparison value is zero.\n"
+                    )
+                else:
+                    pct_change = change / comparison_number * 100
+                    summary += (
+                        f"**Exact 12-month change:** {change:+.2f} index points "
+                        f"({pct_change:+.2f}%) from {comparison_value} "
+                        f"({comparison_date}).\n"
+                    )
+            except ValueError:
+                summary += (
+                    f"**Exact 12-month change:** unavailable; one of the matching "
+                    f"observations ({comparison_date}, {last_date}) is non-numeric.\n"
+                )
 
     shown = points
     note = ""

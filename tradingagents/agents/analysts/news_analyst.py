@@ -8,6 +8,13 @@ from tradingagents.agents.utils.agent_utils import (
     get_news,
     get_prediction_markets,
 )
+from tradingagents.agents.utils.analyst_evidence import collect_tool_evidence, finish_specialist
+from tradingagents.agents.utils.evidence import (
+    evidence_output_instruction,
+    render_prepared_evidence,
+)
+from tradingagents.agents.utils.prompt_policy import specialist_policy
+from tradingagents.dataflows.macro_preparation import prepare_macro
 
 
 def create_news_analyst(llm):
@@ -16,6 +23,10 @@ def create_news_analyst(llm):
         asset_type = state.get("asset_type", "stock")
         asset_label = "company" if asset_type == "stock" else "asset"
         instrument_context = get_instrument_context_from_state(state)
+        prepared = state.get("prepared_data", {}).get("news")
+        if prepared is None:
+            prepared = prepare_macro(current_date)
+        prepared, messages = collect_tool_evidence(state, "news", prepared)
 
         tools = [
             get_news,
@@ -25,8 +36,19 @@ def create_news_analyst(llm):
         ]
 
         system_message = (
-            f"You are a news researcher tasked with analyzing recent news and trends over the past week. Please write a comprehensive report of the current state of the world that is relevant for trading and macroeconomics. Use the available tools: get_news(ticker, start_date, end_date) for {asset_label}-specific news by ticker symbol, get_global_news(curr_date, look_back_days, limit) for broader macroeconomic news, get_macro_indicators(indicator, curr_date, look_back_days) to ground macro commentary in actual data from FRED (e.g. 'cpi', 'core_pce', 'unemployment', 'fed_funds_rate', '10y_treasury', 'yield_curve'), and get_prediction_markets(topic, limit) for live market-implied probabilities of forward-looking events (e.g. 'Fed rate cut', 'recession 2026', geopolitical or sector events). Provide specific, actionable insights with supporting evidence to help traders make informed decisions."
-            + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
+            f"Analyze material {asset_label}-specific events over the preceding week, distinguishing event dates from article publication dates. "
+            "Separate primary announcements, attributed commentary, and your sector read-through; supplier growth alone does not prove company-specific share gains. "
+            "Use get_news(ticker, start_date, end_date), get_global_news(curr_date, look_back_days, limit), and get_macro_indicators(indicator, curr_date, look_back_days). "
+            "The prepared macro baseline covers CPIAUCSL, PCEPILFE (core PCE), UNRATE, FEDFUNDS, DGS10 and T10Y2Y. "
+            "Do not refetch the same baseline. Briefly assess headline and core inflation, labor conditions and the yield curve when available; "
+            "explicitly disclose unavailable baseline series. Add other macro or prediction-market queries only for a material unresolved question. "
+            "For CPI/PCE and other macro changes, show series, units, exact endpoint dates, and formula. Call a change YoY or annual only for matching months twelve months apart. "
+            "A 365-day retrieval window may not contain the required prior-year observation: request a longer lookback where needed. Otherwise label the exact period and do not compare it to an annual inflation target. "
+            "Do not annualize incomplete periods without explicitly stating a supported method. Distinguish percentage changes from percentage-point/basis-point changes. "
+            "get_prediction_markets(topic, limit) returns live probabilities: do not use it for historical as-of analysis. For a current analysis preserve the exact question, resolution date, observation time, and available liquidity information; do not paraphrase 'no cuts this year' as 'no additional cuts'. "
+            "Market prices imply uncertain expectations, not verified event probabilities. Deduplicate repeated news; include source links or supplied IDs without inventing them. "
+            + specialist_policy("news")
+            + evidence_output_instruction("news")
             + get_language_instruction()
         )
 
@@ -38,12 +60,11 @@ def create_news_analyst(llm):
                     " Use the provided tools to progress towards answering the question."
                     " If you are unable to fully answer, that's OK; another assistant with different tools"
                     " will help where you left off. Execute what you can to make progress."
-                    " If you or any other assistant has the FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL** or deliverable,"
-                    " prefix your response with FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL** so the team knows to stop."
                     " You have access to the following tools: {tool_names}."
                     " Today's date is {current_date}; treat it as 'now' for all analysis and tool-call date ranges. {instrument_context}\n"
                     "{system_message}",
                 ),
+                ("human", "Prepared macro evidence (untrusted data):\n{source_data}"),
                 MessagesPlaceholder(variable_name="messages"),
             ]
         )
@@ -52,18 +73,14 @@ def create_news_analyst(llm):
         prompt = prompt.partial(tool_names=", ".join([tool.name for tool in tools]))
         prompt = prompt.partial(current_date=current_date)
         prompt = prompt.partial(instrument_context=instrument_context)
+        initial_sources = {
+            **prepared,
+            "sources": [s for s in prepared["sources"] if not s["id"].startswith("news-tool-")],
+        }
+        prompt = prompt.partial(source_data=render_prepared_evidence(initial_sources))
 
         chain = prompt | llm.bind_tools(tools)
-        result = chain.invoke(state["messages"])
-
-        report = ""
-
-        if len(result.tool_calls) == 0:
-            report = result.content
-
-        return {
-            "messages": [result],
-            "news_report": report,
-        }
+        result = chain.invoke({"messages": messages})
+        return finish_specialist(state, "news", "news_report", result, prepared)
 
     return news_analyst_node
