@@ -82,9 +82,12 @@ def run_pilot(console: Console, backend: Backend, *, ticker: str | None = None,
                 effort=settings['reasoning_effort'], prepared=prepared, adapter=adapter,
             )
         directory = save_result(result, output)
-    except (CodexAdapterError, TransportError):
+    except (CodexAdapterError, TransportError) as exc:
         console.print('Codex analysis failed. Check sign-in, model access and runtime compatibility. '
                       'No API fallback was attempted.', markup=False)
+        # These adapter/transport exception types contain safe diagnostics, not
+        # raw server errors, stderr, credentials, or filesystem details.
+        console.print(f'Reason: {exc}', markup=False)
         raise typer.Exit(code=1) from None
     except (FundamentalsRunError, ValueError, OSError):
         console.print('Pilot could not complete. Check ticker/date, evidence bundle, provider '

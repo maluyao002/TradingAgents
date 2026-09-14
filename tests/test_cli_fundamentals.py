@@ -84,13 +84,16 @@ def test_invalid_inputs_fail_before_codex_start(monkeypatch, tmp_path):
 def test_codex_failure_never_saves_or_falls_back(monkeypatch, tmp_path):
     import tradingagents.codex.adapter as adapter
     import tradingagents.codex.fundamentals as core
-    monkeypatch.setattr(adapter, 'CodexAdapter', Mock(side_effect=adapter.CodexAdapterError('secret detail')))
+    error = adapter.CodexAdapterError('Codex tool feature isolation could not be verified')
+    error.__cause__ = RuntimeError('secret detail')
+    monkeypatch.setattr(adapter, 'CodexAdapter', Mock(side_effect=error))
     run = Mock(side_effect=AssertionError('fallback'))
     monkeypatch.setattr(core, 'run_fundamentals', run)
     result = CliRunner().invoke(pilot.app, ['--backend', 'codex', '--ticker', 'AMD',
                                           '--date', '2026-09-13', '--output', str(tmp_path)])
     assert result.exit_code == 1
     assert 'No API fallback' in ' '.join(result.output.split())
+    assert 'Reason: Codex tool feature isolation could not be verified' in ' '.join(result.output.split())
     assert 'secret detail' not in result.output
     run.assert_not_called()
     assert not list(tmp_path.iterdir())
