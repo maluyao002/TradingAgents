@@ -99,9 +99,14 @@ from the normal Codex home or put credentials in this repository.
 
 ```sh
 export TRADINGAGENTS_CODEX_HOME="$HOME/.tradingagents/codex"
+mkdir -p -m 700 "$TRADINGAGENTS_CODEX_HOME"
 CODEX_HOME="$TRADINGAGENTS_CODEX_HOME" codex login -c 'cli_auth_credentials_store="file"' -c 'forced_login_method="chatgpt"'
 tradingagents --backend codex
 ```
+
+The Codex CLI requires this runtime directory to exist before sign-in; the `mkdir`
+step creates it with access restricted to your user. Your current project directory
+does not affect the runtime location.
 
 Complete the official browser sign-in with ChatGPT. API-key sign-in is not accepted
 by this backend. Keep the same `TRADINGAGENTS_CODEX_HOME` for later setup checks;
