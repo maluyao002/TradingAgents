@@ -1356,7 +1356,7 @@ def analyze(
     backend: Annotated[Backend | None, typer.Option(
         "--backend",
         envvar="TRADINGAGENTS_BACKEND",
-        help="Choose api or codex. Omit to choose at startup; Codex is a setup preview in stage 2.",
+        help="Choose api or codex. Omit to choose at startup; use --fundamentals for the single-analyst pilot.",
     )] = None,
     checkpoint: bool | None = typer.Option(
         None,
@@ -1364,6 +1364,7 @@ def analyze(
         help="Enable/disable checkpoint-resume (save state after each node so a "
         "crashed run can resume). Omit to honor TRADINGAGENTS_CHECKPOINT_ENABLED.",
     ),
+    fundamentals: bool = typer.Option(False, "--fundamentals", help="Run the fundamentals-only pilot with the selected backend."),
     clear_checkpoints: bool = typer.Option(
         False,
         "--clear-checkpoints",
@@ -1372,6 +1373,12 @@ def analyze(
 ):
     try:
         selected_backend = backend if backend is not None else select_backend()
+        if fundamentals:
+            if clear_checkpoints or checkpoint is not None:
+                raise typer.BadParameter("Checkpoint options do not apply to the fundamentals pilot.")
+            from cli.fundamentals import run_pilot
+            run_pilot(console, selected_backend)
+            return
         if selected_backend == Backend.CODEX:
             if clear_checkpoints or checkpoint is not None:
                 raise typer.BadParameter("Checkpoint options apply to API analysis, not the Codex setup preview.")
