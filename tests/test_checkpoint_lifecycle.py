@@ -335,3 +335,67 @@ def test_codex_checkpoint_identity_preserves_bridge_protocol_version():
         graph = _bare_graph(tmp, config={"llm_backend": "codex"})
         signature = graph._run_signature("stock", "2026-05-08")
         assert signature.startswith("codex|codex-bridge-v1|checkpoint-config-v2|")
+
+
+@pytest.mark.parametrize("variable,first,second", [
+    ("AZURE_OPENAI_ENDPOINT", "https://first.example.test/", "https://second.example.test/"),
+    ("AZURE_OPENAI_DEPLOYMENT_NAME", "deployment-a", "deployment-b"),
+    ("OPENAI_API_VERSION", "2025-03-01-preview", "2025-04-01-preview"),
+    ("OPENAI_API_BASE", "https://first.example.test/openai", "https://second.example.test/openai"),
+])
+def test_azure_environment_change_starts_fresh_checkpoint(tmp_path, monkeypatch, variable, first, second):
+    global _should_crash
+    monkeypatch.setenv(variable, first)
+    graph = _bare_graph(str(tmp_path), config={"llm_provider": "azure", "backend_url": None})
+    _should_crash = True
+    original = graph.begin_checkpoint("AAPL", "2026-05-08")
+    try:
+        with pytest.raises(RuntimeError):
+            graph.graph.invoke({"count": 0}, config={"configurable": {"thread_id": original}})
+    finally:
+        graph.end_checkpoint()
+        _should_crash = False
+    assert graph.begin_checkpoint("AAPL", "2026-05-08") == original
+    assert graph._resuming is True
+    graph.end_checkpoint()
+    monkeypatch.setenv(variable, second)
+    try:
+        assert graph.begin_checkpoint("AAPL", "2026-05-08") != original
+        assert graph._resuming is False
+    finally:
+        graph.end_checkpoint()
+
+
+def test_ollama_identity_uses_client_endpoint_precedence(tmp_path, monkeypatch):
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+    graph = _bare_graph(str(tmp_path), config={"llm_provider": "ollama", "backend_url": None})
+    default = graph._run_signature("stock")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+    assert graph._run_signature("stock") == default
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://other.example.test:11434/v1")
+    assert graph._run_signature("stock") != default
+    graph.config["backend_url"] = "http://explicit.example.test/v1"
+    explicit = graph._run_signature("stock")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://ignored.example.test/v1")
+    assert graph._run_signature("stock") == explicit
+
+
+@pytest.mark.parametrize("provider", ["azure", "ollama"])
+def test_environment_endpoint_credentials_do_not_change_identity(tmp_path, monkeypatch, provider):
+    variable = "AZURE_OPENAI_ENDPOINT" if provider == "azure" else "OLLAMA_BASE_URL"
+    graph = _bare_graph(str(tmp_path), config={"llm_provider": provider, "backend_url": None})
+    monkeypatch.setenv(variable, "https://user:secret-one@service.example.test/v1?api_key=one")
+    baseline = graph._run_signature("stock")
+    monkeypatch.setenv(variable, "https://user:secret-two@service.example.test/v1?api_key=two")
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "credential-rotation")
+    assert graph._run_signature("stock") == baseline
+    assert "secret" not in baseline
+    assert "service.example.test" not in baseline
+
+
+def test_api_endpoint_environment_does_not_change_codex_identity(tmp_path, monkeypatch):
+    graph = _bare_graph(str(tmp_path), config={"llm_backend": "codex", "llm_provider": "azure"})
+    baseline = graph._run_signature("stock")
+    for variable in ("AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_DEPLOYMENT_NAME", "OPENAI_API_VERSION", "OLLAMA_BASE_URL"):
+        monkeypatch.setenv(variable, "unrelated-api-setting")
+    assert graph._run_signature("stock") == baseline

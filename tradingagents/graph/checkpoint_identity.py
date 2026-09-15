@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from collections.abc import Mapping, Sequence
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -88,10 +89,27 @@ def _model_identity(config: Mapping[str, Any], backend: str) -> dict[str, Any]:
         return {"agents": agents}
 
     provider = str(config.get("llm_provider", "openai")).lower()
+    endpoint = config.get("backend_url")
+    if provider == "ollama":
+        from tradingagents.llm_clients.openai_client import OPENAI_COMPATIBLE_PROVIDERS
+
+        spec = OPENAI_COMPATIBLE_PROVIDERS["ollama"]
+        endpoint = endpoint or os.environ.get(spec.base_url_env) or spec.base_url
+    elif provider == "azure":
+        # AzureOpenAIClient does not forward backend_url. The Azure SDK reads
+        # its endpoint/version from the environment; deployment falls back to
+        # each configured model when the deployment variable is absent.
+        endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
     result: dict[str, Any] = {
         "provider": provider,
-        "endpoint": _endpoint_identity(config.get("backend_url")),
+        "endpoint": _endpoint_identity(endpoint),
     }
+    if provider == "azure":
+        result["azure"] = {
+            "deployment": os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME"),
+            "api_version": os.environ.get("OPENAI_API_VERSION"),
+            "legacy_endpoint": _endpoint_identity(os.environ.get("OPENAI_API_BASE")),
+        }
     if agents:
         result["agents"] = agents
     else:
