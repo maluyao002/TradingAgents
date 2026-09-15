@@ -15,8 +15,10 @@ _REPORTS = {
 }
 _UNAVAILABLE = re.compile(
     r"^\s*(?:<(?:\w+\s+)?unavailable\b|(?:error|unavailable)\s*:|"
+    r"<no (?:StockTwits messages|Reddit posts)\b|"
+    r"error fetching (?:global )?news\b|"
     r"(?:company news|global news|news|data) unavailable\b|"
-    r"no (?:news|articles|posts|messages|data) (?:found|available|returned)\b)",
+    r"no (?:(?:global )?news|articles|posts|messages|data) (?:found|available|returned)\b)",
     re.IGNORECASE,
 )
 _EXPLICIT_RATING = re.compile(

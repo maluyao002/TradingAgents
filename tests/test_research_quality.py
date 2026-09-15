@@ -285,3 +285,62 @@ def test_report_and_metadata_recompute_gate_without_mutating_diagnostics(tmp_pat
     assert quality["accepted"] is accepted
     assert ("ACCEPTED" if accepted else "DEGRADED") in path.read_text()
     assert state == original
+
+
+@pytest.mark.parametrize("role,source_index,content", [
+    ("news", 1, "No global news found for 2026-09-14"),
+    ("news", 1, "No global news found between 2026-09-07 and 2026-09-14"),
+    ("news", 0, "Error fetching news for AAPL: provider failed"),
+    ("news", 1, "Error fetching global news: provider failed"),
+    ("sentiment", 1, "<no StockTwits messages found for $AAPL>"),
+    ("sentiment", 1, "<no StockTwits messages for $AAPL within 2026-09-07..2026-09-14 (public stream serves only recent messages)>"),
+    ("sentiment", 2, "<no Reddit posts found mentioning AAPL across r/stocks in the past 7 days>"),
+])
+def test_production_no_data_sentinels_withhold_signal_and_memory(role, source_index, content):
+    state = complete_state((role,))
+    state["prepared_data"][role]["sources"][source_index]["content"] = content
+    graph = MagicMock()
+    graph.selected_analysts = [role]
+    graph.config = {"llm_backend": "api"}
+    graph.debug = False
+    graph.graph.invoke.return_value = state
+    graph.propagator.get_graph_args.return_value = {}
+    result, signal = TradingAgentsGraph._run_graph(graph, "AAPL", "2026-09-14")
+    assert signal == "REVIEW"
+    assert {"role": role, "code": "source_unavailable"} in result["research_quality"]["reasons"]
+    graph.memory_log.store_decision.assert_not_called()
+
+
+def test_provider_error_words_inside_usable_content_are_not_a_no_data_sentinel():
+    state = complete_state(("news",))
+    state["prepared_data"]["news"]["sources"][0]["content"] = (
+        "Company earnings update. A historical service incident showed Error fetching news."
+    )
+    assert assess_research_quality(state)["accepted"] is True
+
+
+@pytest.mark.parametrize("structured_failure", ["unavailable", "parse"])
+def test_localized_portfolio_fallback_preserves_machine_rating(monkeypatch, structured_failure):
+    from tradingagents.agents.managers import portfolio_manager
+
+    monkeypatch.setattr(portfolio_manager, "get_language_instruction", lambda: "Write the entire response in Chinese.")
+    llm = MagicMock()
+    if structured_failure == "unavailable":
+        llm.with_structured_output.side_effect = NotImplementedError("unsupported")
+    else:
+        llm.with_structured_output.return_value.invoke.side_effect = ValueError("invalid JSON")
+    llm.invoke.return_value.content = "Rating: Hold\n评级：持有。证据尚不足以改变仓位。"
+    state = complete_state()
+    state.update(company_of_interest="AAPL", trade_date="2026-09-14")
+    state["risk_debate_state"].update(
+        current_aggressive_response="", current_conservative_response="",
+        current_neutral_response="", count=3,
+    )
+    state.update(portfolio_manager.create_portfolio_manager(llm)(state))
+    prompt = llm.invoke.call_args.args[0]
+    assert prompt.index("Machine-readable rating exception") > prompt.index("Write the entire response in Chinese.")
+    assert "Never translate" in prompt
+    assert "Rating: <value>" in prompt
+    assert assess_research_quality(state)["signal"] == "Hold"
+    assert "评级：持有" in state["final_trade_decision"]
+    assert llm.invoke.call_count == 1

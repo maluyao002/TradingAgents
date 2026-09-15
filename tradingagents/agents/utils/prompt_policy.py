@@ -4,7 +4,7 @@ import json
 
 from tradingagents.agents.utils.analysis_time import analysis_calendar
 
-PROMPT_POLICY_VERSION = "evidence-v8"
+PROMPT_POLICY_VERSION = "evidence-v9"
 
 
 _OUTPUT_TARGETS = {
