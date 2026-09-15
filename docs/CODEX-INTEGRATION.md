@@ -3,7 +3,9 @@
 The research workflow supports the official local Codex app-server and the
 existing API providers as explicit startup choices. Stages 1–4 are merged into
 `feat/codex-integration`. Stage 5 has AMD full-pipeline comparisons and offline
-regressions; non-AMD acceptance remains pending. This is a supervised research
+regressions; the INTC non-AMD operational/full-pipeline acceptance case passed
+for supervised research. Cash-flow completeness remains an open quality item.
+This is a supervised research
 beta, not an unattended trading or broker execution service.
 
 ## Stage tracker
@@ -302,8 +304,10 @@ error on failure, without the API helper's free-text recovery. A regression veri
 that rejected private values do not enter warning logs. The reviewer also found an
 unused import, which was removed. Ruff and whitespace checks passed.
 
-Stage 5 has user-run AMD comparisons with per-role latency and usage accounting.
-A non-AMD full-pipeline run remains the next acceptance check. Offline integration
+Stage 5 has user-run AMD and INTC comparisons with per-role latency and usage
+accounting. The user accepted the INTC non-AMD operational/full-pipeline case
+for supervised research. This does not establish full research-quality parity.
+Offline integration
 tests establish routing, validation and recovery, not model quality or profitability.
 
 ## Sources
@@ -407,19 +411,38 @@ factual accuracy, point-in-time data completeness, suitability, profitability, o
 permission to trade. Known data caveats still need human review. The project has
 no scheduler, broker order submission, paper-trading ledger, or live approval flow.
 
-### Next manual acceptance
+### Non-AMD operational acceptance: passed
 
-Run one non-AMD ticker through the full Codex workflow with Balanced unchanged:
+The user accepted the INTC operational/full-pipeline case for supervised research
+after reviewing the Codex and API runs for the September 14, 2026 analysis date.
+Balanced models, reasoning efforts, and two research/two risk rounds were unchanged.
 
-```sh
-tradingagents --backend codex --checkpoint
-```
+| Observed result | Codex | API |
+| --- | --- | --- |
+| Completed model calls | 17 of 17 | 17 of 17 |
+| Structural gate / final signal | Accepted / Hold | Accepted / Hold |
+| Elapsed time | 629.97 seconds | 414.69 seconds |
+| Input / output tokens | 505,980 / 23,106 | 430,364 / 26,780 |
 
-Select the ticker/date and Balanced, then save the report. Review the acceptance
-status/reasons, required evidence and citations, Trader and Portfolio Manager
-consistency, and per-role timing/usage. A degraded result is diagnostic evidence
-for investigation, not a successful acceptance run. This is a real subscription
-and data-provider run; offline tests and clean-install checks do not invoke it.
-The existing AMD API runs remain comparison evidence; another paid API run is
-not required for this next acceptance step. Cross-ticker quality acceptance stays
-pending until that report is reviewed.
+Saved evidence and report outputs revalidated against the current structural gate.
+All bracketed canonical evidence IDs resolved to their respective saved bundles.
+The API Trader proposed a conditional reduction labeled Sell; risk review challenged
+the proposal and the Portfolio Manager returned Hold. Both final decisions retained
+the FCF, provisional-price, and missing-portfolio-context caveats.
+
+This was not an identical-input replay: social samples differed, and Codex received
+the additional global-news baseline. INTC is a different ticker from AMD but remains
+in the semiconductor sector; cross-sector generalization is not established.
+
+**Open quality item:** the API report surfaced the provider's 12.426 billion
+operating-gains/losses cash-flow adjustment, while the Codex report omitted it.
+Both preserved the headline FCF reconciliations and continuing-operations caveat,
+but neither established a complete income-to-OCF bridge from the flat provider
+rows, whose subtotal relationships are uncertain. Operational acceptance therefore
+does not imply full research-quality parity or validated cash-flow normalization.
+Keep Balanced unchanged; this finding remains a focused quality follow-up.
+
+Acceptance covers supervised research only. It does not approve unattended trading,
+paper/live execution, profitability claims, or general reliability across all data
+regimes. Raw reports, provider payloads, and local runtime paths remain outside the
+committed documentation.
