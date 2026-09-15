@@ -7,6 +7,7 @@ behavior we added for the Trader, Research Manager, and Sentiment Analyst
 so they share the same deterministic output shape.
 """
 
+import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -383,7 +384,32 @@ class TestRenderSentimentReport:
             confidence="medium",
             narrative=narrative,
         )
-        assert narrative in render_sentiment_report(report)
+        rendered = render_sentiment_report(report)
+        payload = rendered.split("<!-- EVIDENCE_HANDOFF_START -->", 1)[1]
+        payload = payload.split("<!-- EVIDENCE_HANDOFF_END -->", 1)[0].strip()
+        assert json.loads(payload)["conclusions"] == [narrative]
+
+    def test_typed_evidence_fields_render_one_machine_handoff(self):
+        report = SentimentReport(
+            overall_band=SentimentBand.MIXED,
+            overall_score=5.0,
+            confidence="low",
+            narrative="News and social samples diverge [sentiment-news].",
+            caveats=["Reddit was unavailable."],
+            conflicts=["News was negative while labeled StockTwits posts were positive."],
+            evidence_ids=["sentiment-news", "sentiment-stocktwits"],
+        )
+        rendered = render_sentiment_report(report)
+        assert rendered.count("<!-- EVIDENCE_HANDOFF_START -->") == 1
+        assert rendered.count("<!-- EVIDENCE_HANDOFF_END -->") == 1
+        payload = rendered.split("<!-- EVIDENCE_HANDOFF_START -->", 1)[1]
+        payload = payload.split("<!-- EVIDENCE_HANDOFF_END -->", 1)[0].strip()
+        assert json.loads(payload) == {
+            "conclusions": [report.narrative],
+            "caveats": report.caveats,
+            "conflicts": report.conflicts,
+            "evidence_ids": report.evidence_ids,
+        }
 
     def test_all_six_bands_render(self):
         for band in SentimentBand:
@@ -417,7 +443,13 @@ def _structured_sentiment_llm(captured: dict, report: SentimentReport | None = N
         report = SentimentReport(
             overall_band=SentimentBand.BULLISH, overall_score=7.5,
             confidence="high",
-            narrative="StockTwits 75% bullish. News constructive. Reddit upbeat.",
+            narrative=(
+                "StockTwits was bullish [sentiment-stocktwits]. News was constructive "
+                "[sentiment-news]. Reddit was upbeat [sentiment-reddit]."
+            ),
+            caveats=["Sample selection limits inference."],
+            conflicts=[],
+            evidence_ids=["sentiment-news", "sentiment-stocktwits", "sentiment-reddit"],
         )
     structured = MagicMock()
     structured.invoke.side_effect = lambda prompt: (
@@ -449,13 +481,21 @@ class TestSentimentAnalystAgent:
         captured = {}
         report = SentimentReport(
             overall_band=SentimentBand.MILDLY_BEARISH, overall_score=4.0,
-            confidence="medium", narrative="Mixed signals across sources.",
+            confidence="medium",
+            narrative="Mixed signals across sources [sentiment-news; sentiment-stocktwits].",
+            caveats=["The social sample is not representative."],
+            conflicts=["News and StockTwits diverged."],
+            evidence_ids=["sentiment-news", "sentiment-stocktwits"],
         )
         analyst = create_sentiment_analyst(_structured_sentiment_llm(captured, report))
-        sr = analyst(_make_sentiment_state())["sentiment_report"]
+        result = analyst(_make_sentiment_state())
+        sr = result["sentiment_report"]
         assert "**Overall Sentiment:** **Mildly Bearish**" in sr
         assert "(Score: 4.0/10)" in sr
-        assert "Mixed signals across sources." in sr
+        assert "Mixed signals across sources" in sr
+        assert result["evidence_packets"]["sentiment"]["compacted"] is True
+        assert result["evidence_packets"]["sentiment"]["validation_errors"] == []
+        assert "The social sample is not representative." in sr
 
     def test_sentiment_report_also_in_messages(self):
         captured = {}
@@ -463,6 +503,25 @@ class TestSentimentAnalystAgent:
         result = analyst(_make_sentiment_state())
         assert len(result["messages"]) == 1
         assert result["sentiment_report"] == result["messages"][0].content
+
+    def test_structured_sentiment_unknown_evidence_id_stays_invalid(self):
+        captured = {}
+        report = SentimentReport(
+            overall_band=SentimentBand.NEUTRAL,
+            overall_score=5.0,
+            confidence="low",
+            narrative="The available sample is inconclusive [sentiment-invented].",
+            caveats=["The sample is sparse."],
+            conflicts=[],
+            evidence_ids=["sentiment-invented"],
+        )
+        result = create_sentiment_analyst(_structured_sentiment_llm(captured, report))(
+            _make_sentiment_state()
+        )
+        packet = result["evidence_packets"]["sentiment"]
+        assert packet["compacted"] is False
+        assert any("unknown evidence IDs" in error for error in packet["validation_errors"])
+        assert "sentiment-invented" in result["sentiment_report"]
 
     def test_prompt_contains_ticker(self):
         captured = {}
@@ -484,3 +543,28 @@ class TestSentimentAnalystAgent:
         llm.with_structured_output.return_value = structured
         llm.invoke.return_value = MagicMock(content=plain)
         assert create_sentiment_analyst(llm)(_make_sentiment_state())["sentiment_report"] == plain
+
+
+@pytest.mark.parametrize("structured", [True, False])
+def test_trader_citation_contract_and_existing_citations_survive_both_paths(structured):
+    captured = {}
+    text = "Reported cash flow is 10 [fundamentals-fcf]. Prior-period basis is unknown."
+    if structured:
+        llm = _structured_trader_llm(captured, TraderProposal(action=TraderAction.HOLD, reasoning=text))
+    else:
+        llm = MagicMock()
+        llm.with_structured_output.side_effect = NotImplementedError("offline")
+        def respond(prompt):
+            captured["prompt"] = prompt
+            return MagicMock(content=text)
+        llm.invoke.side_effect = respond
+    state = _make_trader_state()
+    state["investment_plan"] += " " + text
+    result = create_trader(llm)(state)
+    system = captured["prompt"][0]["content"]
+    assert "Cite each material factual claim" in system
+    assert "cite both period values" in system
+    assert "Do not invent an ID" in system
+    assert "immediate handoff gap, not proof that evidence is unavailable globally" in system
+    assert text in captured["prompt"][1]["content"]
+    assert text in result["trader_investment_plan"]

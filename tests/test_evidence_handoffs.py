@@ -205,6 +205,73 @@ def test_inline_numeric_citations_preserve_both_periods_and_dependencies(
     assert "RAW PROVIDER CONTENT" not in rendered
 
 
+@pytest.mark.parametrize("separator", [",", ";", ", ", "; "])
+@pytest.mark.parametrize("include_prepared_on_resume", [False, True])
+def test_grouped_citations_accept_commas_and_semicolons_on_build_and_resume(
+    separator, include_prepared_on_resume,
+):
+    prepared = _prepared("fundamentals")
+    base = {**prepared["facts"][0], "caveats": [], "inputs": []}
+    prepared["facts"] = [
+        {**base, "id": "fundamentals:fact:prior", "value": 10, "period": "FY2024"},
+        {**base, "id": "fundamentals:fact:current", "value": 20},
+    ]
+    citation = separator.join(["fundamentals:fact:current", "fundamentals:fact:prior"])
+    payload = {
+        "conclusions": [f"EPS was 20 versus 10 [{citation}]."],
+        "caveats": [],
+        "conflicts": [],
+        "evidence_ids": ["fundamentals:source:1"],
+    }
+    original = f"{HANDOFF_START}\n{json.dumps(payload)}\n{HANDOFF_END}"
+    packet = build_packet("fundamentals", original, prepared)
+    assert packet.compacted
+    assert {
+        "fundamentals:fact:current",
+        "fundamentals:fact:prior",
+    } <= set(packet.evidence_ids)
+
+    serialized = packet.to_dict()
+    serialized["evidence_ids"] = ["fundamentals:source:1"]
+    state = {"evidence_packets": {"fundamentals": serialized}}
+    if include_prepared_on_resume:
+        state["prepared_data"] = {"fundamentals": prepared}
+    rendered = render_analyst_context(state, ["fundamentals"])
+    assert "Complete report (compact handoff unavailable)" not in rendered
+    assert "fundamentals:fact:current |" in rendered
+    assert "fundamentals:fact:prior |" in rendered
+
+
+@pytest.mark.parametrize(
+    "citation",
+    [
+        "market:fact:1; market:fact:missing",
+        "market:fact:1, market:fact:missing",
+        "market:fact:1; news:fact:1",
+    ],
+)
+def test_grouped_citations_still_reject_every_unknown_id_on_build_and_resume(citation):
+    prepared = _prepared()
+    payload = {
+        "conclusions": [f"Reported EPS is 4.2 [{citation}]."],
+        "caveats": [],
+        "conflicts": [],
+        "evidence_ids": ["market:source:1"],
+    }
+    original = f"{HANDOFF_START}\n{json.dumps(payload)}\n{HANDOFF_END}"
+    packet = build_packet("market", original, prepared)
+    assert not packet.compacted
+    assert any("unknown evidence IDs" in error for error in packet.validation_errors)
+
+    valid = build_packet("market", _report(), prepared).to_dict()
+    valid["conclusions"] = payload["conclusions"]
+    rendered = render_analyst_context(
+        {"evidence_packets": {"market": valid}, "prepared_data": {"market": prepared}},
+        ["market"],
+    )
+    assert "Complete report (compact handoff unavailable)" in rendered
+
+
 @pytest.mark.parametrize("citation", ["market:fact:missing", "market:fact:bad!", "news:fact:1"])
 def test_unknown_inline_citation_disables_compaction_including_on_resume(citation):
     prepared = _prepared()
@@ -549,3 +616,82 @@ def test_research_manager_uses_all_compact_packets_without_full_narrative_duplic
         assert f"{role}:fact:1" in prompt
         assert f"{role.title()} reported EPS is positive" in prompt
         assert full_narratives[roles.index(role)] not in prompt
+
+
+def test_sentiment_known_source_wrapper_is_normalized_without_losing_limitations():
+    original = HANDOFF_START + json.dumps({
+        "conclusions": ["Samples diverge [SOURCE sentiment:source:1]."],
+        "caveats": ["Small sample [SOURCE sentiment:source:1]."],
+        "conflicts": ["News and social disagree [SOURCE sentiment:source:1]."],
+        "evidence_ids": ["SOURCE sentiment:source:1"],
+    }) + HANDOFF_END
+    prepared = _prepared("sentiment")
+    packet = build_packet("sentiment", original, prepared)
+    assert packet.compacted
+    assert packet.original_report == original
+    assert packet.evidence_ids == ("sentiment:source:1",)
+    assert "Small sample [sentiment:source:1]." in packet.caveats
+    assert "News and social disagree [sentiment:source:1]." in packet.conflicts
+    restored = render_analyst_context({
+        "evidence_packets": {"sentiment": packet.to_dict()},
+        "prepared_data": {"sentiment": prepared},
+    }, ["sentiment"])
+    assert "SOURCE sentiment" not in restored
+    assert "Samples diverge [sentiment:source:1]" in restored
+    assert "News and social disagree" in restored
+
+
+@pytest.mark.parametrize("bad_id", [
+    "SOURCE sentiment:invented", "SOURCE market:source:1", "source sentiment:source:1",
+])
+@pytest.mark.parametrize("indexed", [True, False])
+def test_sentiment_wrapper_never_repairs_unknown_or_cross_role_ids(bad_id, indexed):
+    original = HANDOFF_START + json.dumps({
+        "conclusions": [f"Unverified sample [{bad_id}]."],
+        "caveats": [], "conflicts": [],
+        "evidence_ids": [bad_id] if indexed else ["sentiment:source:1"],
+    }) + HANDOFF_END
+    packet = build_packet("sentiment", original, _prepared("sentiment"))
+    assert not packet.compacted
+    assert packet.original_report == original
+    assert packet.validation_errors
+
+
+def test_source_rendering_exposes_exact_bare_id_and_citation():
+    text = render_prepared_evidence(_prepared("sentiment"))
+    assert "evidence_id: sentiment:source:1" in text
+    assert "citation: [sentiment:source:1]" in text
+    assert "[SOURCE " not in text
+
+
+@pytest.mark.parametrize("kind", ["company", "global"])
+@pytest.mark.parametrize("assessed", [False, True])
+def test_news_handoff_requires_inline_assessment_of_baseline(assessed, kind):
+    prepared = _prepared("news")
+    source_id = f"news-{kind}-baseline"
+    prepared["sources"].append({"id": source_id, "content": "News unavailable"})
+    original = HANDOFF_START + json.dumps({
+        "conclusions": ["Macro evidence has limitations."],
+        "caveats": [f"Coverage unavailable [{source_id}]."] if assessed else [],
+        "conflicts": [], "evidence_ids": ["news:fact:1", source_id],
+    }) + HANDOFF_END
+    packet = build_packet("news", original, prepared)
+    assert packet.compacted is assessed
+    if not assessed:
+        assert any(f"required {kind} coverage" in error for error in packet.validation_errors)
+        assert any(source.id == source_id for source in packet.sources)
+
+
+def test_restored_news_packet_cannot_silently_drop_global_assessment():
+    prepared = _prepared("news")
+    prepared["sources"].append({"id": "news-global-baseline", "content": "Global news"})
+    original = HANDOFF_START + json.dumps({
+        "conclusions": ["Global coverage [news-global-baseline]."],
+        "caveats": [], "conflicts": [], "evidence_ids": ["news-global-baseline"],
+    }) + HANDOFF_END
+    packet = build_packet("news", original, prepared).to_dict()
+    packet["conclusions"] = ["Macro only."]
+    rendered = render_analyst_context({
+        "evidence_packets": {"news": packet}, "prepared_data": {"news": prepared},
+    }, ["news"])
+    assert "Complete report (compact handoff unavailable)" in rendered

@@ -109,3 +109,51 @@ def test_short_snapshot_does_not_invent_five_row_history(monkeypatch):
     monkeypatch.setattr(validator, "load_ohlcv", lambda *args: _sample_ohlcv().head(5))
     snapshot = validator.build_verified_market_snapshot_data("TEST", "2026-05-20")
     assert snapshot["indicator_comparisons"] == []
+
+
+@pytest.mark.parametrize("observed,status", [
+    ("2026-05-20T19:18:00+00:00", "provisional"),
+    ("2026-05-21T01:00:00+00:00", "provisional"),
+    ("2026-05-22T19:18:00+00:00", "historical"),
+])
+def test_daily_bar_finality_is_conservative(monkeypatch, observed, status):
+    from datetime import datetime
+    monkeypatch.setattr(validator, "load_ohlcv", lambda *args: _sample_ohlcv())
+    monkeypatch.setattr(validator, "_observed_at", lambda: datetime.fromisoformat(observed))
+    snapshot = validator.build_verified_market_snapshot_data("TEST", "2026-05-20")
+    assert snapshot["bar_status"] == status
+    assert snapshot["observed_at"] == observed
+    rendered = validator.render_verified_market_snapshot(snapshot)
+    if status == "provisional":
+        assert "Close (provisional price)" in rendered
+        assert "do not say 'closed at'" in rendered
+        assert "indicators and changes" in rendered
+    else:
+        assert "exchange-final status is not independently verified" in rendered
+
+
+def test_finality_survives_market_preparation(monkeypatch):
+    from datetime import datetime, timezone
+
+    from tradingagents.dataflows.preparation import prepare_market
+    monkeypatch.setattr(validator, "load_ohlcv", lambda *args: _sample_ohlcv())
+    monkeypatch.setattr(validator, "_observed_at", lambda: datetime(2026, 5, 20, 19, tzinfo=timezone.utc))
+    prepared = prepare_market("TEST", "2026-05-20")
+    assert "PROVISIONAL" in prepared["caveats"][0]
+    assert prepared["facts"]
+    assert all("PROVISIONAL" in fact["caveats"][-1] for fact in prepared["facts"])
+    assert "PROVISIONAL" in prepared["sources"][0]["content"]
+
+
+def test_identical_market_data_keeps_citation_ids_across_observation_times(monkeypatch):
+    from datetime import datetime, timezone
+
+    from tradingagents.dataflows.preparation import prepare_market
+    monkeypatch.setattr(validator, "load_ohlcv", lambda *args: _sample_ohlcv())
+    monkeypatch.setattr(validator, "_observed_at", lambda: datetime(2026, 5, 20, 19, 0, tzinfo=timezone.utc))
+    first = prepare_market("TEST", "2026-05-20")
+    monkeypatch.setattr(validator, "_observed_at", lambda: datetime(2026, 5, 20, 19, 1, tzinfo=timezone.utc))
+    second = prepare_market("TEST", "2026-05-20")
+    assert first["sources"][0]["retrieved_at"] != second["sources"][0]["retrieved_at"]
+    assert first["sources"][0]["id"] == second["sources"][0]["id"]
+    assert [fact["id"] for fact in first["facts"]] == [fact["id"] for fact in second["facts"]]

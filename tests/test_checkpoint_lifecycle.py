@@ -7,14 +7,20 @@ lifecycle is now ``begin_checkpoint`` / ``end_checkpoint`` /
 tests drive that lifecycle exactly as the CLI does (begin -> stream self.graph ->
 clear/end) and prove state is saved and resumed.
 """
+
 from __future__ import annotations
 
+import copy
+import os
 import tempfile
+import time
+from pathlib import Path
 from typing import TypedDict
 
 import pytest
 from langgraph.graph import END, StateGraph
 
+from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.checkpointer import checkpoint_step
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 
@@ -45,19 +51,24 @@ def _workflow() -> StateGraph:
     return b
 
 
-def _bare_graph(tmpdir, *, enabled=True):
+def _bare_graph(tmpdir, *, enabled=True, config=None):
     g = object.__new__(TradingAgentsGraph)
-    g.config = {
-        "checkpoint_enabled": enabled, "data_cache_dir": tmpdir,
-        "max_debate_rounds": 1, "max_risk_discuss_rounds": 1,
-    }
+    g.config = copy.deepcopy(DEFAULT_CONFIG)
+    g.config.update(
+        {
+            "checkpoint_enabled": enabled,
+            "data_cache_dir": tmpdir,
+            "max_debate_rounds": 1,
+            "max_risk_discuss_rounds": 1,
+        }
+    )
+    if config:
+        g.config.update(config)
     g.selected_analysts = ("market",)
     g.workflow = _workflow()
     g.graph = g.workflow.compile()
     g._checkpointer_ctx = None
     return g
-
-
 
 
 @pytest.mark.unit
@@ -136,7 +147,7 @@ def test_cli_style_usage_saves_then_resumes():
 
         # A checkpoint was saved for this run signature (so --checkpoint works).
 
-        sig = g1._run_signature("stock")
+        sig = g1._run_signature("stock", "2026-05-08")
         assert checkpoint_step(tmp, "AAPL", "2026-05-08", sig) is not None
 
         # Run 2 (fresh graph, as a new CLI invocation): resume and finish.
@@ -153,3 +164,238 @@ def test_cli_style_usage_saves_then_resumes():
 
         # Cleared on success -> a later run starts fresh.
         assert checkpoint_step(tmp, "AAPL", "2026-05-08", sig) is None
+
+
+@pytest.mark.unit
+def test_behavior_change_does_not_resume_mixed_checkpoint():
+    global _should_crash
+    with tempfile.TemporaryDirectory() as tmp:
+        run = ("AAPL", "2026-05-08", "stock")
+        _should_crash = True
+        original = _bare_graph(tmp, config={"output_language": "English"})
+        original_tid = original.begin_checkpoint(*run)
+        try:
+            with pytest.raises(RuntimeError):
+                original.graph.invoke(
+                    {"count": 0}, config={"configurable": {"thread_id": original_tid}}
+                )
+        finally:
+            original.end_checkpoint()
+            _should_crash = False
+
+        changed = _bare_graph(tmp, config={"output_language": "Japanese"})
+        changed_tid = changed.begin_checkpoint(*run)
+        try:
+            assert changed_tid != original_tid
+            assert changed._resuming is False
+            assert changed.checkpoint_input({"count": 0}) == {"count": 0}
+        finally:
+            changed.end_checkpoint()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("key", "changed"),
+    [
+        ("output_language", "Japanese"),
+        ("llm_provider", "anthropic"),
+        ("quick_think_llm", "different-quick-model"),
+        ("deep_think_llm", "different-deep-model"),
+        ("openai_reasoning_effort", "high"),
+        ("temperature", 0.2),
+        ("max_tokens", 4096),
+        ("llm_max_retries", 8),
+        ("max_recur_limit", 250),
+        ("news_article_limit", 50),
+        ("global_news_article_limit", 25),
+        ("global_news_lookback_days", 14),
+        ("global_news_queries", ["different macro query"]),
+        ("data_vendors", {"news_data": "alpha_vantage"}),
+        ("tool_vendors", {"get_news": "alpha_vantage"}),
+        ("benchmark_ticker", "QQQ"),
+        ("benchmark_map", {"": "QQQ"}),
+    ],
+)
+def test_material_config_changes_checkpoint_identity(key, changed):
+    with tempfile.TemporaryDirectory() as tmp:
+        graph = _bare_graph(tmp)
+        baseline = graph._run_signature("stock", "2026-05-08")
+        graph.config[key] = changed
+        assert graph._run_signature("stock", "2026-05-08") != baseline
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("key", "changed"),
+    [
+        ("results_dir", "/different/results"),
+        ("data_cache_dir", "/different/cache"),
+        ("memory_log_path", "/different/memory.md"),
+        ("project_dir", "/different/project"),
+        ("checkpoint_enabled", False),
+        ("model_profile", "display-label-only"),
+        ("callbacks", ["runtime callback"]),
+        ("api_key", "TOP-SECRET-KEY"),
+        ("unrelated_future_setting", "ignored"),
+    ],
+)
+def test_nonsemantic_and_secret_config_do_not_change_checkpoint_identity(key, changed):
+    with tempfile.TemporaryDirectory() as tmp:
+        graph = _bare_graph(tmp)
+        baseline = graph._run_signature("stock", "2026-05-08")
+        graph.config[key] = changed
+        assert graph._run_signature("stock", "2026-05-08") == baseline
+
+
+@pytest.mark.unit
+def test_endpoint_credentials_are_excluded_but_endpoint_behavior_is_identified():
+    with tempfile.TemporaryDirectory() as tmp:
+        graph = _bare_graph(
+            tmp,
+            config={
+                "backend_url": "https://first:secret-one@example.test/v1?api_key=hidden-one&api-version=2026-01-01"
+            },
+        )
+        baseline = graph._run_signature("stock", "2026-05-08")
+        assert "secret-one" not in baseline
+        assert "hidden-one" not in baseline
+
+        graph.config["backend_url"] = (
+            "https://second:secret-two@example.test/v1?api_key=hidden-two&api-version=2026-01-01"
+        )
+        assert graph._run_signature("stock", "2026-05-08") == baseline
+
+        graph.config["backend_url"] = "https://example.test/v2?api-version=2026-01-01"
+        assert graph._run_signature("stock", "2026-05-08") != baseline
+
+
+@pytest.mark.unit
+def test_checkpoint_storage_does_not_persist_raw_config_or_endpoint_secrets():
+    global _should_crash
+    secret = "CHECKPOINT-SECRET-MUST-NOT-PERSIST"
+    with tempfile.TemporaryDirectory() as tmp:
+        graph = _bare_graph(
+            tmp,
+            config={
+                "backend_url": f"https://user:{secret}@example.test/v1?api_key={secret}",
+                "api_key": secret,
+            },
+        )
+        _should_crash = True
+        tid = graph.begin_checkpoint("AAPL", "2026-05-08", "stock")
+        try:
+            with pytest.raises(RuntimeError):
+                graph.graph.invoke({"count": 0}, config={"configurable": {"thread_id": tid}})
+        finally:
+            graph.end_checkpoint()
+            _should_crash = False
+
+        database = Path(tmp, "checkpoints", "AAPL.db").read_bytes()
+        assert secret.encode() not in database
+
+
+@pytest.mark.unit
+def test_mapping_order_does_not_change_checkpoint_identity():
+    with tempfile.TemporaryDirectory() as tmp:
+        graph = _bare_graph(
+            tmp,
+            config={"tool_vendors": {"get_news": "yfinance", "get_stock_data": "alpha_vantage"}},
+        )
+        baseline = graph._run_signature("stock", "2026-05-08")
+        graph.config["tool_vendors"] = {"get_stock_data": "alpha_vantage", "get_news": "yfinance"}
+        assert graph._run_signature("stock", "2026-05-08") == baseline
+
+
+@pytest.mark.unit
+def test_local_calendar_change_invalidates_checkpoint_identity():
+    if not hasattr(time, "tzset"):
+        pytest.skip("system-local timezone override requires tzset")
+    with tempfile.TemporaryDirectory() as tmp:
+        graph = _bare_graph(tmp)
+        original_tz = os.environ.get("TZ")
+        try:
+            os.environ["TZ"] = "UTC"
+            time.tzset()
+            utc_signature = graph._run_signature("stock", "2026-05-08")
+            os.environ["TZ"] = "America/Los_Angeles"
+            time.tzset()
+            pacific_signature = graph._run_signature("stock", "2026-05-08")
+        finally:
+            if original_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = original_tz
+            time.tzset()
+        assert utc_signature != pacific_signature
+
+
+@pytest.mark.unit
+def test_codex_checkpoint_identity_preserves_bridge_protocol_version():
+    with tempfile.TemporaryDirectory() as tmp:
+        graph = _bare_graph(tmp, config={"llm_backend": "codex"})
+        signature = graph._run_signature("stock", "2026-05-08")
+        assert signature.startswith("codex|codex-bridge-v1|checkpoint-config-v2|")
+
+
+@pytest.mark.parametrize("variable,first,second", [
+    ("AZURE_OPENAI_ENDPOINT", "https://first.example.test/", "https://second.example.test/"),
+    ("AZURE_OPENAI_DEPLOYMENT_NAME", "deployment-a", "deployment-b"),
+    ("OPENAI_API_VERSION", "2025-03-01-preview", "2025-04-01-preview"),
+    ("OPENAI_API_BASE", "https://first.example.test/openai", "https://second.example.test/openai"),
+])
+def test_azure_environment_change_starts_fresh_checkpoint(tmp_path, monkeypatch, variable, first, second):
+    global _should_crash
+    monkeypatch.setenv(variable, first)
+    graph = _bare_graph(str(tmp_path), config={"llm_provider": "azure", "backend_url": None})
+    _should_crash = True
+    original = graph.begin_checkpoint("AAPL", "2026-05-08")
+    try:
+        with pytest.raises(RuntimeError):
+            graph.graph.invoke({"count": 0}, config={"configurable": {"thread_id": original}})
+    finally:
+        graph.end_checkpoint()
+        _should_crash = False
+    assert graph.begin_checkpoint("AAPL", "2026-05-08") == original
+    assert graph._resuming is True
+    graph.end_checkpoint()
+    monkeypatch.setenv(variable, second)
+    try:
+        assert graph.begin_checkpoint("AAPL", "2026-05-08") != original
+        assert graph._resuming is False
+    finally:
+        graph.end_checkpoint()
+
+
+def test_ollama_identity_uses_client_endpoint_precedence(tmp_path, monkeypatch):
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+    graph = _bare_graph(str(tmp_path), config={"llm_provider": "ollama", "backend_url": None})
+    default = graph._run_signature("stock")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+    assert graph._run_signature("stock") == default
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://other.example.test:11434/v1")
+    assert graph._run_signature("stock") != default
+    graph.config["backend_url"] = "http://explicit.example.test/v1"
+    explicit = graph._run_signature("stock")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://ignored.example.test/v1")
+    assert graph._run_signature("stock") == explicit
+
+
+@pytest.mark.parametrize("provider", ["azure", "ollama"])
+def test_environment_endpoint_credentials_do_not_change_identity(tmp_path, monkeypatch, provider):
+    variable = "AZURE_OPENAI_ENDPOINT" if provider == "azure" else "OLLAMA_BASE_URL"
+    graph = _bare_graph(str(tmp_path), config={"llm_provider": provider, "backend_url": None})
+    monkeypatch.setenv(variable, "https://user:secret-one@service.example.test/v1?api_key=one")
+    baseline = graph._run_signature("stock")
+    monkeypatch.setenv(variable, "https://user:secret-two@service.example.test/v1?api_key=two")
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "credential-rotation")
+    assert graph._run_signature("stock") == baseline
+    assert "secret" not in baseline
+    assert "service.example.test" not in baseline
+
+
+def test_api_endpoint_environment_does_not_change_codex_identity(tmp_path, monkeypatch):
+    graph = _bare_graph(str(tmp_path), config={"llm_backend": "codex", "llm_provider": "azure"})
+    baseline = graph._run_signature("stock")
+    for variable in ("AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_DEPLOYMENT_NAME", "OPENAI_API_VERSION", "OLLAMA_BASE_URL"):
+        monkeypatch.setenv(variable, "unrelated-api-setting")
+    assert graph._run_signature("stock") == baseline

@@ -37,6 +37,7 @@ from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.llm_clients import create_llm_client
 from tradingagents.reporting import write_report_tree
 
+from .checkpoint_identity import checkpoint_run_signature
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
 from .conditional_logic import ConditionalLogic
 from .propagation import Propagator
@@ -87,6 +88,7 @@ class TradingAgentsGraph:
         debug=False,
         config: dict[str, Any] = None,
         callbacks: list | None = None,
+        codex_adapter: Any | None = None,
     ):
         """Initialize the trading agents graph and components.
 
@@ -99,6 +101,13 @@ class TradingAgentsGraph:
         self.debug = debug
         self.config = config or DEFAULT_CONFIG
         self.callbacks = callbacks or []
+        backend = self.config.get("llm_backend", "api")
+        if backend not in {"api", "codex"}:
+            raise ValueError("llm_backend must be api or codex")
+        if backend == "api" and codex_adapter is not None:
+            raise ValueError("codex_adapter requires the Codex backend")
+        if backend == "codex" and codex_adapter is None:
+            raise ValueError("Codex backend requires an open CodexAdapter context")
 
         # Update the interface's config
         set_config(self.config)
@@ -107,40 +116,43 @@ class TradingAgentsGraph:
         os.makedirs(self.config["data_cache_dir"], exist_ok=True)
         os.makedirs(self.config["results_dir"], exist_ok=True)
 
-        # Initialize LLMs with provider-specific thinking configuration
-        llm_kwargs = self._get_provider_kwargs()
-
-        # Add callbacks to kwargs if provided (passed to LLM constructor)
-        if self.callbacks:
-            llm_kwargs["callbacks"] = self.callbacks
-
-        # Clients are stateless transports; conversation state stays in each node.
-        # Reuse equal model/effort clients without sharing agent conversations.
-        self.agent_llms = {}
-        if self.config.get("agent_models"):
-            if self.config["llm_provider"].lower() != "openai":
-                raise ValueError("Per-agent model profiles require the OpenAI provider")
-            client_cache = {}
-            for role, setting in self.config["agent_models"].items():
-                key = (setting["model"], setting["reasoning_effort"])
-                if key not in client_cache:
-                    kwargs = dict(llm_kwargs, reasoning_effort=setting["reasoning_effort"])
-                    client_cache[key] = create_llm_client(
-                        provider=self.config["llm_provider"], model=setting["model"],
-                        base_url=self.config.get("backend_url"), **kwargs,
-                    ).get_llm()
-                self.agent_llms[role] = client_cache[key]
-            self.deep_thinking_llm = self.agent_llms["portfolio_manager"]
-            self.quick_thinking_llm = self.agent_llms["signal"]
+        if backend == "codex":
+            self._initialize_codex_models(codex_adapter, selected_analysts)
         else:
-            self.deep_thinking_llm = create_llm_client(
-                provider=self.config["llm_provider"], model=self.config["deep_think_llm"],
-                base_url=self.config.get("backend_url"), **llm_kwargs,
-            ).get_llm()
-            self.quick_thinking_llm = create_llm_client(
-                provider=self.config["llm_provider"], model=self.config["quick_think_llm"],
-                base_url=self.config.get("backend_url"), **llm_kwargs,
-            ).get_llm()
+            # Initialize LLMs with provider-specific thinking configuration
+            llm_kwargs = self._get_provider_kwargs()
+
+            # Add callbacks to kwargs if provided (passed to LLM constructor)
+            if self.callbacks:
+                llm_kwargs["callbacks"] = self.callbacks
+
+            # Clients are stateless transports; conversation state stays in each node.
+            # Reuse equal model/effort clients without sharing agent conversations.
+            self.agent_llms = {}
+            if self.config.get("agent_models"):
+                if self.config["llm_provider"].lower() != "openai":
+                    raise ValueError("Per-agent model profiles require the OpenAI provider")
+                client_cache = {}
+                for role, setting in self.config["agent_models"].items():
+                    key = (setting["model"], setting["reasoning_effort"])
+                    if key not in client_cache:
+                        kwargs = dict(llm_kwargs, reasoning_effort=setting["reasoning_effort"])
+                        client_cache[key] = create_llm_client(
+                            provider=self.config["llm_provider"], model=setting["model"],
+                            base_url=self.config.get("backend_url"), **kwargs,
+                        ).get_llm()
+                    self.agent_llms[role] = client_cache[key]
+                self.deep_thinking_llm = self.agent_llms["portfolio_manager"]
+                self.quick_thinking_llm = self.agent_llms["signal"]
+            else:
+                self.deep_thinking_llm = create_llm_client(
+                    provider=self.config["llm_provider"], model=self.config["deep_think_llm"],
+                    base_url=self.config.get("backend_url"), **llm_kwargs,
+                ).get_llm()
+                self.quick_thinking_llm = create_llm_client(
+                    provider=self.config["llm_provider"], model=self.config["quick_think_llm"],
+                    base_url=self.config.get("backend_url"), **llm_kwargs,
+                ).get_llm()
 
         self.memory_log = TradingMemoryLog(self.config)
 
@@ -179,6 +191,38 @@ class TradingAgentsGraph:
         self.graph = self.workflow.compile()
         self._checkpointer_ctx = None
         self._resuming = False
+
+    def _initialize_codex_models(self, adapter, selected_analysts):
+        from tradingagents.codex.chat_model import CodexChatModel
+        from tradingagents.model_profiles import MODEL_PROFILES
+
+        settings = self.config.get("agent_models")
+        required = set(MODEL_PROFILES["balanced"]["agents"])
+        if not isinstance(settings, dict) or not required.issubset(settings):
+            raise ValueError("Codex requires a complete per-agent model profile")
+        active = set(selected_analysts) | (required - {
+            "market", "social", "news", "fundamentals", "signal", "reflection",
+        })
+        for role in sorted(active):
+            setting = settings[role]
+            adapter.validate_selection(setting["model"], setting["reasoning_effort"])
+        self.agent_llms = {
+            role: CodexChatModel(
+                adapter=adapter, model=setting["model"],
+                effort=setting["reasoning_effort"], role=role,
+                callbacks=self.callbacks,
+            )
+            for role, setting in settings.items()
+        }
+        self.deep_thinking_llm = self.agent_llms["portfolio_manager"]
+        self.quick_thinking_llm = self.agent_llms["signal"]
+
+    def _checkpoint_data_dir(self):
+        # Separate storage also keeps Codex checkpoint deletion away from API runs.
+        directory = self.config["data_cache_dir"]
+        if self.config.get("llm_backend", "api") == "codex":
+            return os.path.join(directory, "codex")
+        return directory
 
     def _get_provider_kwargs(self) -> dict[str, Any]:
         """Get provider-specific kwargs for LLM client creation."""
@@ -402,28 +446,15 @@ class TradingAgentsGraph:
         td = str(trade_date)
         return td if td < datetime.now().strftime("%Y-%m-%d") else None
 
-    def _run_signature(self, asset_type: str) -> str:
-        """Graph-shape inputs that must invalidate a checkpoint if changed.
-
-        Keyed into the checkpoint thread ID so a resume under a different analyst
-        selection, debate/risk depth, or asset mode starts fresh instead of
-        silently continuing the previous graph (#1089).
-        """
-        return "|".join([
-            "analysts=" + ",".join(self.selected_analysts),
-            f"debate={self.config['max_debate_rounds']}",
-            f"risk={self.config['max_risk_discuss_rounds']}",
-            f"asset={asset_type}",
-            f"prompts={PROMPT_POLICY_VERSION}",
-            "models=" + json.dumps({
-                "provider": self.config.get("llm_provider"),
-                "backend": self.config.get("backend_url"),
-                "agents": self.config.get("agent_models"),
-                "quick": self.config.get("quick_think_llm"),
-                "deep": self.config.get("deep_think_llm"),
-                "effort": self.config.get("openai_reasoning_effort"),
-            }, sort_keys=True),
-        ])
+    def _run_signature(self, asset_type: str, trade_date=None) -> str:
+        """Identity of every non-secret setting that can change resumed work."""
+        return checkpoint_run_signature(
+            self.config,
+            self.selected_analysts,
+            asset_type,
+            PROMPT_POLICY_VERSION,
+            analysis_date=trade_date,
+        )
 
     @run_data_scope
     def propagate(self, company_name, trade_date, asset_type: str = "stock"):
@@ -438,7 +469,9 @@ class TradingAgentsGraph:
 
         Returns ``(final_state, signal)`` where ``signal`` is one of the 5-tier
         ratings (Buy / Overweight / Hold / Underweight / Sell) or ``"REVIEW"``
-        when the decision had no parseable rating (#1170); guard with
+        when required evidence or workflow checks fail, or the decision has no
+        unambiguous explicit rating. Inspect ``final_state['research_quality']``;
+        guard with
         ``tradingagents.agents.utils.rating.is_review`` before mapping it to the
         PortfolioRating enum.
         """
@@ -467,13 +500,13 @@ class TradingAgentsGraph:
         self._resuming = False
         if not self.config.get("checkpoint_enabled"):
             return None
-        signature = self._run_signature(asset_type)
-        self._checkpointer_ctx = get_checkpointer(self.config["data_cache_dir"], company_name)
+        signature = self._run_signature(asset_type, trade_date)
+        self._checkpointer_ctx = get_checkpointer(self._checkpoint_data_dir(), company_name)
         saver = self._checkpointer_ctx.__enter__()
         self.graph = self.workflow.compile(checkpointer=saver)
 
         step = checkpoint_step(
-            self.config["data_cache_dir"], company_name, str(trade_date), signature
+            self._checkpoint_data_dir(), company_name, str(trade_date), signature
         )
         self._resuming = step is not None
         if step is not None:
@@ -512,8 +545,8 @@ class TradingAgentsGraph:
         """Drop a completed run's checkpoint so a later run starts fresh (#1249)."""
         if self.config.get("checkpoint_enabled"):
             clear_checkpoint(
-                self.config["data_cache_dir"], company_name, str(trade_date),
-                self._run_signature(asset_type),
+                self._checkpoint_data_dir(), company_name, str(trade_date),
+                self._run_signature(asset_type, trade_date),
             )
 
     def save_reports(self, final_state, ticker, save_path=None) -> Path:
@@ -580,29 +613,36 @@ class TradingAgentsGraph:
         else:
             final_state = self.graph.invoke(graph_input, **args)
 
-        # Store current state for reflection.
+        from tradingagents.research_quality import finalize_research_quality
+
+        quality = finalize_research_quality(
+            final_state, self.selected_analysts, self.config.get("llm_backend", "api"),
+        )
+        # Store current state for diagnostics; degraded research is not a signal.
         self.curr_state = final_state
 
         # Log state to disk.
         self._log_state(trade_date, final_state)
 
         # Store decision for deferred reflection on the next same-ticker run.
-        self.memory_log.store_decision(
-            ticker=company_name,
-            trade_date=trade_date,
-            final_trade_decision=final_state["final_trade_decision"],
-        )
+        if quality["accepted"]:
+            self.memory_log.store_decision(
+                ticker=company_name,
+                trade_date=trade_date,
+                final_trade_decision=final_state["final_trade_decision"],
+            )
 
         # Clear checkpoint on successful completion to avoid stale state.
         self.clear_checkpoint_on_success(company_name, trade_date, asset_type)
 
-        return final_state, self.process_signal(final_state["final_trade_decision"])
+        return final_state, quality["signal"]
 
     def _log_state(self, trade_date, final_state):
         """Log the final state to a JSON file."""
         self.log_states_dict[str(trade_date)] = {
             "company_of_interest": final_state["company_of_interest"],
             "trade_date": final_state["trade_date"],
+            "research_quality": final_state.get("research_quality"),
             "evidence_packets": final_state.get("evidence_packets", {}),
             "prepared_data": final_state.get("prepared_data", {}),
             "market_report": final_state["market_report"],

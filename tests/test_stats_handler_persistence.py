@@ -110,3 +110,34 @@ def test_persistence_stats_marks_mixed_provider_usage_incomplete():
         "calls_unfinished": 0,
         "usage_complete": False,
     }
+
+
+@pytest.mark.unit
+def test_reasoning_is_an_output_subset_and_not_added_to_totals():
+    handler = StatsCallbackHandler()
+    for number, model in enumerate(["gpt-one", "gpt-two", "gpt-one"]):
+        handler.on_chat_model_start({"model": model}, [[]], run_id=str(number))
+        message = AIMessage(content="ok", usage_metadata={
+            "input_tokens": 10, "output_tokens": 5, "total_tokens": 15,
+            "input_token_details": {"cache_read": 4},
+            "output_token_details": {"reasoning": 3},
+        })
+        handler.on_llm_end(SimpleNamespace(generations=[[SimpleNamespace(message=message)]]), run_id=str(number))
+    stats = handler.get_persistence_stats()
+    assert stats["total_tokens"] == 45
+    assert stats["output_tokens"] == 15
+    assert stats["reasoning_output_tokens"] == 9
+    assert stats["per_model"]["gpt-one"]["total_tokens"] == 30
+    assert stats["per_model"]["gpt-two"]["reasoning_output_tokens"] == 3
+
+
+@pytest.mark.unit
+def test_empty_usage_object_does_not_mark_tokens_complete():
+    handler = StatsCallbackHandler()
+    handler.on_chat_model_start({"model": "gpt-test"}, [[]], run_id="empty-usage")
+    message = AIMessage.model_construct(content="ok", usage_metadata={})
+    handler.on_llm_end(SimpleNamespace(generations=[[SimpleNamespace(message=message)]]), run_id="empty-usage")
+    stats = handler.get_persistence_stats()
+    assert stats["usage_completeness"]["calls_with_usage"] == 0
+    assert stats["total_tokens"] is None
+    assert stats["reasoning_output_tokens"] is None

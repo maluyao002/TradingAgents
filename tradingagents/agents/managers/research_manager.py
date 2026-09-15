@@ -36,6 +36,11 @@ def create_research_manager(llm):
 
 {output_policy("research_manager")}
 
+Research-plan handoff citation contract:
+- The Trader relies on this plan as a citation-preserving handoff. Retain every exact supplied inline evidence ID that supports a material factual claim, comparison, condition, or trigger; never replace IDs with a vague reference to reports or sources.
+- Cite each material factual claim and trigger inline with its exact supplied ID(s). For a comparison, cite every operand and both period values, not just the calculated change or current value. This includes cash-versus-debt claims, margin changes, inventory or receivables changes, and comparisons of stock-price levels.
+- Keep the cited IDs beside the claim in rationale or strategic actions, including its caveat, as-of date, and invalidation condition. Do not invent, rename, combine, or drop IDs during this summary.
+
 ---
 
 **Rating Scale** (use exactly one):

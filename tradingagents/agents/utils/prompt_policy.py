@@ -2,7 +2,9 @@
 
 import json
 
-PROMPT_POLICY_VERSION = "evidence-v4"
+from tradingagents.agents.utils.analysis_time import analysis_calendar
+
+PROMPT_POLICY_VERSION = "evidence-v9"
 
 
 _OUTPUT_TARGETS = {
@@ -107,6 +109,7 @@ Evidence contract:
 - Use currency symbols only when source metadata explicitly establishes the currency. Unknown quote or reporting currency remains unknown; a familiar ticker alone does not establish it.
 - Label an illustrative sensitivity as an assumption, not a forecast, target, or actionable threshold. Explain the basis of any selected multiple or threshold; otherwise leave it illustrative.
 - Evidence must have been available as of the analysis date. Exclude known future observations and live-only data from historical conclusions; flag unknown publication dates. A prompt cannot guarantee point-in-time completeness.
+- Compare offset-aware timestamps using the supplied analysis calendar, not their UTC date labels alone. A next-day UTC retrieval can be the same local analysis day. Retrieval time neither proves publication/availability nor makes evidence future; preserve unknown publication/vintage caveats separately. Do not reclassify a current-day run as historical because of UTC rollover. With a date-only selection, do not invent a market-close decision cutoff or treat local-day membership as proof of availability or finalized prices.
 - Give concise evidence-backed conclusions, uncertainty, and what would change your assessment. Do not output private chain-of-thought or repeat the full input.
 """
 
@@ -130,6 +133,7 @@ def debate_policy(count: int, participants: int) -> str:
 def decision_context(state: dict) -> str:
     context = {
         "analysis_date": state.get("trade_date", "unknown"),
+        "analysis_calendar": analysis_calendar(state.get("trade_date")),
         "portfolio_context": state.get("portfolio_context") or "not supplied",
         "investment_horizon": state.get("investment_horizon") or "not supplied",
     }
