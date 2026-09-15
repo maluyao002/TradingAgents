@@ -1,8 +1,12 @@
 # Codex subscription integration
 
-This development uses the official local Codex app-server protocol. The existing
-API implementation remains the baseline. The integration is not enabled by the
-stage 1 compatibility probe.
+The research workflow supports the official local Codex app-server and the
+existing API providers as explicit startup choices. Stages 1–4 are merged into
+`feat/codex-integration`. Stage 5 has AMD full-pipeline comparisons and offline
+regressions; the INTC non-AMD operational/full-pipeline acceptance case passed
+for supervised research. Cash-flow completeness remains an open quality item.
+This is a supervised research
+beta, not an unattended trading or broker execution service.
 
 ## Stage tracker
 
@@ -38,7 +42,9 @@ passed. Review corrections cover detached descendant cleanup, explicit POSIX
 support, strict authentication/isolation response validation, path-free filesystem
 failures, and detection of all workspace entry types. The Unix socket regression
 requires local IPC permission when tests run in a restricted sandbox. Live gates
-below remain pending. Stages 2–3 are merged; stage 4 is in development; stage 5 has not started.
+below describe the historical stage-1 checklist. Subsequent stages and user-run
+AMD evaluations exercised inference and the complete research pipeline; the current
+release checklist is at the end of this document.
 
 The initial transport supports macOS/Linux only. It explicitly rejects Windows
 before launching a subprocess; the existing API backend remains cross-platform.
@@ -74,7 +80,8 @@ Merged into `feat/codex-integration` in [PR #4](https://github.com/maluyao002/Tr
 Validation: 986 full offline tests and 65 subtests passed; Ruff passed. Independent
 review and focused re-review are complete with no remaining findings. Review fixes
 require explicit effective configuration fields and retain known turn IDs for
-interruption after malformed responses. No live research run has been performed.
+interruption after malformed responses. No live research run was performed during stage 2; later stages include user-run
+AMD research evaluations.
 The GitHub hooks finding is also addressed: startup disables lifecycle and plugin
 hooks, and inference requires verified disabled hook features and explicitly empty
 effective hook configuration, including configuration inherited from system layers.
@@ -92,7 +99,8 @@ model and effort are advertised. Unsupported profiles are disabled and show the
 affected roles. Custom checks one advertised model/effort pair. This is a capability
 check, not proof of model entitlement, remaining quota, or research quality. The
 preview does not run inference, fetch market data, save model settings, or fall back
-to an API provider. API checkpoint flags are rejected on this path before any deletion.
+to an API provider. The early preview rejected checkpoint flags; the current full workflow supports
+backend-isolated checkpoint recovery as described below.
 
 ### One-time sign-in (user-run)
 
@@ -198,7 +206,7 @@ remains stage 4, and repeated quality/latency/usage evaluation remains stage 5.
 Validation uses focused offline checks: 19 new core pilot cases, nine pilot CLI
 cases, and the affected existing CLI, prepared-data, reconciliation, citation, and
 prompt tests. No full-suite rerun or real research inference was needed for this
-stage. Live matched comparison remains pending the user's run. A fresh independent
+stage. Subsequent user-run AMD comparisons are reflected in the release checklist. A fresh independent
 read-only review found one portability issue: locale-dependent artifact encoding.
 All artifact reads/writes now use explicit UTF-8, verified by a Unicode round-trip
 test with UTF-8 mode disabled and the C locale. No other actionable findings were reported.
@@ -259,13 +267,17 @@ without runtime paths, credentials, or Codex thread IDs.
 ### Recovery
 
 `--checkpoint` saves TradingAgents graph state after completed nodes. Run again with
-the same ticker/date/profile/rounds/analysts to resume. Recovery creates fresh Codex
+the same ticker/date and effective research settings to resume. Recovery creates fresh Codex
 threads from the saved application state; it does not depend on Codex session history.
 An interrupted model call may be repeated when its graph node is retried.
 
 Codex checkpoints live in the `codex/checkpoints` subdirectory of the configured data
-cache; API checkpoints keep their existing location and fingerprints. Codex fingerprints
-include a bridge version. On the Codex path, `--clear-checkpoints` clears only Codex
+cache; API checkpoints keep their existing location. Both now use a versioned
+digest covering model/provider/effort/generation settings, language, vendor/tool
+routing, news windows, graph settings, prompt version, and date-specific calendar
+boundaries. Codex fingerprints also include the bridge version. Changing any of
+these starts a fresh run. Older fingerprints intentionally do not resume.
+Credentials, runtime paths, callbacks and display-only profile labels are excluded. On the Codex path, `--clear-checkpoints` clears only Codex
 checkpoints. The dedicated app-server context closes on success, error, or cancellation.
 
 For programmatic use, supply an explicit profile and own the adapter lifetime:
@@ -292,8 +304,11 @@ error on failure, without the API helper's free-text recovery. A regression veri
 that rejected private values do not enter warning logs. The reviewer also found an
 unused import, which was removed. Ruff and whitespace checks passed.
 
-Stage 5 remains the repeated matched quality/latency/usage evaluation. Offline
-integration tests establish routing, validation and recovery, not model quality.
+Stage 5 has user-run AMD and INTC comparisons with per-role latency and usage
+accounting. The user accepted the INTC non-AMD operational/full-pipeline case
+for supervised research. This does not establish full research-quality parity.
+Offline integration
+tests establish routing, validation and recovery, not model quality or profitability.
 
 ## Sources
 
@@ -355,3 +370,79 @@ comparisons, including both periods and cash versus debt. If an immediate plan
 omits a citation, the trader identifies that handoff gap rather than asserting
 that evidence is absent from the complete research bundle. These are generation
 contracts, not a guarantee that every future model response will comply.
+
+
+## Release hardening and acceptance
+
+### Reproducible installation and CI
+
+The checked-in `uv.lock` pins the application and development dependency resolution.
+Use `uv sync --locked --extra dev` for development or `uv sync --locked --no-dev`
+for a runtime checkout. CI uses uv 0.9.28 and tests Python 3.10–3.13; the clean-install
+job imports the non-editable package away from its checkout. Dependency updates
+should deliberately update the lock and pass these checks. A lockfile does not pin
+the operating system, Python patch release, or external Codex CLI.
+
+The Docker build accepts only packaging files and application sources, excludes
+local secrets and generated artifacts even inside source folders, and copies only
+the installed environment to the runtime image. CI inserts private-file canaries
+and checks they are absent in that image. The supplied container supports the
+API backend; it does not bundle the Codex CLI. Use the local macOS/Linux installation
+for Codex. Inject API credentials at runtime with the existing Compose env file.
+
+### Accepted versus degraded research
+
+Both full-pipeline entry points run a deterministic gate after analysis. It checks
+selected analyst reports and source-backed handoffs, required news/social coverage,
+usable market/fundamental facts, completed research and risk debates, manager/trader
+outputs, and an explicit unambiguous final rating. Invalid or unavailable required
+evidence makes the result **degraded**. Diagnostic reports remain available.
+This gate adds no model or provider requests and does not change profiles or rounds.
+
+`propagate()` returns `REVIEW` for degraded runs and omits their decision from
+reflection memory. The CLI displays the status, and `complete_report.md` plus
+`run_metadata.json.research_quality` expose the same acceptance result. Consumers
+must require `accepted == true` and use the gated `signal`; do not extract an order
+from raw diagnostic decision prose. Calling the low-level LangGraph directly or
+`process_signal()` only bypasses this finalization and is not an acceptance check.
+
+An accepted result means structural research checks passed. It does not establish
+factual accuracy, point-in-time data completeness, suitability, profitability, or
+permission to trade. Known data caveats still need human review. The project has
+no scheduler, broker order submission, paper-trading ledger, or live approval flow.
+
+### Non-AMD operational acceptance: passed
+
+The user accepted the INTC operational/full-pipeline case for supervised research
+after reviewing the Codex and API runs for the September 14, 2026 analysis date.
+Balanced models, reasoning efforts, and two research/two risk rounds were unchanged.
+
+| Observed result | Codex | API |
+| --- | --- | --- |
+| Completed model calls | 17 of 17 | 17 of 17 |
+| Structural gate / final signal | Accepted / Hold | Accepted / Hold |
+| Elapsed time | 629.97 seconds | 414.69 seconds |
+| Input / output tokens | 505,980 / 23,106 | 430,364 / 26,780 |
+
+Saved evidence and report outputs revalidated against the current structural gate.
+All bracketed canonical evidence IDs resolved to their respective saved bundles.
+The API Trader proposed a conditional reduction labeled Sell; risk review challenged
+the proposal and the Portfolio Manager returned Hold. Both final decisions retained
+the FCF, provisional-price, and missing-portfolio-context caveats.
+
+This was not an identical-input replay: social samples differed, and Codex received
+the additional global-news baseline. INTC is a different ticker from AMD but remains
+in the semiconductor sector; cross-sector generalization is not established.
+
+**Open quality item:** the API report surfaced the provider's 12.426 billion
+operating-gains/losses cash-flow adjustment, while the Codex report omitted it.
+Both preserved the headline FCF reconciliations and continuing-operations caveat,
+but neither established a complete income-to-OCF bridge from the flat provider
+rows, whose subtotal relationships are uncertain. Operational acceptance therefore
+does not imply full research-quality parity or validated cash-flow normalization.
+Keep Balanced unchanged; this finding remains a focused quality follow-up.
+
+Acceptance covers supervised research only. It does not approve unattended trading,
+paper/live execution, profitability claims, or general reliability across all data
+regimes. Raw reports, provider payloads, and local runtime paths remain outside the
+committed documentation.

@@ -203,7 +203,9 @@ def test_symlink_loop_resolution_is_path_free(tmp_path, capsys, use_cli):
         assert "private-symlink-loop" not in output
         assert "Traceback" not in output
     else:
-        with pytest.raises(ProbeError, match="Unable to resolve") as caught:
+        # Python 3.13's non-strict resolve leaves loops unresolved; directory
+        # preparation then rejects them. Both paths must redact the same details.
+        with pytest.raises(ProbeError, match="Unable to (resolve|prepare or inspect)") as caught:
             run_probe(home=loop, cwd=tmp_path / "workspace")
         assert "private-symlink-loop" not in str(caught.value)
         assert caught.value.__suppress_context__ is True

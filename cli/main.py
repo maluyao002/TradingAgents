@@ -1330,6 +1330,11 @@ def run_analysis(checkpoint: bool | None = None, *, selections=None, codex_adapt
             "codex_startup_seconds": getattr(codex_adapter, "startup_seconds", None),
             "usage": stats_handler.get_persistence_stats(),
         }
+        from tradingagents.research_quality import finalize_research_quality
+
+        quality = finalize_research_quality(
+            final_state, selected_analyst_keys, "codex" if codex_adapter is not None else "api",
+        )
 
         # Update all agent statuses to completed
         for agent in message_buffer.agent_status:
@@ -1348,6 +1353,12 @@ def run_analysis(checkpoint: bool | None = None, *, selections=None, codex_adapt
 
     # Post-analysis prompts (outside Live context for clean interaction)
     console.print("\n[bold cyan]Analysis Complete![/bold cyan]\n")
+    if quality["accepted"]:
+        console.print("[green]Research checks passed. Human review is still required before trading.[/green]")
+    else:
+        console.print("[yellow]DEGRADED research — review required; no accepted trading signal.[/yellow]")
+        for reason in quality["reasons"]:
+            console.print(f"  {reason.get('role', 'workflow')}: {reason['code']}", markup=False)
     console.print(f"[dim]{analyst_wall_time_tracker.format_summary()}[/dim]")
 
     # Prompt to save report

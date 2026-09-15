@@ -15,6 +15,7 @@ from typing import Any
 
 from tradingagents.agents.utils.analysis_time import analysis_calendar
 from tradingagents.model_profiles import MODEL_PROFILES
+from tradingagents.research_quality import assess_research_quality
 
 _TELEMETRY_ROLES = frozenset(MODEL_PROFILES["balanced"]["agents"]) | {"unknown"}
 _TOKEN_FIELDS = ("input_tokens", "output_tokens", "cached_input_tokens", "reasoning_output_tokens", "total_tokens")
@@ -171,6 +172,9 @@ def build_run_metadata(
         "backend": "codex" if config.get("llm_backend") == "codex" else "api",
         "ticker": ticker,
         "analysis_date": final_state.get("trade_date"),
+        "research_quality": assess_research_quality(
+            final_state, config.get("selected_analysts"), config.get("llm_backend"),
+        ),
         "analysis_calendar": analysis_calendar(final_state.get("trade_date")),
         "model_profile": next(
             (
@@ -333,6 +337,10 @@ def write_report_tree(
     sections.sort(key=lambda section: not section.startswith("## Portfolio Manager Decision"))
 
     # Write consolidated report
-    header = f"# Trading Analysis Report: {ticker}\n\nGenerated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    quality = assess_research_quality(
+        final_state, (config or {}).get("selected_analysts"), (config or {}).get("llm_backend"),
+    )
+    status = "ACCEPTED — structural research checks passed" if quality["accepted"] else "DEGRADED — review required; no accepted trading signal"
+    header = f"# Trading Analysis Report: {ticker}\n\nGenerated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\nResearch status: **{status}**. Not authorization to trade.\n\n"
     (save_path / "complete_report.md").write_text(header + "\n\n".join(sections), encoding="utf-8")
     return save_path / "complete_report.md"
