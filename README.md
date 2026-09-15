@@ -110,14 +110,20 @@ conda create -n tradingagents python=3.12
 conda activate tradingagents
 ```
 
-Install the package and its dependencies:
+Install the checkout with its pinned dependencies (using uv):
 ```bash
-pip install .
+uv sync --locked --no-dev
+source .venv/bin/activate
 ```
+
+For development, use `uv sync --locked --extra dev`. Installing with `pip install .`
+is also supported, but resolves dependency ranges independently of `uv.lock`.
+See [Codex integration and release status](docs/CODEX-INTEGRATION.md) for backend
+setup, accepted/degraded research outputs, and remaining manual acceptance.
 
 ### Docker
 
-Alternatively, run with Docker:
+Alternatively, run the API backend with Docker (the image does not bundle Codex):
 ```bash
 cp .env.example .env  # add your API keys
 docker compose run --rm tradingagents

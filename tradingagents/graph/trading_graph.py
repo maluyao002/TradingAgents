@@ -37,6 +37,7 @@ from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.llm_clients import create_llm_client
 from tradingagents.reporting import write_report_tree
 
+from .checkpoint_identity import checkpoint_run_signature
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
 from .conditional_logic import ConditionalLogic
 from .propagation import Propagator
@@ -445,29 +446,15 @@ class TradingAgentsGraph:
         td = str(trade_date)
         return td if td < datetime.now().strftime("%Y-%m-%d") else None
 
-    def _run_signature(self, asset_type: str) -> str:
-        """Graph-shape inputs that must invalidate a checkpoint if changed.
-
-        Keyed into the checkpoint thread ID so a resume under a different analyst
-        selection, debate/risk depth, or asset mode starts fresh instead of
-        silently continuing the previous graph (#1089).
-        """
-        prefix = "codex-bridge-v1|" if self.config.get("llm_backend", "api") == "codex" else ""
-        return prefix + "|".join([
-            "analysts=" + ",".join(self.selected_analysts),
-            f"debate={self.config['max_debate_rounds']}",
-            f"risk={self.config['max_risk_discuss_rounds']}",
-            f"asset={asset_type}",
-            f"prompts={PROMPT_POLICY_VERSION}",
-            "models=" + json.dumps({
-                "provider": self.config.get("llm_provider"),
-                "backend": self.config.get("backend_url"),
-                "agents": self.config.get("agent_models"),
-                "quick": self.config.get("quick_think_llm"),
-                "deep": self.config.get("deep_think_llm"),
-                "effort": self.config.get("openai_reasoning_effort"),
-            }, sort_keys=True),
-        ])
+    def _run_signature(self, asset_type: str, trade_date=None) -> str:
+        """Identity of every non-secret setting that can change resumed work."""
+        return checkpoint_run_signature(
+            self.config,
+            self.selected_analysts,
+            asset_type,
+            PROMPT_POLICY_VERSION,
+            analysis_date=trade_date,
+        )
 
     @run_data_scope
     def propagate(self, company_name, trade_date, asset_type: str = "stock"):
@@ -482,7 +469,9 @@ class TradingAgentsGraph:
 
         Returns ``(final_state, signal)`` where ``signal`` is one of the 5-tier
         ratings (Buy / Overweight / Hold / Underweight / Sell) or ``"REVIEW"``
-        when the decision had no parseable rating (#1170); guard with
+        when required evidence or workflow checks fail, or the decision has no
+        unambiguous explicit rating. Inspect ``final_state['research_quality']``;
+        guard with
         ``tradingagents.agents.utils.rating.is_review`` before mapping it to the
         PortfolioRating enum.
         """
@@ -511,7 +500,7 @@ class TradingAgentsGraph:
         self._resuming = False
         if not self.config.get("checkpoint_enabled"):
             return None
-        signature = self._run_signature(asset_type)
+        signature = self._run_signature(asset_type, trade_date)
         self._checkpointer_ctx = get_checkpointer(self._checkpoint_data_dir(), company_name)
         saver = self._checkpointer_ctx.__enter__()
         self.graph = self.workflow.compile(checkpointer=saver)
@@ -557,7 +546,7 @@ class TradingAgentsGraph:
         if self.config.get("checkpoint_enabled"):
             clear_checkpoint(
                 self._checkpoint_data_dir(), company_name, str(trade_date),
-                self._run_signature(asset_type),
+                self._run_signature(asset_type, trade_date),
             )
 
     def save_reports(self, final_state, ticker, save_path=None) -> Path:
@@ -624,29 +613,36 @@ class TradingAgentsGraph:
         else:
             final_state = self.graph.invoke(graph_input, **args)
 
-        # Store current state for reflection.
+        from tradingagents.research_quality import finalize_research_quality
+
+        quality = finalize_research_quality(
+            final_state, self.selected_analysts, self.config.get("llm_backend", "api"),
+        )
+        # Store current state for diagnostics; degraded research is not a signal.
         self.curr_state = final_state
 
         # Log state to disk.
         self._log_state(trade_date, final_state)
 
         # Store decision for deferred reflection on the next same-ticker run.
-        self.memory_log.store_decision(
-            ticker=company_name,
-            trade_date=trade_date,
-            final_trade_decision=final_state["final_trade_decision"],
-        )
+        if quality["accepted"]:
+            self.memory_log.store_decision(
+                ticker=company_name,
+                trade_date=trade_date,
+                final_trade_decision=final_state["final_trade_decision"],
+            )
 
         # Clear checkpoint on successful completion to avoid stale state.
         self.clear_checkpoint_on_success(company_name, trade_date, asset_type)
 
-        return final_state, self.process_signal(final_state["final_trade_decision"])
+        return final_state, quality["signal"]
 
     def _log_state(self, trade_date, final_state):
         """Log the final state to a JSON file."""
         self.log_states_dict[str(trade_date)] = {
             "company_of_interest": final_state["company_of_interest"],
             "trade_date": final_state["trade_date"],
+            "research_quality": final_state.get("research_quality"),
             "evidence_packets": final_state.get("evidence_packets", {}),
             "prepared_data": final_state.get("prepared_data", {}),
             "market_report": final_state["market_report"],

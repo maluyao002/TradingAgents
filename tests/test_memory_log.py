@@ -864,8 +864,8 @@ class TestLegacyRemoval:
         with pytest.raises(TypeError):
             create_portfolio_manager(mock_llm, memory=MagicMock())
 
-    def test_full_pipeline_no_regression(self, tmp_path):
-        """propagate() completes and stores the decision after the redesign."""
+    def test_incomplete_pipeline_does_not_store_a_decision(self, tmp_path):
+        """A parsed rating alone must not add degraded research to reflection."""
         import functools
 
         fake_state = {
@@ -894,6 +894,7 @@ class TestLegacyRemoval:
         mock_graph.log_states_dict = {}
         mock_graph.debug = False
         mock_graph.config = {"results_dir": str(tmp_path)}
+        mock_graph.selected_analysts = ["market"]
         mock_graph.graph.invoke.return_value = fake_state
         mock_graph.propagator.create_initial_state.return_value = fake_state
         mock_graph.propagator.get_graph_args.return_value = {}
@@ -903,8 +904,8 @@ class TestLegacyRemoval:
         mock_graph._run_graph = functools.partial(
             TradingAgentsGraph._run_graph, mock_graph
         )
-        TradingAgentsGraph.propagate(mock_graph, "NVDA", "2026-01-10")
+        state, signal = TradingAgentsGraph.propagate(mock_graph, "NVDA", "2026-01-10")
         entries = mock_graph.memory_log.load_entries()
-        assert len(entries) == 1
-        assert entries[0]["ticker"] == "NVDA"
-        assert entries[0]["pending"] is True
+        assert entries == []
+        assert signal == "REVIEW"
+        assert state["research_quality"]["accepted"] is False
