@@ -32,6 +32,14 @@ def _normalized_text(value) -> str | None:
     return unicodedata.normalize("NFKC", value).replace("\r\n", "\n").replace("\r", "\n").strip()
 
 
+def _role_scope(value):
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return None
+    if not all(isinstance(role, str) and role in {*_REPORTS, "social"} for role in value):
+        return None
+    return {"sentiment" if role == "social" else role for role in value}
+
+
 def assess_research_quality(state: Mapping, selected_analysts=None, backend=None) -> dict:
     """Revalidate source-backed packets; never trust a stored accepted flag.
 
@@ -39,12 +47,21 @@ def assess_research_quality(state: Mapping, selected_analysts=None, backend=None
     present. It does not certify factual truth, data freshness or profitability.
     Missing selection defaults conservatively to the full four-analyst workflow.
     """
-    selected = (
-        selected_analysts if selected_analysts is not None else state.get("_selected_analysts")
-    )
+    reasons = []
+    stored_selection = state.get("_selected_analysts")
+    if stored_selection is not None and selected_analysts is not None and (
+        _role_scope(stored_selection) != _role_scope(selected_analysts)
+    ):
+        reasons.append({"code": "analyst_scope_mismatch"})
+    selected = stored_selection if stored_selection is not None else selected_analysts
     if selected is None:
         selected = tuple(_REPORTS)
-    reasons = []
+    stored_backend = state.get("_research_backend")
+    if stored_backend is not None and backend is not None and stored_backend != backend:
+        reasons.append({"code": "backend_scope_mismatch"})
+    effective_backend = stored_backend if stored_backend is not None else backend
+    if effective_backend not in (None, "api", "codex"):
+        reasons.append({"code": "invalid_backend"})
     roles = []
     if not isinstance(selected, Sequence) or isinstance(selected, (str, bytes)):
         selected = []
@@ -91,7 +108,7 @@ def assess_research_quality(state: Mapping, selected_analysts=None, backend=None
                 "sentiment-reddit",
             },
         }.get(role, set())
-        if role == "news" and (backend or state.get("_research_backend")) == "codex":
+        if role == "news" and effective_backend == "codex":
             required.add("news-global-baseline")
         source_ids = {source.id for source in packet.sources}
         if not required <= source_ids:

@@ -36,7 +36,7 @@ jobs:
         run: uv run --no-sync pytest -q
       - name: Lint application and test code
         if: matrix.python-version == '3.12'
-        run: uv run --no-sync ruff check cli tradingagents tests scripts
+        run: uv run --no-sync ruff check .
 
   smoke-install:
     name: clean locked install
@@ -62,9 +62,12 @@ jobs:
       - name: Add private-file canaries outside packaging inputs
         run: |
           mkdir -p reports .codex cli/reports
-          touch reports/private-build-canary .env.enterprise .codex/auth.json cli/.env.private cli/reports/private-build-canary
+          touch reports/private-build-canary .env.enterprise .codex/auth.json cli/.env.private cli/reports/private-build-canary tradingagents/custom-credentials.secret
       - name: Build API runtime with locked dependencies
-        run: docker build -t tradingagents-ci .
+        run: |
+          docker build --target builder -t tradingagents-builder-ci .
+          docker run --rm --entrypoint python tradingagents-builder-ci -c "from pathlib import Path; forbidden={'private-build-canary', '.env.enterprise', '.env.private', 'auth.json', 'custom-credentials.secret'}; assert not any(p.name in forbidden for p in Path('/build').rglob('*')); print('private files excluded from builder')"
+          docker build -t tradingagents-ci .
       - name: Check runtime import and private-file exclusion
         run: |
-          docker run --rm --entrypoint python tradingagents-ci -c "import cli.main, tradingagents; from pathlib import Path; roots=[Path('/home/appuser'), Path('/opt/venv')]; forbidden={'private-build-canary', '.env.enterprise', '.env.private', 'auth.json'}; assert not any(p.name in forbidden for root in roots for p in root.rglob('*')); print('private files excluded')"
+          docker run --rm --entrypoint python tradingagents-ci -c "import cli.main, tradingagents; from pathlib import Path; roots=[Path('/home/appuser'), Path('/opt/venv')]; forbidden={'private-build-canary', '.env.enterprise', '.env.private', 'auth.json', 'custom-credentials.secret'}; assert not any(p.name in forbidden for root in roots for p in root.rglob('*')); Path('reports').mkdir(); Path('reports/write-check').write_text('OK'); print('private files excluded; report directory writable')"

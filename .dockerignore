@@ -4,10 +4,9 @@
 !uv.lock
 !README.md
 !LICENSE
-!tradingagents/
-!tradingagents/**
-!cli/
-!cli/**
+!tradingagents/**/*.py
+!cli/**/*.py
+!cli/static/welcome.txt
 # Never include private/generated files, even inside an allowed source tree.
 **/.env
 **/.env.*

@@ -240,6 +240,21 @@ def test_selection_is_required_and_unselected_roles_do_not_block():
     assert assess_research_quality(state)["accepted"] is False
 
 
+def test_export_config_cannot_narrow_finalized_scope_or_switch_backend(tmp_path):
+    state = complete_state(("market", "news"))
+    state["evidence_packets"]["news"]["compacted"] = False
+    state["_research_backend"] = "codex"
+    write_report_tree(state, "AAPL", tmp_path, {
+        "selected_analysts": ["market"], "llm_backend": "api",
+    })
+    quality = json.loads((tmp_path / "run_metadata.json").read_text())["research_quality"]
+    assert quality["accepted"] is False
+    assert quality["selected_analysts"] == ["market", "news"]
+    assert {"code": "analyst_scope_mismatch"} in quality["reasons"]
+    assert {"code": "backend_scope_mismatch"} in quality["reasons"]
+    assert {"role": "news", "code": "invalid_evidence"} in quality["reasons"]
+
+
 @pytest.mark.parametrize("accepted", [True, False])
 def test_programmatic_gate_controls_signal_and_memory_while_preserving_diagnostics(accepted):
     state = complete_state()
