@@ -1066,6 +1066,9 @@ def _material_summary_facts(
     # operating cash flow less its positive capex magnitude) as well as direct
     # provider FCF rows. Comparisons remain within one vendor and unit.
     quarterly_fcf: dict[tuple[str, str | None], dict[str, dict[str, Any]]] = {}
+    quarterly_cashflow_context: dict[
+        tuple[str, str | None], dict[str, dict[str, dict[str, Any]]]
+    ] = {}
     overview_fcf: dict[tuple[str, str | None], list[dict[str, Any]]] = {}
     for fact in [*facts, *calculated]:
         vendor = source_vendors.get(fact["source_id"])
@@ -1076,6 +1079,16 @@ def _material_summary_facts(
             quarterly_fcf.setdefault((vendor, fact.get("unit")), {})[period] = fact
         elif fact["metric"] == "overview_free_cash_flow":
             overview_fcf.setdefault((vendor, fact.get("unit")), []).append(fact)
+        if fact["period"].startswith("quarterly:") and fact["metric"] in {
+            "operating_cash_flow",
+            "continuing_operations_operating_cash_flow",
+            "discontinued_operations_operating_cash_flow",
+            "capital_expenditures",
+        }:
+            period = fact["period"].split(":", 1)[1]
+            quarterly_cashflow_context.setdefault(
+                (vendor, fact.get("unit")), {}
+            ).setdefault(period, {})[fact["metric"]] = fact
 
     compared_overviews: set[str] = set()
     for (vendor, unit), periods in sorted(
@@ -1115,12 +1128,106 @@ def _material_summary_facts(
             f"Sum of four contiguous quarterly free-cash-flow values from {start} "
             f"through {end}: {components}; total {plain_number(total)}."
         )
+        summary_inputs = [fact["id"] for fact in chronological]
+        summary_caveats = [sum_caveat]
+
+        cashflow_periods = quarterly_cashflow_context.get((vendor, unit), {})
+        disclosed_discontinued: list[tuple[str, dict[str, Any]]] = []
+        undisclosed_periods: list[str] = []
+        reconciled_periods: list[str] = []
+        discontinued_inputs: list[str] = []
+        for fcf_fact in chronological:
+            period = fcf_fact["period"].split(":", 1)[1]
+            period_values = cashflow_periods.get(period, {})
+            discontinued = period_values.get(
+                "discontinued_operations_operating_cash_flow"
+            )
+            if discontinued is None:
+                undisclosed_periods.append(period)
+                continue
+
+            disclosed_discontinued.append((period, discontinued))
+            supporting = [discontinued]
+            operating = period_values.get("operating_cash_flow")
+            continuing = period_values.get("continuing_operations_operating_cash_flow")
+            capex = period_values.get("capital_expenditures")
+            if operating and continuing and (
+                parse_decimal(operating["value"])
+                == parse_decimal(continuing["value"])
+                + parse_decimal(discontinued["value"])
+            ):
+                supporting.extend((operating, continuing))
+                capex_value = parse_decimal(capex["value"]) if capex else None
+                expected_fcf = None
+                if capex_value is not None:
+                    if vendor == "yfinance" and capex_value <= 0:
+                        expected_fcf = parse_decimal(operating["value"]) + capex_value
+                    elif vendor == "alpha_vantage" and capex_value >= 0:
+                        expected_fcf = parse_decimal(operating["value"]) - capex_value
+                if capex and expected_fcf == parse_decimal(fcf_fact["value"]):
+                    supporting.append(capex)
+                    reconciled_periods.append(period)
+            for support in supporting:
+                if support["id"] not in discontinued_inputs:
+                    discontinued_inputs.append(support["id"])
+
+        nonzero_discontinued = [
+            (period, fact) for period, fact in disclosed_discontinued
+            if parse_decimal(fact["value"]) != 0
+        ]
+        if nonzero_discontinued or undisclosed_periods:
+            limitation_parts: list[str] = []
+            if nonzero_discontinued:
+                disclosed_components = ", ".join(
+                    f"{period}={fact['value']}"
+                    for period, fact in nonzero_discontinued
+                )
+                disclosed_total = sum(
+                    parse_decimal(fact["value"])
+                    for _, fact in nonzero_discontinued
+                )
+                limitation_parts.append(
+                    "Within this span, the source reports discontinued-operations "
+                    f"operating cash flow of {disclosed_components}; disclosed total "
+                    f"{plain_number(disclosed_total)}."
+                )
+            if reconciled_periods:
+                limitation_parts.append(
+                    "For " + ", ".join(reconciled_periods)
+                    + ", total operating cash flow reconciles to continuing plus "
+                    "discontinued operating cash flow, and reported free cash flow "
+                    "reconciles arithmetically to total operating cash flow and signed "
+                    "capital expenditures."
+                )
+            if undisclosed_periods:
+                limitation_parts.append(
+                    "Discontinued-operations operating cash flow is unavailable for "
+                    + ", ".join(undisclosed_periods)
+                    + "; missing values were not treated as zero."
+                )
+            limitation_parts.append(
+                "Capital expenditures are not allocated between continuing and "
+                "discontinued operations, so no continuing-operations free cash flow "
+                "is inferred"
+                + (
+                    " and the disclosed discontinued-operations amounts are not "
+                    "subtracted from the four-quarter total."
+                    if nonzero_discontinued
+                    else " and no discontinued-operations adjustment is made to the "
+                    "four-quarter total."
+                )
+            )
+            discontinued_caveat = " ".join(limitation_parts)
+            summary_inputs.extend(discontinued_inputs)
+            summary_caveats.append(discontinued_caveat)
+            caveats.append(discontinued_caveat)
+
         summary = _fact(
             metric="latest_four_quarters_free_cash_flow",
             value=plain_number(total), unit=unit,
             period=f"four_quarters:{start}..{end}", basis="not_disclosed",
             source_id=span[0]["source_id"], kind="calculated",
-            inputs=[fact["id"] for fact in chronological], caveats=[sum_caveat],
+            inputs=summary_inputs, caveats=summary_caveats,
         )
         calculated.append(summary)
 

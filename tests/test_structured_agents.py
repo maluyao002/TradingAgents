@@ -543,3 +543,28 @@ class TestSentimentAnalystAgent:
         llm.with_structured_output.return_value = structured
         llm.invoke.return_value = MagicMock(content=plain)
         assert create_sentiment_analyst(llm)(_make_sentiment_state())["sentiment_report"] == plain
+
+
+@pytest.mark.parametrize("structured", [True, False])
+def test_trader_citation_contract_and_existing_citations_survive_both_paths(structured):
+    captured = {}
+    text = "Reported cash flow is 10 [fundamentals-fcf]. Prior-period basis is unknown."
+    if structured:
+        llm = _structured_trader_llm(captured, TraderProposal(action=TraderAction.HOLD, reasoning=text))
+    else:
+        llm = MagicMock()
+        llm.with_structured_output.side_effect = NotImplementedError("offline")
+        def respond(prompt):
+            captured["prompt"] = prompt
+            return MagicMock(content=text)
+        llm.invoke.side_effect = respond
+    state = _make_trader_state()
+    state["investment_plan"] += " " + text
+    result = create_trader(llm)(state)
+    system = captured["prompt"][0]["content"]
+    assert "Cite each material factual claim" in system
+    assert "cite both period values" in system
+    assert "Do not invent an ID" in system
+    assert "immediate handoff gap, not proof that evidence is unavailable globally" in system
+    assert text in captured["prompt"][1]["content"]
+    assert text in result["trader_investment_plan"]

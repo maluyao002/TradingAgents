@@ -168,3 +168,69 @@ def test_reused_directory_is_rejected_before_overwriting_or_leaving_stale_report
     with pytest.raises(FileExistsError, match="Choose a new directory"):
         write_report_tree({"market_report": "NEW RUN"}, "TEST", tmp_path)
     assert {p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == original
+
+
+def test_role_and_call_diagnostics_persist_without_raw_inputs(tmp_path):
+    from tradingagents.reporting import build_run_metadata
+
+    state = _state() | {"_run_metadata": {
+        "elapsed_seconds": 20, "graph_setup_seconds": 2, "codex_startup_seconds": 3,
+        "usage": {
+            "model_active_seconds": 12, "llm_elapsed_seconds": 15,
+            "usage_completeness": {"calls_unfinished": 0},
+            "per_role": {
+                "news": {"input_tokens": 100, "output_tokens": 20, "elapsed_seconds": 12,
+                         "prompt_characters": 500, "repeated_message_characters": 100,
+                         "analyst_evidence_characters": 200, "repeated_analyst_evidence_characters": 200,
+                         "calls_failed": 0, "prompt": "PRIVATE SOURCE"},
+                "PRIVATE ROLE": {"input_tokens": 10},
+            },
+            "calls": [{"role": "news", "model": "gpt-test", "status": "succeeded",
+                       "elapsed_seconds": 12, "input_tokens": 100, "prompt": "PRIVATE SOURCE",
+                       "runtime": {"adapter_seconds": 10, "turn_wait_seconds": 8,
+                                   "serialized_prompt_characters": 500, "auth": "PRIVATE KEY"}}],
+        },
+    }}
+    metadata = build_run_metadata(state, "TEST")
+    assert metadata["timing"]["outside_model_calls_seconds"] == 8
+    assert metadata["timing"]["graph_setup_seconds"] == 2
+    assert metadata["timing"]["codex_startup_seconds"] == 3
+    assert metadata["usage"]["per_role"]["news"]["input_tokens"] == 100
+    assert metadata["usage"]["per_role"]["news"]["repeated_analyst_evidence_characters"] == 200
+    assert metadata["usage"]["calls"][0]["runtime"]["turn_wait_seconds"] == 8
+    assert "PRIVATE" not in json.dumps(metadata)
+    write_report_tree(state, "TEST", tmp_path)
+    saved = json.loads((tmp_path / "run_metadata.json").read_text())
+    assert saved["usage"]["calls"] == metadata["usage"]["calls"]
+
+
+@pytest.mark.parametrize("bad", [True, -1, float('nan'), float('inf'), "secret"])
+def test_invalid_timing_and_character_metrics_are_unknown(bad):
+    from tradingagents.reporting import build_run_metadata
+
+    metadata = build_run_metadata({"_run_metadata": {"elapsed_seconds": bad, "usage": {
+        "model_active_seconds": bad,
+        "calls": [{"role": ["invalid"], "model": "https://private.example/key", "status": "succeeded",
+                   "elapsed_seconds": bad, "runtime": {"turn_wait_seconds": bad,
+                   "instructions_characters": bad}}],
+    }}}, "TEST")
+    assert metadata["elapsed_seconds"] is None
+    assert metadata["timing"]["outside_model_calls_seconds"] is None
+    assert metadata["usage"]["calls"][0]["model"] is None
+    assert metadata["usage"]["calls"][0]["role"] == "unknown"
+    assert metadata["usage"]["calls"][0]["elapsed_seconds"] is None
+    assert metadata["usage"]["calls"][0]["runtime"]["turn_wait_seconds"] is None
+    assert metadata["usage"]["calls"][0]["runtime"]["instructions_characters"] is None
+
+
+@pytest.mark.parametrize("model", ["gpt-test\rPRIVATE", "PRIVATE SOURCE", "x" * 129, "https://private.example/key"])
+def test_model_labels_reject_private_text_across_metadata(model):
+    from tradingagents.reporting import build_run_metadata
+
+    metadata = build_run_metadata({"_run_metadata": {"usage": {
+        "calls": [{"role": "news", "model": model}],
+        "per_model": {model: {"input_tokens": 1}},
+    }}}, "TEST", {"quick_think_llm": model})
+    assert metadata["usage"]["calls"][0]["model"] is None
+    assert metadata["usage"]["per_model"] == {}
+    assert model not in json.dumps(metadata)

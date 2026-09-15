@@ -344,6 +344,11 @@ def _cashflow_reconciliation_router():
             value = (
                 ",2026-06-30,2026-03-31,2025-12-31,2025-09-30\n"
                 "Free Cash Flow,1558000000,2566000000,2378000000,1901000000\n"
+                "Operating Cash Flow,2366000000,2955000000,2600000000,2159000000\n"
+                "Cash Flow From Continuing Operating Activities,2366000000,2955000000,"
+                "2304000000,1788000000\n"
+                "Cash From Discontinued Operating Activities,,,296000000,371000000\n"
+                "Capital Expenditure,-808000000,-389000000,-222000000,-258000000\n"
             )
         elif method == "get_income_statement" and frequency == "quarterly":
             value = (
@@ -384,7 +389,15 @@ def test_cashflow_reconciliations_and_profitability_pairs_are_required(monkeypat
     four_quarters = by_metric["latest_four_quarters_free_cash_flow"][0]
     assert four_quarters["value"] == 8403000000
     assert four_quarters["period"] == "four_quarters:2025-09-30..2026-06-30"
-    assert len(four_quarters["inputs"]) == 4
+    assert len(four_quarters["inputs"]) == 12
+    discontinued_caveat = four_quarters["caveats"][1]
+    assert "2025-09-30=371000000" in discontinued_caveat
+    assert "2025-12-31=296000000" in discontinued_caveat
+    assert "disclosed total 667000000" in discontinued_caveat
+    assert "unavailable for 2026-03-31, 2026-06-30" in discontinued_caveat
+    assert "missing values were not treated as zero" in discontinued_caveat
+    assert "no continuing-operations free cash flow is inferred" in discontinued_caveat
+    assert "not subtracted from the four-quarter total" in discontinued_caveat
     comparison = by_metric["free_cash_flow_overview_comparison_difference"][0]
     assert comparison["value"] == -438499648
     assert comparison["inputs"] == [
@@ -402,6 +415,12 @@ def test_cashflow_reconciliations_and_profitability_pairs_are_required(monkeypat
     for summary in (bridge, four_quarters, comparison):
         assert summary["id"] in required
         assert all(dependency in required for dependency in summary["inputs"])
+    required_discontinued = [
+        fact for fact in by_metric["discontinued_operations_operating_cash_flow"]
+        if fact["period"] in {"quarterly:2025-09-30", "quarterly:2025-12-31"}
+    ]
+    assert len(required_discontinued) == 2
+    assert all(fact["id"] in required for fact in required_discontinued)
     annual_context = [
         fact for fact in prepared["facts"]
         if fact["period"] == "annual:2025-12-31"
@@ -472,6 +491,10 @@ def test_cashflow_reconciliation_withholds_missing_component_and_cross_vendor_co
 
     summary = next(fact for fact in prepared["facts"]
                    if fact["metric"] == "latest_four_quarters_free_cash_flow")
+    assert "Discontinued-operations operating cash flow is unavailable for" \
+        in summary["caveats"][1]
+    assert "missing values were not treated as zero" in summary["caveats"][1]
+    assert "no continuing-operations free cash flow is inferred" in summary["caveats"][1]
     required = set(prepared["required_evidence_ids"])
     by_id = {fact["id"]: fact for fact in prepared["facts"]}
     assert summary["id"] in required
@@ -593,6 +616,8 @@ def test_cashflow_required_context_survives_source_only_handoff_and_restore(monk
                   "8841499648", "-438499648", "6735000000", "-974000000"):
         assert value in context
     assert "no continuing-operations free cash flow is inferred" in context
+    assert "disclosed total 667000000" in context
+    assert "not subtracted from the four-quarter total" in context
     assert "does not establish a contradiction or provider error" in context
 
 

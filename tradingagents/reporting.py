@@ -7,14 +7,28 @@ run produces the same on-disk report tree a CLI run does.
 """
 
 import json
+import math
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from tradingagents.agents.utils.analysis_time import analysis_calendar
+from tradingagents.model_profiles import MODEL_PROFILES
+
+_TELEMETRY_ROLES = frozenset(MODEL_PROFILES["balanced"]["agents"]) | {"unknown"}
+_TOKEN_FIELDS = ("input_tokens", "output_tokens", "cached_input_tokens", "reasoning_output_tokens", "total_tokens")
+_RUNTIME_SECONDS = (
+    "bridge_lock_wait_seconds", "adapter_seconds", "bridge_seconds", "validation_seconds",
+    "thread_start_seconds", "turn_start_seconds", "turn_wait_seconds", "cleanup_seconds",
+)
+_RUNTIME_CHARACTERS = ("instructions_characters", "serialized_prompt_characters", "output_schema_characters")
+_SAFE_MODEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/+:-]{0,127}\Z")
+
 
 def _safe_model_id(value: Any) -> str | None:
     """Allow a model label, never an endpoint or multiline runtime value."""
-    if not isinstance(value, str) or not value or "://" in value or "\n" in value:
+    if not isinstance(value, str) or "://" in value or not _SAFE_MODEL.fullmatch(value):
         return None
     return value
 
@@ -23,6 +37,61 @@ def _valid_count(value: Any) -> int | None:
     if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
         return value
     return None
+
+
+def _valid_seconds(value: Any) -> float | None:
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0:
+        return float(value)
+    return None
+
+
+def _usage_per_role(value: Any) -> dict:
+    if not isinstance(value, dict):
+        return {}
+    result = {}
+    for role, metrics in value.items():
+        if role not in _TELEMETRY_ROLES or not isinstance(metrics, dict):
+            continue
+        result[role] = {
+            key: _valid_count(metrics.get(key)) for key in (
+                *_TOKEN_FIELDS, "calls_started", "calls_finished", "calls_with_usage",
+                "calls_failed", "prompt_characters", "repeated_message_characters",
+                "analyst_evidence_characters", "repeated_analyst_evidence_characters",
+            )
+        } | {
+            "elapsed_seconds": _valid_seconds(metrics.get("elapsed_seconds")),
+            "usage_complete": metrics.get("usage_complete") is True,
+        }
+    return result
+
+
+def _usage_calls(value: Any) -> list[dict]:
+    if not isinstance(value, list):
+        return []
+    calls = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        role = item.get("role")
+        call = {
+            "role": role if isinstance(role, str) and role in _TELEMETRY_ROLES else "unknown",
+            "model": _safe_model_id(item.get("model")),
+            "status": item.get("status") if item.get("status") in ("succeeded", "failed") else "unknown",
+            "elapsed_seconds": _valid_seconds(item.get("elapsed_seconds")),
+            **{key: _valid_count(item.get(key)) for key in (
+                *_TOKEN_FIELDS, "prompt_characters", "repeated_message_characters",
+                "analyst_evidence_characters", "repeated_analyst_evidence_characters",
+            )},
+        }
+        runtime = item.get("runtime")
+        if isinstance(runtime, dict):
+            call["runtime"] = {
+                key: _valid_seconds(runtime.get(key)) for key in _RUNTIME_SECONDS if key in runtime
+            } | {
+                key: _valid_count(runtime.get(key)) for key in _RUNTIME_CHARACTERS if key in runtime
+            }
+        calls.append(call)
+    return calls
 
 
 def _usage_per_model(value: Any) -> dict[str, dict[str, int | None]]:
@@ -87,11 +156,22 @@ def build_run_metadata(
     usage = runtime.get("usage", {})
     if not isinstance(usage, dict):
         usage = {}
+    elapsed = _valid_seconds(runtime.get("elapsed_seconds"))
+    active = _valid_seconds(usage.get("model_active_seconds"))
+    complete_timing = (
+        isinstance(usage.get("usage_completeness"), dict)
+        and _valid_count(usage["usage_completeness"].get("calls_unfinished")) == 0
+    )
+    outside_calls = (
+        elapsed - active if complete_timing and elapsed is not None
+        and active is not None and active <= elapsed else None
+    )
     return {
         "schema_version": 1,
         "backend": "codex" if config.get("llm_backend") == "codex" else "api",
         "ticker": ticker,
         "analysis_date": final_state.get("trade_date"),
+        "analysis_calendar": analysis_calendar(final_state.get("trade_date")),
         "model_profile": next(
             (
                 value
@@ -110,11 +190,22 @@ def build_run_metadata(
             config.get("max_risk_discuss_rounds")
             if isinstance(config.get("max_risk_discuss_rounds"), int) else None
         ),
-        "elapsed_seconds": (
-            runtime.get("elapsed_seconds")
-            if isinstance(runtime.get("elapsed_seconds"), (int, float))
-            else None
-        ),
+        "elapsed_seconds": elapsed,
+        "timing": {
+            "model_active_seconds": active,
+            "llm_elapsed_seconds": _valid_seconds(usage.get("llm_elapsed_seconds")),
+            "outside_model_calls_seconds": outside_calls,
+            "graph_setup_seconds": _valid_seconds(runtime.get("graph_setup_seconds")),
+            "codex_startup_seconds": _valid_seconds(runtime.get("codex_startup_seconds")),
+            "scope": (
+                "Role/call durations cover model callbacks, not whole agent nodes. Active time is the union "
+                "of completed call intervals; summed call time can overlap. Outside-call time includes "
+                "data preparation, tools, graph/UI work and checkpointing, not proven runtime overhead. "
+                "CLI graph setup and Codex startup are measured separately before elapsed_seconds. "
+                "Codex bridge/adapter totals include their phase timings; do not add nested totals. "
+                "Turn wait includes server, network, retries and inference; it is not pure model compute."
+            ),
+        },
         "usage": {
             "llm_calls": _valid_count(usage.get("llm_calls")),
             "input_tokens": _valid_count(usage.get("input_tokens")),
@@ -123,6 +214,17 @@ def build_run_metadata(
             "reasoning_output_tokens": _valid_count(usage.get("reasoning_output_tokens")),
             "total_tokens": _valid_count(usage.get("total_tokens")),
             "per_model": _usage_per_model(usage.get("per_model")),
+            "per_role": _usage_per_role(usage.get("per_role")),
+            "calls": _usage_calls(usage.get("calls")),
+            "input_diagnostics_scope": (
+                "Character counts describe application-visible message content, not billed tokens. "
+                "Repeated-message characters count exact type/content repetitions within this run, "
+                "including across roles; they are not cache hits or estimated token savings. "
+                "Analyst-evidence counts track exact tagged blocks inside changing messages; these overlap "
+                "message counts and must not be added to them. "
+                "Codex wire character counts additionally expose instructions, JSON prompt and output schema; "
+                "hidden server framing and internal retries are not measured. No raw prompts are persisted."
+            ),
             "usage_completeness": _usage_completeness(usage.get("usage_completeness")),
             "tool_calls": _valid_count(usage.get("tool_calls")),
             "tool_calls_scope": (

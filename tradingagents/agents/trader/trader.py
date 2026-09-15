@@ -80,6 +80,17 @@ def create_trader(llm):
                     "Populate stop_loss only for a justified execution stop; keep review levels and "
                     "conditional thresholds in reasoning. Omit position sizing when portfolio context "
                     "is unknown. "
+                    + "Cite each material factual claim in reasoning with the exact supplied evidence ID "
+                    "in square brackets, especially prices, financial values, comparisons and dated triggers. "
+                    "Preserve citations from the research plan and technical evidence; cite both period values "
+                    "for comparisons. For proposed entry/stop levels, cite the factual inputs in reasoning and "
+                    "label your derivation or judgment; keep numeric fields numeric. If the supplied plan has "
+                    "no supporting citation for a claim, explicitly say that the research-plan handoff lacks "
+                    "the citation needed to verify that claim through this handoff. This is an immediate handoff "
+                    "gap, not proof that evidence is unavailable globally. Say evidence is unavailable only when "
+                    "the relevant supplied evidence explicitly establishes that it is unavailable. Do not invent "
+                    "an ID, or present an uncited plan claim as verified. Keep material caveats beside the cited "
+                    "claim. "
                     + NO_EXTERNAL_TOOLS
                     + get_language_instruction()
                 ),

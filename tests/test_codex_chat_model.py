@@ -367,3 +367,66 @@ def test_usage_aware_adapters_remain_serialized_and_results_stay_paired():
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(lambda pair: pair[0].invoke(str(pair[1])), zip(models, [10, 20], strict=True)))
     assert [(msg.content, msg.usage_metadata["input_tokens"]) for msg in results] == [("10", 10), ("20", 20)]
+
+
+def test_runtime_timings_and_wire_sizes_do_not_change_messages_or_infer_usage(monkeypatch):
+    from tradingagents.codex.adapter import CodexCompletion
+
+    clock = [0.0]
+    monkeypatch.setattr("tradingagents.codex.chat_model.time.perf_counter", lambda: clock[0])
+
+    class Adapter(_FakeAdapter):
+        def complete_with_usage(self, *args, **kwargs):
+            self.calls.append((args, kwargs))
+            clock[0] += 6
+            return CodexCompletion("result", None, {
+                "thread_start_seconds": 1, "turn_wait_seconds": 4, "cleanup_seconds": 1,
+            })
+
+    class Lock:
+        def __enter__(self):
+            clock[0] += 2
+        def __exit__(self, *args):
+            pass
+
+    adapter = Adapter()
+    model = _model(adapter)
+    model._call_lock = Lock()
+    answer = model.invoke([SystemMessage("Policy"), HumanMessage("Evidence")])
+    metrics = answer.response_metadata["tradingagents_runtime"]
+    assert answer.content == "result" and answer.usage_metadata is None
+    assert metrics["bridge_lock_wait_seconds"] == 2
+    assert metrics["adapter_seconds"] == 6
+    assert metrics["bridge_seconds"] == 8
+    assert metrics["turn_wait_seconds"] == 4
+    instructions, prompt, *_ = adapter.calls[0][0]
+    assert metrics["instructions_characters"] == len(instructions)
+    assert metrics["serialized_prompt_characters"] == len(prompt)
+    assert metrics["output_schema_characters"] == 0
+    assert json.loads(prompt) == {"messages": [{"role": "user", "content": "Evidence"}]}
+
+
+@pytest.mark.parametrize("timings", [
+    {"thread_start_seconds": 1.5, "turn_wait_seconds": float("nan"),
+     "turn_start_seconds": -1, "cleanup_seconds": True,
+     "validation_seconds": float("inf"), "private": "PRIVATE SOURCE",
+     "adapter_seconds": "PRIVATE KEY"},
+    "PRIVATE SOURCE", ["PRIVATE SOURCE"], None,
+])
+def test_custom_adapter_timings_are_sanitized_before_message_persistence(timings):
+    from tradingagents.codex.adapter import CodexCompletion
+
+    class Adapter(_FakeAdapter):
+        def complete_with_usage(self, *args, **kwargs):
+            return CodexCompletion("result", None, timings)
+
+    answer = _model(Adapter()).invoke("Evidence")
+    metrics = answer.response_metadata["tradingagents_runtime"]
+    assert "PRIVATE" not in answer.model_dump_json()
+    assert "turn_wait_seconds" not in metrics
+    assert "turn_start_seconds" not in metrics
+    assert "cleanup_seconds" not in metrics
+    assert "validation_seconds" not in metrics
+    if isinstance(timings, dict):
+        assert metrics["thread_start_seconds"] == 1.5
+    assert metrics["adapter_seconds"] >= 0

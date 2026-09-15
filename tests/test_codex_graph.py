@@ -61,6 +61,7 @@ def offline(monkeypatch, tmp_path):
     factory = Mock(side_effect=AssertionError("API client constructed"))
     monkeypatch.setattr(graph_module, "create_llm_client", factory)
     monkeypatch.setattr(sentiment.get_news, "func", lambda *a, **k: "fixture news")
+    monkeypatch.setattr("tradingagents.agents.analysts.news_analyst.get_global_news.func", lambda *a: "fixture global news")
     monkeypatch.setattr(sentiment, "fetch_stocktwits_messages", lambda *a, **k: "fixture posts")
     monkeypatch.setattr(sentiment, "fetch_reddit_posts", lambda *a, **k: "fixture posts")
     tool_calls = []
@@ -108,9 +109,18 @@ def test_full_codex_graph_tools_roles_rounds_and_progress(offline):
     assert len(tools) == 1
     assert "**Rating**: Hold" in result["final_trade_decision"]
     assert stats.llm_calls == len(adapter.calls)
+    telemetry = stats.get_persistence_stats()
+    assert {role: value["calls_started"] for role, value in telemetry["per_role"].items()} == dict(counts)
+    assert all(call["elapsed_seconds"] >= 0 for call in telemetry["calls"])
+    assert all("adapter_seconds" in call["runtime"] for call in telemetry["calls"])
+    assert telemetry["per_role"]["bear"]["repeated_analyst_evidence_characters"] > 0
     assert stats.tool_calls == 1
     # The market tool history goes back only to its requesting analyst.
     for role, prompt, model, effort in adapter.calls:
+        if role == "news":
+            assert "fixture global news" in json.dumps(prompt)
+            assert "fixture news" in json.dumps(prompt)
+            assert "news-global-baseline" in json.dumps(prompt)
         if role != "market":
             assert "PRIVATE_MARKET_TOOL_RESULT" not in json.dumps(prompt)
         assert {"model": model, "reasoning_effort": effort} == config["agent_models"][role]

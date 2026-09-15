@@ -315,3 +315,43 @@ Both CLI backends save observed input, output, cached-input, reasoning-output an
 Codex uses the official [`thread/tokenUsage/updated`](https://learn.chatgpt.com/docs/app-server) event for the active thread and turn. Each model invocation creates a fresh ephemeral thread, so the latest cumulative `tokenUsage.total` snapshot belongs to that invocation. Repeated updates replace the prior snapshot; they are not summed. The adapter passes text and usage together under the existing call lock. The text-only `complete()` interface remains available; `complete_with_usage()` returns both. No extra inference or account-wide polling is needed.
 
 Absent or malformed telemetry is recorded as unknown (`null`), not zero. Aggregate values are sums of observed usage, which can be partial: inspect `usage_completeness` and `calls_missing_usage` before comparing runs. Completeness tracks calls with valid input/output counts; optional cached, reasoning and total fields can still be unavailable for API providers. Counts are runtime-reported usage, not an invoice or a measurement of Codex subscription allowance. The initial implementation is verified with offline protocol fixtures; your next live run will confirm what this runtime reports.
+
+### Per-role timing and repeated-input diagnostics
+
+Both CLI backends now save `usage.per_role` and `usage.calls` in `run_metadata.json` automatically. Each completed call has its role, model, success/failure, observed token counts and elapsed seconds. Shared API clients still attribute calls to separate graph roles. Missing usage remains null. The existing live dashboard is unchanged, and instrumentation makes no model or data-provider requests.
+
+- Role elapsed time sums model-call durations, including failures. It excludes data fetching outside those calls; it is not whole-agent wall time. `timing.model_active_seconds` measures the union of completed intervals, avoiding double-counting concurrent calls. `timing.llm_elapsed_seconds` is their sum.
+- `timing.outside_model_calls_seconds` is the remainder of the measured CLI analysis interval when all calls finished. It includes preparation, tools, graph/UI work and checkpointing. It does not isolate backend overhead. Graph setup and Codex process initialization/authentication are timed separately before that analysis interval; model selection time and final process shutdown are not measured here.
+- Codex successful calls additionally record `runtime` timings for bridge lock waiting, adapter work, validation, thread creation, turn start, waiting for completion and cleanup. Bridge duration contains adapter duration, which contains its phases: do not add these nested totals. Turn-wait duration includes server/network time and possible internal retries as well as inference; pure model compute is not exposed. Failed callbacks retain their total elapsed time, without invented phase measurements.
+- `prompt_characters` counts visible message content. `repeated_message_characters` detects exact message type/content repetitions within one run, including across roles. `analyst_evidence_characters` and `repeated_analyst_evidence_characters` measure exact `<analyst_evidence>` blocks, even when surrounding debate/history changes. These overlapping character metrics are not additive and are not tokenizer measurements, cache hits, or guaranteed savings.
+- Codex wire counts describe the instructions, serialized prompt and output schema supplied by the bridge. They cannot reveal hidden server framing. Only numeric metrics and allowlisted role/model labels are persisted; source text, prompts and their transient fingerprints are not exported.
+
+Telemetry is scoped to the current invocation. Resumed checkpoints do not reconstruct timings or token counts from the previous process; saved older reports cannot acquire real timing measurements retroactively.
+
+### What a matched full-pipeline replay would compare
+
+Start with AMD and freeze a complete input bundle: ticker/date, raw market/fundamental/macro/company-news/global-news/social snapshots, additional permitted tool responses, portfolio assumptions and prior-decision memory. Run the complete agent graph once through API and once through Codex with the same Balanced choices, reasoning efforts, rounds and prompt-policy version. Regenerate every analyst and decision response; do not replay the previous model conclusions. Missing data requests must be explicitly unavailable or fail replay rather than silently fetching live data. Record the same input bundle identity for both runs.
+
+This isolates backend behavior from changing market/news/social inputs. Equal initial evidence does not imply identical downstream prompts: different model outputs and tool choices are part of the behavior being evaluated. A separate role-by-role replay would be needed to hold every individual model prompt identical. For latency/caching evaluation, repeat in alternating backend order and distinguish fresh versus reused data caches; server-side prompt-cache state cannot necessarily be controlled.
+
+The existing fundamentals-only replay and offline fake-model acceptance tests are not a full-pipeline replay implementation. After an AMD comparison, use a different-sector ticker to check generalization while keeping each backend pair matched.
+
+### Analysis calendar and citation handoffs
+
+Both backends use the same date-only analysis calendar as the CLI: the machine's
+local timezone. Evidence prompts retain original retrieval timestamps and show
+their local equivalents; `run_metadata.json` records the selected day's start
+and exclusive end with UTC offsets. The two boundaries are localized separately
+so daylight-saving changes are represented correctly. This describes a calendar
+day, not a market-close decision cutoff. Evidence validation converts offset-aware
+publication timestamps into that same local calendar before comparing dates;
+date-only and naive timestamps retain their stated dates. Provider retrieval
+windows are unchanged. Unknown publication times, historical-vintage limits,
+and provisional market-bar status remain independent limitations; a next-day
+UTC retrieval label alone does not establish future evidence.
+
+The research-manager handoff must cite each material claim and the operands of
+comparisons, including both periods and cash versus debt. If an immediate plan
+omits a citation, the trader identifies that handoff gap rather than asserting
+that evidence is absent from the complete research bundle. These are generation
+contracts, not a guarantee that every future model response will comply.

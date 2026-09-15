@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import math
 import threading
+import time
 import uuid
 import weakref
 from collections.abc import Callable, Sequence
@@ -31,6 +33,10 @@ from tradingagents.codex.adapter import CodexCompletion, CodexInferenceError
 
 _MAX_ROLE_CHARS = 256
 _MAX_MESSAGE_CHARS = 4_000_000
+_ADAPTER_TIMING_FIELDS = frozenset({
+    "validation_seconds", "thread_start_seconds", "turn_start_seconds",
+    "turn_wait_seconds", "cleanup_seconds",
+})
 _LOCK_REGISTRY_GUARD = threading.Lock()
 _ADAPTER_LOCKS: weakref.WeakKeyDictionary[object, threading.RLock] = (
     weakref.WeakKeyDictionary()
@@ -411,18 +417,34 @@ class CodexChatModel(BaseChatModel):
         prompt: str,
         output_schema: dict[str, Any] | None,
     ) -> CodexCompletion:
+        waiting_since = time.perf_counter()
         with self._call_lock:
+            acquired_at = time.perf_counter()
             kwargs = {} if output_schema is None else {"output_schema": output_schema}
             complete_with_usage = getattr(self.adapter, "complete_with_usage", None)
             if callable(complete_with_usage):
                 result = complete_with_usage(instructions, prompt, self.model, self.effort, **kwargs)
                 if not isinstance(result, CodexCompletion):
                     raise CodexInferenceError("Codex returned an invalid completion result")
-                return result
-            # Text-only custom adapters remain supported without inventing usage.
-            return CodexCompletion(
-                self.adapter.complete(instructions, prompt, self.model, self.effort, **kwargs), None,
+            else:
+                # Text-only custom adapters remain supported without inventing usage.
+                result = CodexCompletion(
+                    self.adapter.complete(instructions, prompt, self.model, self.effort, **kwargs), None,
+                )
+            # Custom adapters must not inject arbitrary metadata into messages
+            # (and therefore graph checkpoints), even before stats filtering.
+            timings = {
+                key: float(value)
+                for key, value in (result.timings.items() if isinstance(result.timings, dict) else ())
+                if key in _ADAPTER_TIMING_FIELDS
+                and isinstance(value, (int, float)) and not isinstance(value, bool)
+                and math.isfinite(value) and value >= 0
+            }
+            timings.update(
+                bridge_lock_wait_seconds=acquired_at - waiting_since,
+                adapter_seconds=time.perf_counter() - acquired_at,
             )
+            return CodexCompletion(result.text, result.usage, timings)
 
     def _tool_message(self, response: str) -> AIMessage:
         parsed = _decode_json_object(response, "tool response")
@@ -487,6 +509,7 @@ class CodexChatModel(BaseChatModel):
         run_manager: Any | None = None,
         **kwargs: Any,
     ) -> ChatResult:
+        bridge_start = time.perf_counter()
         del run_manager
         if stop:
             raise ValueError("Codex chat model does not support stop sequences")
@@ -499,7 +522,8 @@ class CodexChatModel(BaseChatModel):
         output_schema = self._structured.output_schema if self._structured else None
         if self._bound_tools:
             output_schema = _tool_output_schema(self._bound_tools)
-        completion = self._adapter_complete(self._instructions(policies), prompt, output_schema)
+        instructions = self._instructions(policies)
+        completion = self._adapter_complete(instructions, prompt, output_schema)
         response = completion.text
         if self._bound_tools:
             message = self._tool_message(response)
@@ -525,6 +549,13 @@ class CodexChatModel(BaseChatModel):
                 "input_token_details": {"cache_read": usage.cached_input_tokens},
                 "output_token_details": {"reasoning": usage.reasoning_output_tokens},
             }
+        message.response_metadata["tradingagents_runtime"] = {
+            **(completion.timings or {}),
+            "bridge_seconds": time.perf_counter() - bridge_start,
+            "instructions_characters": len(instructions),
+            "serialized_prompt_characters": len(prompt),
+            "output_schema_characters": len(json.dumps(output_schema, ensure_ascii=False)) if output_schema else 0,
+        }
         return ChatResult(generations=[ChatGeneration(message=message)])
 
 

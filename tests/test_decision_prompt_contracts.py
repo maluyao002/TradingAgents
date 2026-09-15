@@ -35,6 +35,20 @@ def _capturing_llm(result):
     return llm, captured
 
 
+def _free_text_capturing_llm(content):
+    """Capture the prompt after structured output is explicitly unavailable."""
+    captured = {}
+    llm = MagicMock()
+    llm.with_structured_output.side_effect = NotImplementedError("unsupported")
+
+    def capture(prompt):
+        captured["prompt"] = prompt
+        return MagicMock(content=content)
+
+    llm.invoke.side_effect = capture
+    return llm, captured
+
+
 def _state():
     return {
         "company_of_interest": "NVDA",
@@ -102,6 +116,31 @@ def test_research_manager_prompt_preserves_selected_reports_and_decision_context
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("free_text", [False, True])
+def test_research_manager_requires_citation_complete_trader_handoff(free_text):
+    if free_text:
+        llm, captured = _free_text_capturing_llm("**Recommendation**: Hold")
+    else:
+        llm, captured = _capturing_llm(
+            ResearchPlan(
+                recommendation=PortfolioRating.HOLD,
+                rationale="Evidence conflicts.",
+                strategic_actions="Reassess after a data refresh.",
+            )
+        )
+
+    create_research_manager(llm)(_state())
+    prompt = _text(captured["prompt"])
+
+    assert "Trader relies on this plan as a citation-preserving handoff" in prompt
+    assert "each material factual claim and trigger" in prompt
+    assert "every operand and both period values" in prompt
+    assert "cash-versus-debt claims" in prompt
+    assert "margin changes, inventory or receivables changes" in prompt
+    assert "comparisons of stock-price levels" in prompt
+
+
+@pytest.mark.unit
 def test_portfolio_manager_prompt_propagates_reports_plans_risk_and_lessons():
     llm, captured = _capturing_llm(
         PortfolioDecision(
@@ -153,6 +192,25 @@ def test_trader_prompt_marks_review_levels_as_reasoning_and_preserves_policy():
     assert "Populate stop_loss only for a justified execution stop" in prompt
     assert "Omit position sizing when portfolio context is unknown" in prompt
     assert "2026-09-12" in prompt
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("free_text", [False, True])
+def test_trader_distinguishes_missing_handoff_citation_from_missing_evidence(free_text):
+    if free_text:
+        llm, captured = _free_text_capturing_llm("**Action**: Hold")
+    else:
+        llm, captured = _capturing_llm(
+            TraderProposal(action=TraderAction.HOLD, reasoning="Wait for current evidence.")
+        )
+
+    create_trader(llm)(_state())
+    prompt = _text(captured["prompt"])
+
+    assert "research-plan handoff lacks the citation needed" in prompt
+    assert "immediate handoff gap, not proof that evidence is unavailable globally" in prompt
+    assert "only when the relevant supplied evidence explicitly establishes" in prompt
+    assert "Do not invent an ID" in prompt
 
 
 @pytest.mark.unit
