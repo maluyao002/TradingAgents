@@ -36,6 +36,7 @@ def test_specialist_contract_reaches_actual_call(factory, requirements, monkeypa
     monkeypatch.setattr("tradingagents.agents.analysts.market_analyst.prepare_market", lambda *a: prepared)
     monkeypatch.setattr("tradingagents.agents.analysts.fundamentals_analyst.prepare_fundamentals", lambda *a: prepared)
     monkeypatch.setattr("tradingagents.agents.analysts.news_analyst.prepare_macro", lambda *a: prepared)
+    monkeypatch.setattr("tradingagents.agents.analysts.news_analyst.get_news.func", lambda *a: "No company news in offline fixture.")
     captured = []
     llm = MagicMock()
     def respond(prompt):

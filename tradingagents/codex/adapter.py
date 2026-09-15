@@ -67,6 +67,7 @@ class CodexCompletion:
 
     text: str
     usage: CodexTokenUsage | None
+    timings: dict[str, float] | None = None
 
 
 _CLIENT_INFO = {
@@ -325,6 +326,7 @@ class CodexAdapter:
         self._models: tuple[CodexModel, ...] | None = None
         self._retired_threads: set[str] = set()
         self._inference_isolation_verified = False
+        self.startup_seconds: float | None = None
         self._validate_home_location()
 
     def _validate_home_location(self) -> None:
@@ -357,6 +359,8 @@ class CodexAdapter:
     def __enter__(self) -> CodexAdapter:
         if self._transport is not None:
             raise CodexAdapterError("The Codex adapter is already open")
+        startup_start = time.perf_counter()
+        self.startup_seconds = None
         self._retired_threads.clear()
         self._inference_isolation_verified = False
         try:
@@ -405,6 +409,7 @@ class CodexAdapter:
             self._verify_account(account)
             self._check_runtime_files()
             self._check_workspace_empty()
+            self.startup_seconds = time.perf_counter() - startup_start
             return self
         except CodexAdapterError:
             self._invalidate()
@@ -735,6 +740,8 @@ class CodexAdapter:
         without changing successful inference behavior.
         """
 
+        validation_start = time.perf_counter()
+        timings: dict[str, float] = {}
         if not _valid_text(instructions, limit=1_000_000):
             raise ValueError("instructions must be non-empty text")
         if not _valid_text(prompt, limit=4_000_000):
@@ -762,6 +769,7 @@ class CodexAdapter:
         except (CodexAdapterError, OSError):
             self._invalidate()
             raise CodexAdapterError("Unable to verify the isolated Codex workspace") from None
+        timings["validation_seconds"] = time.perf_counter() - validation_start
         deadline = time.monotonic() + self.timeout
         thread_id: str | None = None
         turn_id: str | None = None
@@ -769,7 +777,10 @@ class CodexAdapter:
         result: CodexCompletion | None = None
         failure: BaseException | None = None
         try:
+            phase_start = time.perf_counter()
             thread_id = self._start_thread(instructions, model, deadline)
+            timings["thread_start_seconds"] = time.perf_counter() - phase_start
+            phase_start = time.perf_counter()
             turn_id, turn_is_valid = self._start_turn(
                 thread_id,
                 prompt,
@@ -780,10 +791,14 @@ class CodexAdapter:
             )
             if not turn_is_valid:
                 raise CodexInferenceError("turn/start returned an invalid active turn")
+            timings["turn_start_seconds"] = time.perf_counter() - phase_start
+            phase_start = time.perf_counter()
             result = self._wait_for_turn(thread_id, turn_id, deadline, model=model, effort=effort)
+            timings["turn_wait_seconds"] = time.perf_counter() - phase_start
             turn_completed = True
         except BaseException as exc:
             failure = exc
+        phase_start = time.perf_counter()
         cleanup_error = self._cleanup_thread(
             thread_id,
             turn_id if not turn_completed else None,
@@ -795,6 +810,7 @@ class CodexAdapter:
             if isinstance(exc, OSError):
                 exc = CodexAdapterError("Unable to inspect the isolated Codex directories")
             cleanup_error = cleanup_error or exc
+        timings["cleanup_seconds"] = time.perf_counter() - phase_start
 
         if failure is not None:
             self._invalidate()
@@ -812,7 +828,7 @@ class CodexAdapter:
             raise CodexInferenceError("Codex thread cleanup failed") from None
         if result is None:  # Defensive; successful turns always set a result.
             raise CodexInferenceError("Codex completed without a final text response")
-        return result
+        return CodexCompletion(result.text, result.usage, timings)
 
     def _start_thread(self, instructions: str, model: str, deadline: float) -> str:
         transport = self._require_transport()

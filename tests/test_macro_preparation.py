@@ -229,6 +229,8 @@ def test_news_prepares_once_and_keeps_source_data_out_of_system_prompt(monkeypat
     prepared = {"analysis_date": "2026-09-13", "sources": [source], "facts": [], "caveats": []}
     prepare = MagicMock(return_value=prepared)
     monkeypatch.setattr("tradingagents.agents.analysts.news_analyst.prepare_macro", prepare)
+    news_fetch = MagicMock(return_value="Required company news baseline")
+    monkeypatch.setattr("tradingagents.agents.analysts.news_analyst.get_news.func", news_fetch)
     prompts = []
 
     def respond(prompt):
@@ -246,7 +248,8 @@ def test_news_prepares_once_and_keeps_source_data_out_of_system_prompt(monkeypat
     state["messages"].append(ToolMessage(content=tool_text, tool_call_id="news-1", name="get_news"))
     update = node(state)
     assert prepare.call_count == 1
+    assert news_fetch.call_count == 1
     assert "CPI raw evidence" not in prompts[-1][0].content
     assert sum(str(m.content).count("CPI raw evidence") for m in prompts[-1]) == 1
     assert sum(str(m.content).count(tool_text) for m in prompts[-1]) == 1
-    assert len(update["prepared_data"]["news"]["sources"]) == 2
+    assert len(update["prepared_data"]["news"]["sources"]) == 3

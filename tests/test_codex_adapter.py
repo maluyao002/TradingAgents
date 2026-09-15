@@ -498,7 +498,13 @@ def test_complete_with_usage_replaces_cumulative_snapshots_and_uses_total(tmp_pa
             reasoning_output_tokens=3,
             total_tokens=28,
         ),
+        timings=completion.timings,
     )
+    assert set(completion.timings) == {
+        "validation_seconds", "thread_start_seconds", "turn_start_seconds",
+        "turn_wait_seconds", "cleanup_seconds",
+    }
+    assert all(value >= 0 for value in completion.timings.values())
 
 
 def test_usage_is_local_to_each_ephemeral_completion(tmp_path):
@@ -806,3 +812,26 @@ def test_known_unhandled_method_is_named_without_payload(tmp_path):
     adapter, _ = _adapter(tmp_path, "known-active-event")
     with adapter, pytest.raises(CodexInferenceError, match=r"notification \(thread/queue/changed\)"):
         adapter.complete("Role", "Evidence", "gpt-test-terra", "medium")
+
+
+def test_completion_phase_timings_use_local_clock_without_changing_result(tmp_path, monkeypatch):
+    adapter, _ = _adapter(tmp_path)
+    phases = {}
+    clock = [100.0]
+    monkeypatch.setattr("tradingagents.codex.adapter.time.perf_counter", lambda: clock[0])
+    with adapter:
+        assert adapter.startup_seconds == 0
+        for name, duration in (("_start_thread", 2.0), ("_start_turn", 3.0),
+                               ("_wait_for_turn", 5.0), ("_cleanup_thread", 7.0)):
+            original = getattr(adapter, name)
+            def measured(*args, _original=original, _duration=duration, **kwargs):
+                value = _original(*args, **kwargs)
+                clock[0] += _duration
+                return value
+            monkeypatch.setattr(adapter, name, measured)
+        completion = adapter.complete_with_usage("Role", "Evidence", "gpt-test-terra", "medium")
+        phases = completion.timings
+    assert completion.text == "final analysis"
+    assert phases == {"validation_seconds": 0.0, "thread_start_seconds": 2.0,
+                      "turn_start_seconds": 3.0, "turn_wait_seconds": 5.0,
+                      "cleanup_seconds": 7.0}

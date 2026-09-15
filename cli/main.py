@@ -1090,6 +1090,7 @@ def run_analysis(checkpoint: bool | None = None, *, selections=None, codex_adapt
 
     # Initialize the graph with callbacks bound to LLMs
     backend_kwargs = {"codex_adapter": codex_adapter} if codex_adapter is not None else {}
+    graph_setup_start = time.perf_counter()
     graph = TradingAgentsGraph(
         selected_analyst_keys,
         config=config,
@@ -1097,12 +1098,14 @@ def run_analysis(checkpoint: bool | None = None, *, selections=None, codex_adapt
         callbacks=[stats_handler],
         **backend_kwargs,
     )
+    graph_setup_seconds = time.perf_counter() - graph_setup_start
 
     # Initialize message buffer with selected analysts
     message_buffer.init_for_analysis(selected_analyst_keys)
 
     # Track start time for elapsed display
     start_time = time.time()
+    analysis_started_at = time.perf_counter()
 
     # Create result directory
     results_dir = Path(config["results_dir"]) / selections["ticker"] / selections["analysis_date"]
@@ -1322,7 +1325,9 @@ def run_analysis(checkpoint: bool | None = None, *, selections=None, codex_adapt
         # Capture observed completion metrics before optional report export.
         # Provider metrics that were never supplied stay null in the sidecar.
         final_state["_run_metadata"] = {
-            "elapsed_seconds": max(0.0, time.time() - start_time),
+            "elapsed_seconds": max(0.0, time.perf_counter() - analysis_started_at),
+            "graph_setup_seconds": graph_setup_seconds,
+            "codex_startup_seconds": getattr(codex_adapter, "startup_seconds", None),
             "usage": stats_handler.get_persistence_stats(),
         }
 
