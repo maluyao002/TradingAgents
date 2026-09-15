@@ -1,8 +1,8 @@
 # Codex subscription integration
 
 The research workflow supports the official local Codex app-server and the
-existing API providers as explicit startup choices. Stages 1–4 are merged into
-`feat/codex-integration`. Stage 5 has AMD full-pipeline comparisons and offline
+existing API providers as explicit startup choices. Stages 1–4 implement the
+complete research pipeline. Stage 5 has AMD full-pipeline comparisons and offline
 regressions; the INTC non-AMD operational/full-pipeline acceptance case passed
 for supervised research. Cash-flow completeness remains an open quality item.
 This is a supervised research
@@ -18,8 +18,8 @@ beta, not an unattended trading or broker execution service.
 | 4 | Full pipeline | Tool requests, role isolation, debates, managers, progress and checkpoint recovery |
 | 5 | Evaluation | Repeated matched runs with quality, latency and usage accounting; no unmeasured equivalence claims |
 
-Each stage receives a separate PR into `feat/codex-integration` and a new reviewer
-with no conversation history. Main is not the target of these stage PRs.
+The implementation stages were reviewed in separate PRs into `feat/codex-integration`,
+with fresh reviewers. The complete integration is promoted to `main` in a final PR.
 
 ## Boundaries
 

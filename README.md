@@ -119,7 +119,7 @@ source .venv/bin/activate
 For development, use `uv sync --locked --extra dev`. Installing with `pip install .`
 is also supported, but resolves dependency ranges independently of `uv.lock`.
 See [Codex integration and release status](docs/CODEX-INTEGRATION.md) for backend
-setup, accepted/degraded research outputs, and remaining manual acceptance.
+setup, accepted/degraded research outputs, and acceptance limitations.
 
 ### Docker
 
@@ -176,7 +176,7 @@ python -m cli.main     # alternative: run directly from source
 ```
 You will see a screen where you can select your desired tickers, analysis date, LLM provider, research depth, and more.
 
-On the Codex integration branch, startup offers **API** or **Codex subscription**
+Startup offers **API** or **Codex subscription**
 for the full research workflow. Use `tradingagents --backend api` or
 `tradingagents --backend codex --checkpoint` to select directly. Codex uses your
 separate ChatGPT sign-in, the existing model profiles and local data-provider tools;
