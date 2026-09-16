@@ -16,6 +16,7 @@ from pathlib import Path
 from tradingagents.codex.transport import (
     DEFAULT_TIMEOUT_SECONDS,
     CodexAppServerTransport,
+    TransportClosed,
     TransportError,
     TransportTimeout,
 )
@@ -35,6 +36,40 @@ class CodexSelectionError(CodexAdapterError):
 
 class CodexInferenceError(CodexAdapterError):
     """A Codex turn did not produce a valid text response."""
+
+
+class CodexUsageLimitError(CodexInferenceError):
+    """Stop an unattended batch until subscription capacity is available."""
+
+
+class CodexTransientError(CodexInferenceError):
+    """A bounded checkpoint retry may recover this inference failure."""
+
+
+def _turn_error(error: object) -> CodexAdapterError:
+    """Classify only protocol codes; never expose free-form upstream details."""
+    info = error.get("codexErrorInfo") if isinstance(error, dict) else None
+    if isinstance(info, str):
+        if info in {"usageLimitExceeded", "sessionBudgetExceeded"}:
+            return CodexUsageLimitError("Codex usage limit reached; resume when capacity is available")
+        if info == "unauthorized":
+            return CodexAuthenticationError("Codex authentication is unavailable; sign in again")
+        if info in {"rateLimitExceeded", "serverOverloaded", "internalServerError"}:
+            return CodexTransientError("Codex temporarily unavailable; details redacted")
+    elif isinstance(info, dict) and len(info) == 1:
+        for name in (
+            "httpConnectionFailed", "responseStreamConnectionFailed",
+            "responseStreamDisconnected", "responseTooManyFailedAttempts",
+        ):
+            details = info.get(name)
+            if not isinstance(details, dict):
+                continue
+            status = details.get("httpStatusCode")
+            if type(status) is int and status in {401, 403}:
+                return CodexAuthenticationError("Codex authentication or access is unavailable")
+            if status is None or type(status) is int and (status in {408, 429} or 500 <= status <= 599):
+                return CodexTransientError("Codex connection temporarily unavailable; details redacted")
+    return CodexInferenceError("Codex reported a turn error; details redacted")
 
 
 @dataclass(frozen=True, slots=True)
@@ -817,7 +852,9 @@ class CodexAdapter:
             if isinstance(failure, CodexAdapterError):
                 raise failure
             if isinstance(failure, TransportTimeout):
-                raise CodexInferenceError("Codex inference did not complete before its deadline") from None
+                raise CodexTransientError("Codex inference did not complete before its deadline") from None
+            if isinstance(failure, TransportClosed):
+                raise CodexTransientError("Codex connection closed before inference completed") from None
             if isinstance(failure, TransportError):
                 raise CodexInferenceError(str(failure)) from None
             raise failure
@@ -1059,12 +1096,14 @@ class CodexAdapter:
             elif method == "model/rerouted":
                 raise CodexInferenceError("Codex rerouted the requested model")
             elif method == "error":
-                raise CodexInferenceError("Codex reported a turn error; details redacted")
+                raise _turn_error(params.get("error"))
             elif method == "turn/completed":
                 turn = params.get("turn")
                 if not turn_started or not isinstance(turn, dict):
                     raise CodexInferenceError("Codex emitted an invalid turn completion event")
                 if turn.get("status") != "completed":
+                    if turn.get("error") is not None:
+                        raise _turn_error(turn["error"])
                     raise CodexInferenceError("Codex turn did not complete successfully")
                 if started_items != completed_items:
                     raise CodexInferenceError("Codex completed with unfinished output items")

@@ -182,6 +182,11 @@ for the full research workflow. Use `tradingagents --backend api` or
 separate ChatGPT sign-in, the existing model profiles and local data-provider tools;
 it never falls back to paid API calls. See [Codex setup and rollout](docs/CODEX-INTEGRATION.md).
 
+For unattended watchlist batches, use `python -m cli.weekly --config
+config/weekly-watchlist.json --resume`. The weekly workflow saves recoverable
+per-company reports and prepares Google Docs publication separately. See
+[weekly report setup and recovery](docs/WEEKLY-REPORTS.md).
+
 ### Markets and tickers
 
 TradingAgents works with any market Yahoo Finance covers, using the exchange-suffixed ticker. Company identity and the alpha benchmark resolve automatically per market.

@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "timezone": "America/Los_Angeles",
+  "tickers": [
+    "AMD",
+    "INTC",
+    "NVDA",
+    "AVGO",
+    "TSM"
+  ],
+  "analysts": [
+    "market",
+    "social",
+    "news",
+    "fundamentals"
+  ],
+  "model_profile": "balanced",
+  "output_language": "English",
+  "backend": "codex",
+  "checkpoint_enabled": true,
+  "call_timeout_seconds": 300,
+  "company_timeout_seconds": 1800,
+  "termination_grace_seconds": 5,
+  "transient_retries": 1,
+  "temperature": null,
+  "max_tokens": null,
+  "llm_max_retries": 0,
+  "paths": {
+    "output_root": "../../work/tradingagents/weekly",
+    "cache_dir": "../../work/tradingagents/cache",
+    "memory_log_path": "../../work/tradingagents/weekly-memory/trading_memory.md",
+    "codex_home": "~/.tradingagents/codex"
+  },
+  "credentials": {
+    "fred_keychain_label": "Robinhood Advisor FRED API Key",
+    "fred_keychain_account": "api-key",
+    "alpha_vantage_env": "ALPHA_VANTAGE_API_KEY"
+  },
+  "data_vendors": {
+    "core_stock_apis": "yfinance",
+    "technical_indicators": "yfinance",
+    "fundamental_data": "yfinance",
+    "news_data": "yfinance",
+    "macro_data": "fred",
+    "prediction_markets": "polymarket"
+  },
+  "tool_vendors": {}
+}
