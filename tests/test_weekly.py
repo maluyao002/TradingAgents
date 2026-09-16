@@ -102,6 +102,35 @@ def successful_worker(ticker, analysis_date, _request, state_path):
     }
 
 
+def timezone_worker(ticker, analysis_date, request, state_path):
+    from tradingagents.agents.utils.analysis_time import analysis_calendar
+
+    result = successful_worker(ticker, analysis_date, request, state_path)
+    state = json.loads(Path(state_path).read_text())
+    state["worker_calendar"] = analysis_calendar(analysis_date)
+    write_json(state_path, state)
+    return result
+
+
+def test_batch_timezone_controls_spawn_and_exports_across_dst(tmp_path, monkeypatch):
+    config = _config(tmp_path, tickers=["AMD"])
+    try:
+        with monkeypatch.context() as patch:
+            patch.setenv("TZ", "UTC")
+            time.tzset()
+            path = run_batch(config, batch_id="dst", worker=timezone_worker,
+                             preflight_check=no_preflight, date_provider=lambda _: "2026-03-08")
+            company = read_manifest(path)["companies"]["AMD"]
+            state = json.loads(Path(company["state_path"]).read_text())
+            metadata = json.loads((Path(company["report_dir"]) / "run_metadata.json").read_text())
+            for calendar in (state["worker_calendar"], metadata["analysis_calendar"]):
+                assert calendar["day_start"] == "2026-03-08T00:00:00-08:00"
+                assert calendar["day_end_exclusive"] == "2026-03-09T00:00:00-07:00"
+            assert os.environ["TZ"] == "UTC"
+    finally:
+        time.tzset()
+
+
 def dishonest_quality_worker(ticker, analysis_date, request, state_path):
     result = successful_worker(ticker, analysis_date, request, state_path)
     result["quality"] = {"accepted": True, "signal": "Buy", "reasons": []}

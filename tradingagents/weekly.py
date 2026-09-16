@@ -383,6 +383,22 @@ def _timestamp(timezone: str) -> str:
     return datetime.now(ZoneInfo(timezone)).isoformat(timespec="seconds")
 
 
+@contextmanager
+def _analysis_timezone(timezone: str) -> Iterator[None]:
+    """Pin legacy local-calendar helpers and spawned workers to the batch zone."""
+    previous = os.environ.get("TZ")
+    os.environ["TZ"] = timezone
+    time.tzset()
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = previous
+        time.tzset()
+
+
 def _analysis_date(timezone: str) -> str:
     return datetime.now(ZoneInfo(timezone)).date().isoformat()
 
@@ -986,6 +1002,7 @@ def run_batch(
             manifest = _new_manifest(effective_batch_id, normalized, graph_config)
             _touch_manifest(manifest_path, manifest)
 
+        locks.enter_context(_analysis_timezone(normalized["timezone"]))
         if dry_run:
             manifest["dry_run"] = True
             _touch_manifest(manifest_path, manifest)
