@@ -183,9 +183,9 @@ def _digest_markdown(manifest: dict[str, Any], entries: list[dict[str, Any]], su
         elif not accepted:
             reason = "; ".join(_reason_text(value) for value in entry.get("quality", {}).get("reasons", [])) or "quality gate did not accept this report"
             notes.append(f"- {ticker}: Needs review — {reason}. Read the full report before using it.")
-        elif entry.get("executive_excerpt"):
+        elif not summary and entry.get("executive_excerpt"):
             notes.append(f"## {ticker} executive-summary excerpt\n\n{entry['executive_excerpt']}")
-    return "\n".join(notes + (["", "## Scheduler summary", "", summary] if summary else []) + ["", *rows, ""])
+    return "\n".join(notes + (["", "## Weekly overview", "", summary] if summary else []) + ["", *rows, ""])
 
 
 def _quality(company: dict[str, Any]) -> dict[str, Any]:
