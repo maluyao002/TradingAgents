@@ -41,6 +41,66 @@ def test_quarterly_terminal_flow_is_not_capitalized_as_annual():
         dcf_valuation(replace(model, periods=(model.periods[0], quarterly)))
 
 
+@pytest.mark.parametrize(
+    "periods",
+    [
+        lambda model: (replace(model.periods[0], discount_years=D("0.01")), model.periods[1]),
+        lambda model: (model.periods[0], replace(model.periods[1], discount_years=D("50"))),
+    ],
+)
+def test_discount_timing_must_match_dated_period_ends(periods):
+    model = _model()
+    with pytest.raises(ValuationError, match="dated period-end timing"):
+        replace(model, periods=periods(model))
+
+
+def test_tolerated_discount_timing_rounding_cannot_change_calculation():
+    model = _model()
+    rounded_periods = tuple(
+        replace(period, discount_years=period.discount_years + D("0.001"))
+        for period in model.periods
+    )
+    result = dcf_valuation(replace(model, periods=rounded_periods))
+    assert tuple(item.discount_years for item in result.forecasts) == (D("1"), D("2"))
+    assert tuple(item.discount_factor for item in result.forecasts) == (
+        D("1.10"), D("1.10") ** 2
+    )
+    assert any("dated period ends" in limitation for limitation in result.limitations)
+
+
+@pytest.mark.parametrize(
+    ("as_of", "period_start", "period_end"),
+    [
+        (date(2023, 2, 28), date(2023, 2, 28), date(2024, 2, 29)),
+        (date(2024, 2, 29), date(2024, 2, 29), date(2025, 2, 28)),
+    ],
+)
+def test_month_end_leap_year_anniversaries_are_exact_years(as_of, period_start, period_end):
+    period = _period("FY", period_start, period_end, "1")
+    result = dcf_valuation(replace(_model(), as_of_date=as_of, periods=(period,)))
+    assert result.forecasts[0].discount_years == D("1")
+    assert result.forecasts[0].discount_factor == D("1.10")
+
+
+def test_stub_period_uses_actual_fraction_of_surrounding_calendar_year():
+    with localcontext() as context:
+        context.prec = 40
+        stub_years = D("181") / D("365")
+        second_period_years = D("1") + stub_years
+    periods = (
+        _period("H1 2025", date(2024, 12, 31), date(2025, 6, 30), str(stub_years)),
+        _period(
+            "LTM June 2026",
+            date(2025, 6, 30),
+            date(2026, 6, 30),
+            str(second_period_years),
+        ),
+    )
+    result = dcf_valuation(replace(_model(), periods=periods))
+    assert result.forecasts[0].discount_years == stub_years
+    assert result.forecasts[1].discount_years == second_period_years
+
+
 def _period(
     label: str,
     start: date,

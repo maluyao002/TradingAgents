@@ -7,6 +7,7 @@ here are a foundation for M3, not sector-calibrated models and not investment ad
 
 from __future__ import annotations
 
+import calendar
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import date
@@ -25,6 +26,13 @@ MAX_AMOUNT = Decimal("1e50")
 MAX_RATE = Decimal("10")
 MAX_FORECAST_PERIODS = 50
 MAX_SENSITIVITY_CELLS = 400
+# Supplied timing is an assertion that must agree with the dated schedule.  The
+# fixed tolerance is a 40-digit representation of 2/365 years to accommodate
+# harmless source rounding; calculations use the canonical dated exponent, never
+# the asserted value.
+DISCOUNT_TIME_TOLERANCE = Decimal(
+    "0.005479452054794520547945205479452054795"
+)
 
 MarginBasis = Literal["after_sbc", "before_sbc"]
 ValueBasis = Literal["enterprise_value", "equity_value"]
@@ -98,6 +106,53 @@ def _pow(base: Decimal, exponent: Decimal) -> Decimal:
     return _decimal(result, "compounded value")
 
 
+def _calendar_anniversary(origin: date, years: int) -> date:
+    """Return an end-of-month-preserving calendar anniversary."""
+
+    try:
+        target_year = origin.year + years
+        origin_month_end = calendar.monthrange(origin.year, origin.month)[1]
+        target_month_end = calendar.monthrange(target_year, origin.month)[1]
+        day = target_month_end if origin.day == origin_month_end else min(
+            origin.day, target_month_end
+        )
+        return date(target_year, origin.month, day)
+    except (OverflowError, ValueError) as exc:
+        raise ValuationError("forecast date is outside the supported calendar range") from exc
+
+
+def _period_end_years(as_of_date: date, period_end: date) -> Decimal:
+    """Canonical period-end timing under a calendar-anniversary convention.
+
+    Whole calendar anniversaries are exact integer years.  A stub is the actual
+    number of days since the preceding anniversary divided by the actual number
+    of days to the next anniversary.  Month-end is preserved, so both
+    2023-02-28 -> 2024-02-29 and 2024-02-29 -> 2025-02-28 are exactly one year.
+    """
+
+    if period_end <= as_of_date:
+        raise ValuationError("forecast period end must be after the valuation date")
+    whole_years = period_end.year - as_of_date.year
+    anniversary = _calendar_anniversary(as_of_date, whole_years)
+    if anniversary > period_end:
+        whole_years -= 1
+        anniversary = _calendar_anniversary(as_of_date, whole_years)
+    if anniversary == period_end:
+        return Decimal(whole_years)
+    next_anniversary = _calendar_anniversary(as_of_date, whole_years + 1)
+    elapsed_days = (period_end - anniversary).days
+    anniversary_days = (next_anniversary - anniversary).days
+    if elapsed_days <= 0 or anniversary_days <= 0:
+        raise ValuationError("invalid dated discount period")
+    try:
+        with localcontext() as context:
+            context.prec = 40
+            result = Decimal(whole_years) + Decimal(elapsed_days) / Decimal(anniversary_days)
+    except (DecimalException, OverflowError) as exc:
+        raise ValuationError("dated discount timing is outside the numeric domain") from exc
+    return _decimal(result, "dated discount years")
+
+
 @dataclass(frozen=True, slots=True)
 class ValuationUnits:
     """Explicit bridge from raw model values to currency and share units.
@@ -126,7 +181,12 @@ class ValuationUnits:
 
 @dataclass(frozen=True, slots=True)
 class ForecastPeriod:
-    """One explicit forecast period; growth is for this period, not annualized."""
+    """One explicit forecast period; growth is for this period, not annualized.
+
+    ``discount_years`` asserts period-end timing from the model's ``as_of_date``.
+    FCFF is discounted at the canonical dated period end; mid-year timing is not
+    supported by this foundation model.
+    """
 
     label: str
     period_start: date
@@ -205,6 +265,11 @@ class FCFFModelInput:
             labels.add(period.label)
             if period.period_start < previous_end:
                 raise ValuationError("forecast periods must be ordered and non-overlapping")
+            dated_discount_years = _period_end_years(self.as_of_date, period.period_end)
+            if abs(period.discount_years - dated_discount_years) > DISCOUNT_TIME_TOLERANCE:
+                raise ValuationError(
+                    f"{period.label} discount_years does not match dated period-end timing"
+                )
             if period.discount_years <= previous_discount_years:
                 raise ValuationError("discount_years must strictly increase")
             previous_end = period.period_end
@@ -283,7 +348,10 @@ def forecast_fcff(model: FCFFModelInput) -> tuple[ForecastCashFlow, ...]:
         next_working_capital = revenue * period.working_capital_pct_revenue
         change_in_working_capital = next_working_capital - working_capital
         fcff = nopat + depreciation - capex - change_in_working_capital
-        discount_factor = _pow(ONE + model.discount_rate, period.discount_years)
+        # The supplied exponent is validation metadata.  Always calculate from
+        # dates so tolerated input rounding cannot alter value.
+        discount_years = _period_end_years(model.as_of_date, period.period_end)
+        discount_factor = _pow(ONE + model.discount_rate, discount_years)
         present_value = fcff / discount_factor
         for name, value in (
             ("revenue", revenue),
@@ -305,7 +373,7 @@ def forecast_fcff(model: FCFFModelInput) -> tuple[ForecastCashFlow, ...]:
                 working_capital=next_working_capital,
                 change_in_working_capital=change_in_working_capital,
                 fcff=fcff,
-                discount_years=period.discount_years,
+                discount_years=discount_years,
                 discount_factor=discount_factor,
                 present_value=present_value,
             )
@@ -348,6 +416,8 @@ def dcf_valuation(model: FCFFModelInput) -> DCFResult:
     limitations = (
         "Present equity value uses current diluted shares; future dilution and repurchases are not modeled.",
         "SBC is treated as an economic cost and is not added back to FCFF.",
+        "FCFF and terminal value are discounted at canonical dated period ends; "
+        "mid-year timing is not supported.",
         *model.funding_caveats,
     )
     return DCFResult(
