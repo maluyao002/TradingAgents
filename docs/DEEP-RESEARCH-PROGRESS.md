@@ -165,7 +165,30 @@ startup; decoding failures preserve returned usage. Wire identity is versioned a
 field-drift guards cover the financial dataclasses. Safe schema-error classification
 does not expose upstream prose or authorize retries. Final offline validation:
 **1,639 passed, 2 skipped, 18 existing warnings, 65 subtests passed**. The live
-schema repair remains unverified until an authorized retry.
+schema repair was then exercised in the explicitly authorized one-call diagnostic
+retry described below, but did not produce a completed research response.
+
+The diagnostic retry passed all model preflights and isolation settings, then
+streamed output until **287.74 seconds**, when the adapter raised
+`Codex turn exceeded the notification safety limit`. The exact observed trigger
+was the local `_MAX_TURN_EVENTS = 10_000` cap, which counts text-delta notifications
+alongside lifecycle/control events. It was not a reported subscription quota error
+or the 300-second deadline. The desktop account had 57% weekly allowance remaining
+at the check; this is not asserted to identify the separate runtime account.
+
+Both attempts still lack returned token counters and remain usage-incomplete.
+No further diagnostic call was launched. The original five-second error has no
+retained precise upstream payload, so the schema defect is not retroactively
+declared its proven cause. Final bilingual reports remain ungenerated.
+
+The scoped diagnostic helper retains redacted protocol metadata and permits one
+inference turn under parent supervision. It also preflights configured models.
+After reviewing the diagnostic, token-delta log writes were removed to avoid
+per-token disk overhead in future diagnostics; this change was not exercised by
+a second live call. A completed validated planner reply, if any, is explicitly
+separate from diagnostic logs. Next: redesign the stream/control-event bounds
+while retaining deadline, payload-size and tool-isolation protections, then
+validate before returning to bilingual generation. The production cap is unchanged.
 
 Baseline review also illustrates why the Claude report is not a gold label and
 why reviewers need checks: an initial criticism of its 18.6% EPS premium mistakenly

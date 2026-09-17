@@ -86,9 +86,11 @@ usage blocks subsequent calls. Codex's output-token allowance is advisory here,
 not a hard provider cap; metadata says so, and observed overshoot stops the run.
 
 The September 17 first NVDA pilot attempt failed at the planner provider boundary
-without returned usage counters. It is not successful live validation. See the
-progress log; another live attempt requires separately acknowledged unknown usage,
-preserved failed artifacts and an explicitly bounded retry.
+without returned usage counters. The authorized one-call diagnostic retry streamed
+output but hit the adapter's 10,000-notification guard before completion. Neither
+is successful live validation. See the progress log; preserve both failed attempts
+and their unknown usage. The streaming-event guard needs a bounded redesign before
+another report run; do not simply disable deadline, output-size or tool protections.
 
 ## Artifacts and recovery
 
