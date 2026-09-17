@@ -54,7 +54,7 @@ class BudgetTracker:
 
     def reserve(self, estimated_input_and_max_output: int, *, finalization: bool = False):
         """Atomically reserve a conservative per-call envelope before dispatch."""
-        if isinstance(estimated_input_and_max_output, bool) or estimated_input_and_max_output <= 0:
+        if type(estimated_input_and_max_output) is not int or estimated_input_and_max_output <= 0:
             raise ValueError("a positive per-call token envelope is required")
         with self._lock:
             timeout = self.admit(finalization=finalization,

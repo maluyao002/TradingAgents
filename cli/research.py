@@ -1,7 +1,7 @@
 """Standalone configuration boundary for the opt-in research workflow.
 
-M0 deliberately supports validation only.  It never creates output directories,
-contacts providers, or initializes a model client.
+Dry run supports side-effect-free validation. Execution is explicit offline replay;
+this command never contacts providers or initializes a live model client.
 """
 
 from __future__ import annotations
@@ -16,9 +16,24 @@ from typing import Any
 from pydantic import ValidationError
 
 from tradingagents.research.contracts import ResearchRequest
+from tradingagents.research.engine import run_research
+from tradingagents.research.evidence import load_snapshot
+from tradingagents.research.replay import ReplayModelService, SnapshotEvidenceService
+from tradingagents.research.services import ModelReply, ResearchServices
 from tradingagents.research.storage import read_json
 
 _PATH_FIELDS = ("output_dir", "evidence_path", "prior_dossier_path", "dossier_dir")
+_REPLAY_MINIMUM_RESPONSES = {
+    "planner": 1,
+    "challenger": 2,
+    "business": 1,
+    "accounting": 1,
+    "expectations": 1,
+    "management": 1,
+    "valuation": 1,
+    "verifier": 2,
+    "editor": 1,
+}
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -30,6 +45,11 @@ def _parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="Validate and print a normalized configuration summary without execution.",
+    )
+    parser.add_argument(
+        "--responses",
+        type=Path,
+        help="Frozen replay-response JSON; relative paths are resolved from the caller's cwd.",
     )
     return parser
 
@@ -82,18 +102,80 @@ def safe_summary(request: ResearchRequest) -> dict[str, object]:
     }
 
 
+def load_responses(path: Path) -> dict[str, list[dict[str, object]]]:
+    """Load bounded, strict frozen model replies without exposing malformed input."""
+    try:
+        payload = read_json(path.resolve(), max_bytes=32 * 1024 * 1024)
+    except (OSError, UnicodeError, ValueError):
+        raise ValueError("responses must be a readable bounded JSON object") from None
+    if not isinstance(payload, dict):
+        raise ValueError("responses must be a JSON object")
+
+    normalized: dict[str, list[dict[str, object]]] = {}
+    for role, replies in payload.items():
+        if not isinstance(role, str) or not isinstance(replies, list):
+            raise ValueError("responses must map role names to reply lists")
+        validated = []
+        for reply in replies:
+            try:
+                validated.append(ModelReply.model_validate(reply).model_dump(mode="json"))
+            except ValidationError:
+                raise ValueError("responses contain an invalid model reply") from None
+        normalized[role] = validated
+    if any(
+        len(normalized.get(role, [])) < count for role, count in _REPLAY_MINIMUM_RESPONSES.items()
+    ):
+        raise ValueError("responses do not cover the required initial replay stages")
+    return normalized
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         request = load_request(args.config)
     except (ValidationError, ValueError):
         # Validation errors can contain arbitrary raw input, including secrets.
-        print("research configuration validation failed; check fields, types and cutoff", file=sys.stderr)
+        print(
+            "research configuration validation failed; check fields, types and cutoff",
+            file=sys.stderr,
+        )
         return 2
 
     if args.dry_run:
         print(json.dumps(safe_summary(request), ensure_ascii=False, indent=2, sort_keys=True))
         return 0
+
+    if request.backend == "replay":
+        if args.responses is None:
+            print("replay execution requires --responses frozen JSON", file=sys.stderr)
+            return 2
+        if request.evidence_path is None:  # Defensive: the request contract also enforces this.
+            print("replay execution requires evidence_path", file=sys.stderr)
+            return 2
+        try:
+            responses = load_responses(args.responses)
+            snapshot = load_snapshot(request.evidence_path, request)
+            services = ResearchServices(
+                evidence=SnapshotEvidenceService(snapshot),
+                models=ReplayModelService(responses),
+            )
+            result = run_research(request, services)
+        except (OSError, ValidationError, ValueError):
+            print("offline replay failed; check frozen evidence and responses", file=sys.stderr)
+            return 2
+        print(
+            json.dumps(
+                {
+                    "assessment": result.assessment.status,
+                    "artifacts": result.artifacts,
+                    "stop_reason": result.stop_reason,
+                    "ticker": result.ticker,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+        return 0 if result.stop_reason == "completed_needs_review" else 1
 
     print(
         "live research execution is not yet configured; use --dry-run to validate the request.",

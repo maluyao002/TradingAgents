@@ -1,6 +1,8 @@
 """Standalone M0 CLI contract tests: validation only, with no side effects."""
 
+import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -22,6 +24,66 @@ def run_cli(config: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 def write_config(path: Path, **overrides: object) -> None:
     path.write_text(json.dumps(request_data(**overrides)), encoding="utf-8")
+
+
+def write_evidence(path: Path) -> None:
+    content = "frozen evidence"
+    path.write_text(
+        json.dumps(
+            {
+                "ticker": "AMD",
+                "cutoff": "2026-09-17T12:00:00+00:00",
+                "sources": [
+                    {
+                        "id": "source-1",
+                        "url": "https://example.test/filing",
+                        "title": "Filing",
+                        "publisher": "Issuer",
+                        "retrieved_at": "2026-09-16T12:00:00+00:00",
+                        "published_at": "2026-09-16T12:00:00+00:00",
+                        "content": content,
+                        "content_sha256": hashlib.sha256(content.encode()).hexdigest(),
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def replay_responses() -> dict[str, list[dict[str, object]]]:
+    usage = {"input_tokens": 1, "output_tokens": 1}
+    analysis = {"data": {"summary": "offline"}, "usage": usage}
+    planner = {
+        "data": {
+            "summary": "offline plan",
+            "questions": [
+                {
+                    "id": f"question-{index}",
+                    "question": "Question",
+                    "consequence": "Material",
+                    "resolvability": "high",
+                }
+                for index in range(1, 4)
+            ],
+        },
+        "usage": usage,
+    }
+    return {
+        "planner": [planner],
+        "challenger": [analysis, analysis],
+        "business": [analysis],
+        "accounting": [analysis],
+        "expectations": [analysis],
+        "management": [analysis],
+        "valuation": [{"data": {"model": None, "unsupported_inputs": ["offline"]}, "usage": usage}],
+        "verifier": [
+            {"data": {"reviewed_report": False}, "usage": usage},
+            {"data": {"reviewed_report": True}, "usage": usage},
+        ],
+        "editor": [{"data": {"sections": [{"title": "研究摘要", "text": "合成测试，证据不足。"}],
+                              "limitations": []}, "usage": usage}],
+    }
 
 
 def test_dry_run_prints_normalized_safe_summary_without_creating_paths(tmp_path):
@@ -86,3 +148,59 @@ def test_validation_does_not_echo_secret_or_accept_duplicate_keys(tmp_path):
     assert "SYNTHETIC_PRIVATE_TOKEN" not in result.stderr
     config.write_text('{"ticker":"AMD","ticker":"NVDA"}')
     assert run_cli(config, "--dry-run").returncode == 2
+
+
+def test_offline_replay_uses_frozen_evidence_and_responses(tmp_path):
+    evidence = tmp_path / "evidence.json"
+    responses = tmp_path / "responses.json"
+    config = tmp_path / "request.json"
+    write_evidence(evidence)
+    responses.write_text(json.dumps(replay_responses()), encoding="utf-8")
+    write_config(
+        config,
+        backend="replay",
+        evidence_path="evidence.json",
+        output_dir="offline-output",
+    )
+
+    result = run_cli(config, "--responses", os.path.relpath(responses, Path.cwd()))
+
+    assert result.returncode == 0, result.stderr
+    summary = json.loads(result.stdout)
+    assert summary["ticker"] == "AMD"
+    assert summary["assessment"] == "needs_review"
+    assert (tmp_path / "offline-output" / "result.json").is_file()
+
+
+def test_replay_rejects_invalid_responses_before_creating_output(tmp_path):
+    evidence = tmp_path / "evidence.json"
+    config = tmp_path / "request.json"
+    responses = tmp_path / "responses.json"
+    write_evidence(evidence)
+    responses.write_text("{", encoding="utf-8")
+    write_config(
+        config,
+        backend="replay",
+        evidence_path="evidence.json",
+        output_dir="must-not-exist",
+    )
+
+    result = run_cli(config, "--responses", str(responses))
+
+    assert result.returncode == 2
+    assert "offline replay failed" in result.stderr
+    assert not (tmp_path / "must-not-exist").exists()
+
+
+def test_dry_run_does_not_read_unavailable_replay_responses(tmp_path):
+    evidence = tmp_path / "evidence.json"
+    config = tmp_path / "request.json"
+    write_evidence(evidence)
+    write_config(
+        config, backend="replay", evidence_path="evidence.json", output_dir="must-not-exist"
+    )
+
+    result = run_cli(config, "--dry-run", "--responses", "missing-responses.json")
+
+    assert result.returncode == 0, result.stderr
+    assert not (tmp_path / "must-not-exist").exists()
