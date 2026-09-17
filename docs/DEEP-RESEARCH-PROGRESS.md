@@ -221,6 +221,20 @@ planner/wire/stream validation, not full-pipeline or research-quality acceptance
 Next: an authorized fresh full-engine run, keeping the failed run's unsettled
 checkpoint intact; this diagnostic artifact is not an engine resume checkpoint.
 
+Preflight for the user-authorized full bilingual run found that the successful
+diagnostic was **wire/schema-valid, not engine-semantic-valid**: its findings cite
+generated `C1`-style claim IDs instead of eligible evidence IDs. It also mixes
+Chinese into the English intermediate analysis. No additional inference was made
+to discover this. The original diagnostic is preserved, not relabeled or patched.
+Prompts now explicitly distinguish evidence references from generated record IDs,
+namespace new IDs by stage (avoiding independent-stage collisions), preserve
+question links and use only the current payload language. The planner is scoped
+as a concise plan rather than duplicating a bilingual final report. Diagnostics
+now also enforce evidence eligibility, planner question count, finding/question
+links and unique claim IDs while preserving returned usage on semantic failure.
+Full generation will use `request_final_1.json` / `run_final_1`, with unchanged
+frozen evidence, model settings and budget. Prior failures remain untouched.
+
 Baseline review also illustrates why the Claude report is not a gold label and
 why reviewers need checks: an initial criticism of its 18.6% EPS premium mistakenly
 used Q2 instead of H1; H1 EPS $4.85/$4.09 supports 18.6%. That criticism was withdrawn.

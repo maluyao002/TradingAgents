@@ -4,7 +4,7 @@ import pytest
 
 from scripts import research_diagnostic as diagnostic
 from scripts.research_diagnostic import summarize_event
-from tradingagents.research.contracts import ResearchRequest, Usage
+from tradingagents.research.contracts import EvidenceSnapshot, ResearchRequest, Usage
 from tradingagents.research.services import ModelReply
 
 
@@ -21,7 +21,9 @@ def test_diagnostic_drops_prompt_and_output_fields():
         "method": "item/agentMessage/delta"}
 
 
-@pytest.mark.parametrize("invalid,cleanup_error", [(False, False), (True, False), (False, True)])
+@pytest.mark.parametrize("invalid,cleanup_error", [(False, False), (True, False), (False, True),
+                                                  ("evidence", False), ("questions", False),
+                                                  ("question_link", False), ("duplicate_claim", False)])
 def test_one_inference_and_known_usage_survive_validation_or_cleanup_failure(tmp_path, monkeypatch,
                                                                           invalid, cleanup_error):
     calls = []
@@ -39,11 +41,27 @@ def test_one_inference_and_known_usage_survive_validation_or_cleanup_failure(tmp
 
         def complete(self, role, payload, request):
             calls.append(role)
-            return ModelReply(data={} if invalid else {"summary": "Synthetic planner response"},
-                              usage=Usage(input_tokens=12, output_tokens=3))
+            data = {"summary": "Synthetic planner response", "questions": [
+                {"id": f"q{i}", "question": "Question", "consequence": "Cash flow",
+                 "resolvability": "high"} for i in range(3)]}
+            if invalid is True:
+                data = {}
+            elif invalid == "evidence":
+                data["claims"] = [{"id": "c1", "text": "Claim", "kind": "reported",
+                                   "source_ids": ["INVENTED_SECRET_ID"]}]
+            elif invalid == "questions":
+                data["questions"] = []
+            elif invalid == "question_link":
+                data["findings"] = [{"id": "f1", "question_id": "unknown", "conclusion": "Finding",
+                    "economic_consequence": "Cash flow", "uncertainty": "Missing evidence",
+                    "invalidation": "New data"}]
+            elif invalid == "duplicate_claim":
+                data["claims"] = [{"id": "c1", "text": "Claim", "kind": "reported"}] * 2
+            return ModelReply(data=data, usage=Usage(input_tokens=12, output_tokens=3))
 
     monkeypatch.setattr(diagnostic, "CodexModelService", FakeService)
-    monkeypatch.setattr(diagnostic, "load_snapshot", lambda *args: None)
+    monkeypatch.setattr(diagnostic, "load_snapshot", lambda path, request:
+                        EvidenceSnapshot(ticker=request.ticker, cutoff=request.cutoff))
     monkeypatch.setattr(diagnostic, "_prompt_evidence", lambda *args: {})
     request = ResearchRequest(ticker="TEST", cutoff="2026-09-17T00:00:00Z", backend="codex",
                               output_dir=tmp_path / "diagnostic")
@@ -54,3 +72,5 @@ def test_one_inference_and_known_usage_survive_validation_or_cleanup_failure(tmp
     assert trace["usage"]["input_tokens"] == 12
     assert trace["status"] == ("failed" if invalid or cleanup_error else "succeeded")
     assert "Synthetic planner response" not in json.dumps(trace)
+    assert "INVENTED_SECRET_ID" not in json.dumps(trace)
+    assert (request.output_dir / "planner_reply.json").exists() == (not invalid and not cleanup_error)

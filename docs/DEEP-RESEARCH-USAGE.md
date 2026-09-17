@@ -104,6 +104,14 @@ English/Chinese final reports remain ungenerated. Keep all three attempts separa
 the successful diagnostic neither settles earlier unknown usage nor creates an
 engine checkpoint that can safely resume those failed runs.
 
+Further preflight found that this schema-valid diagnostic used generated claim
+IDs as finding evidence links, which the engine correctly rejects. It also mixed
+languages internally. Prompts now state exact evidence-reference semantics,
+stage-qualified generated IDs and one language per call; the diagnostic now runs
+the engine evidence-ID check plus planner count/link/uniqueness checks. The earlier
+successful diagnostic therefore demonstrates transport/schema success only, not
+engine acceptance. Its original result and usage remain preserved.
+
 ## Artifacts and recovery
 
 Each run writes `reader_report.md`, `audit_report.md`, `evidence.json`, `research.json`,

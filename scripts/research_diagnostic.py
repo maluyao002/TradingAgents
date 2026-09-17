@@ -17,7 +17,7 @@ from pathlib import Path
 from cli.research import load_request
 from tradingagents.codex.adapter import CodexAdapterError
 from tradingagents.research.contracts import Assessment, ResearchResult, Usage
-from tradingagents.research.engine import _prompt_evidence
+from tradingagents.research.engine import _prompt_evidence, _validate_analysis
 from tradingagents.research.evidence import load_snapshot
 from tradingagents.research.models import CodexModelService, _ClosingSafeAdapter
 from tradingagents.research.stages import AnalysisOutput, instruction
@@ -121,7 +121,14 @@ class DiagnosticWorker:
             with CodexModelService(self.home, adapter_factory=ObservedAdapter) as service:
                 reply = service.complete("planner", payload, request)
                 trace["usage"] = reply.usage.model_dump(mode="json")
-            AnalysisOutput.model_validate(reply.data)
+            analysis = _validate_analysis(AnalysisOutput.model_validate(reply.data), snapshot)
+            if not 3 <= len(analysis.questions) <= 5:
+                raise ValueError("planner must supply 3-5 decisive questions")
+            if len({claim.id for claim in analysis.claims}) != len(analysis.claims):
+                raise ValueError("duplicate claim identifiers within a stage")
+            if any(finding.question_id not in {q.id for q in analysis.questions}
+                   for finding in analysis.findings):
+                raise ValueError("finding references an unknown research question")
             trace["status"] = "succeeded"
             atomic_write(directory / "planner_reply.json", canonical_json(reply))
         except Exception as exc:
