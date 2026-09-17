@@ -112,6 +112,13 @@ the engine evidence-ID check plus planner count/link/uniqueness checks. The earl
 successful diagnostic therefore demonstrates transport/schema success only, not
 engine acceptance. Its original result and usage remain preserved.
 
+The subsequent full NVDA run completed six research calls but stopped on a
+provider structured-output schema rejection at valuation. It has 197,067 known
+tokens plus an unknown valuation-call amount; its unsettled checkpoint must not
+be reset for automatic continuation. Valid stages are retained in `run_final_1`,
+but neither English nor Chinese final reports have been generated. See the
+progress log for the required scoped schema diagnostic/recovery next step.
+
 ## Artifacts and recovery
 
 Each run writes `reader_report.md`, `audit_report.md`, `evidence.json`, `research.json`,

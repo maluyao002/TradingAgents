@@ -235,6 +235,29 @@ links and unique claim IDs while preserving returned usage on semantic failure.
 Full generation will use `request_final_1.json` / `run_final_1`, with unchanged
 frozen evidence, model settings and budget. Prior failures remain untouched.
 
+The prompt/diagnostic repair passed **1,682 tests, 2 skips, 18 existing warnings
+and 65 subtests** and was committed as `0e9b1b0`. Independent Terra/medium review
+found no remaining prompt-contract blocker. The authorized full run then completed
+and checkpointed planner, independent challenge, business, accounting, expectations
+and management. It stopped at the valuation provider boundary after **1,148.27
+seconds**, with `CodexStructuredOutputError` (provider schema rejection), not the
+streaming-event guard or a timeout. No English or Chinese final was generated.
+
+Known spend for those six completed calls is **142,599 input + 54,468 output =
+197,067 tokens**, including 17,164 reasoning-output tokens within output. The
+valuation call returned no counters; aggregate usage is incomplete, not zero for
+that call. The unsettled dispatch flag and all valid stages are preserved under
+`reports/NVDA_V2_20260917/run_final_1`. No automatic retry/resume was launched.
+
+Offline inspection confirms the valuation schema differs from the successfully
+used analysis schema: it includes typed dates and Decimal number/string unions
+with Pydantic-generated lookahead patterns. Those are compatibility candidates,
+not a proven exact cause: the retained safe error class does not identify the
+rejected keyword/path. Next is a scoped valuation-schema diagnostic and repair,
+plus explicit recovery that retains the six valid stages and the failed call's
+unknown usage. Do not clear `dispatched`, invent zero usage, or silently rerun the
+entire research pass. Live valuation validation and continuation require direction.
+
 Baseline review also illustrates why the Claude report is not a gold label and
 why reviewers need checks: an initial criticism of its 18.6% EPS premium mistakenly
 used Q2 instead of H1; H1 EPS $4.85/$4.09 supports 18.6%. That criticism was withdrawn.
