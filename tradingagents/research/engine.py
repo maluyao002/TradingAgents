@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 from pydantic import TypeAdapter
 
 from .budget import BudgetExhausted, BudgetTracker
+from .context import pack_evidence
 from .contracts import (
     Assessment,
     Dossier,
@@ -48,8 +49,16 @@ from .valuation import FCFFModelInput, ForecastPeriod, ValuationUnits, dcf_valua
 def _known_ids(snapshot):
     eligible = {source.id for source in snapshot.sources
                 if source.published_at is not None and source.availability == "full_text"}
-    return eligible | {item.id for item in (*snapshot.facts, *snapshot.events)
-                       if item.source_id in eligible} | {
+    fact_ids = set()
+    pending = [fact for fact in snapshot.facts if fact.source_id in eligible]
+    while pending:
+        ready = {fact.id for fact in pending if set(fact.inputs) <= fact_ids}
+        if not ready:
+            break
+        fact_ids.update(ready)
+        pending = [fact for fact in pending if fact.id not in fact_ids]
+    return eligible | fact_ids | {item.id for item in snapshot.events
+                                  if item.source_id in eligible} | {
                            item.id for item in snapshot.expectations
                            if not set(item.source_ids) - eligible}
 
@@ -59,8 +68,11 @@ def _prompt_evidence(snapshot):
     known = _known_ids(snapshot)
     payload = snapshot.model_dump(mode="json")
     for key in ("sources", "facts", "events", "expectations"):
+        original_count = len(payload[key])
         payload[key] = [item for item in payload[key] if item["id"] in known]
-    return payload
+        if len(payload[key]) != original_count:
+            payload["gaps"].append(f"{original_count - len(payload[key])} {key} omitted from model context: ineligible evidence or dependencies.")
+    return pack_evidence(EvidenceSnapshot.model_validate(payload))
 
 
 def _validate_analysis(output: AnalysisOutput, snapshot: EvidenceSnapshot):
@@ -91,7 +103,7 @@ def _calculate(proposal: ValuationProposal, request: ResearchRequest, snapshot):
                 "units.currency", "units.amount_scale", "units.share_scale"}
     for index, period in enumerate(model.periods):
         required.update(f"periods.{index}.{field.name}" for field in fields(period)
-                        if field.name not in {"label", "period_start", "period_end", "discount_years"})
+                        if field.name not in {"label", "discount_years"})
     missing = required - proposal.assumptions.keys()
     if missing or not proposal.evidence_ids:
         return {"status": "unavailable", "limitations": [
@@ -100,6 +112,11 @@ def _calculate(proposal: ValuationProposal, request: ResearchRequest, snapshot):
     if any(set(support.evidence_ids) - known for support in proposal.assumptions.values()):
         raise ValueError("valuation assumptions invented evidence identifiers")
     facts = {fact.id: fact for fact in snapshot.facts if fact.id in known}
+    if proposal.accounting_basis is None:
+        return {"status": "unavailable", "limitations": ["Opening accounting basis is unspecified."]}
+    if snapshot.instrument and model.units.currency != snapshot.instrument.reporting_currency:
+        return {"status": "unavailable", "limitations": ["Model currency differs from reporting currency."]}
+    opening_dates = set()
     opening_metrics = {"current_revenue": "revenue", "current_working_capital": "working_capital",
                        "net_debt": "net_debt", "current_diluted_shares": "diluted_shares"}
     for name, metric in opening_metrics.items():
@@ -107,11 +124,19 @@ def _calculate(proposal: ValuationProposal, request: ResearchRequest, snapshot):
         scale = model.units.share_scale if name == "current_diluted_shares" else model.units.amount_scale
         compatible = [facts[sid] for sid in support.evidence_ids if sid in facts
                       and facts[sid].metric == metric
+                      and facts[sid].basis == proposal.accounting_basis
+                      and 0 <= (model.as_of_date - facts[sid].period_end).days <= 120
+                      and (facts[sid].period_type == "duration" and facts[sid].period_start is not None
+                           and 360 <= (facts[sid].period_end - facts[sid].period_start).days + 1 <= 371
+                           if name == "current_revenue" else facts[sid].period_type == "instant")
                       and (facts[sid].unit == "shares" if name == "current_diluted_shares"
-                           else facts[sid].currency == model.units.currency)]
-        if support.kind != "reported" or not any(
-                fact.normalized_value == getattr(model, name) * scale for fact in compatible):
+                           else facts[sid].currency == facts[sid].unit == model.units.currency)
+                      and facts[sid].normalized_value == getattr(model, name) * scale]
+        if support.kind != "reported" or len(compatible) != 1:
             return {"status": "unavailable", "limitations": [f"Opening input not bound to a matching fact: {name}"]}
+        opening_dates.add(compatible[0].period_end)
+    if len(opening_dates) != 1:
+        return {"status": "unavailable", "limitations": ["Opening facts require a reconciled common period end."]}
     result = dcf_valuation(model)
     return {"status": "illustrative", "result": asdict(result),
             "limitations": [*result.limitations, *proposal.scope_limitations,
@@ -184,6 +209,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 elapsed_seconds=previous.get("elapsed_seconds", 0))
         if previous.get("dispatched"):
             tracker.record(Usage(complete=False))
+        dispatch_unsettled = bool(previous.get("dispatched"))
         usage_by_stage = dict(previous.get("by_stage", {}))
         role_indices = defaultdict(int)
         outputs, reviews = {}, []
@@ -194,13 +220,14 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
         stop_reason = "completed_needs_review"
         failure_type = None
 
-        def save_resources(dispatched=False):
+        def save_resources(dispatched=None):
             store.save_stage("resources", {}, {"usage": tracker.usage.model_dump(mode="json"),
                                                "elapsed_seconds": tracker.elapsed_seconds,
-                                               "dispatched": dispatched,
+                                               "dispatched": dispatch_unsettled if dispatched is None else dispatched,
                                                "by_stage": usage_by_stage})
 
         def call(stage, role, data, schema, finalization=False):
+            nonlocal dispatch_unsettled
             role_index = role_indices[role]
             role_indices[role] += 1
             payload = {**instruction(role, schema), "evidence": _prompt_evidence(snapshot),
@@ -218,20 +245,24 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             # UTF-8 bytes are a conservative input bound, plus an output envelope.
             envelope = len(canonical_json(payload)) + 16_000
             permit = tracker.reserve(envelope, finalization=finalization)
-            save_resources(dispatched=True)
+            dispatch_unsettled = True
+            save_resources()
             try:
                 reply = services.models.complete(role, {**payload,
                     "timeout_seconds": permit.timeout_seconds, "max_output_tokens": 16_000}, request)
                 reply = ModelReply.model_validate(reply)
+                tracker.complete(permit, reply.usage)
+                usage_by_stage.setdefault(stage, []).append({
+                    "role": role, "model": request.models[role].model,
+                    "effort": request.models[role].effort, **reply.usage.model_dump(mode="json")})
+                save_resources(dispatched=False)
+                dispatch_unsettled = False
             except BaseException:
-                tracker.cancel(permit, dispatched=True)
+                tracker.record(Usage(complete=False))
                 save_resources()
                 raise
-            tracker.complete(permit, reply.usage)
-            usage_by_stage.setdefault(stage, []).append({
-                "role": role, "model": request.models[role].model,
-                "effort": request.models[role].effort, **reply.usage.model_dump(mode="json")})
-            save_resources()
+            if not reply.usage.complete:
+                raise BudgetExhausted("usage_incomplete")
             if tracker.usage.total_tokens > request.budget.total_tokens:
                 raise BudgetExhausted("token_budget_exceeded")
             if tracker.elapsed_seconds >= request.budget.wall_seconds:
@@ -265,6 +296,10 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             snapshot = validate_snapshot(snapshot, request)
             store.save_stage("evidence", {}, snapshot.model_dump(mode="json"))
             gaps.extend(snapshot.gaps)
+            if getattr(services.models, "kind", None) == "codex" and not any(
+                    source.id in _known_ids(snapshot) and source.content.strip() for source in snapshot.sources):
+                gaps.append("No eligible source text; live model calls withheld.")
+                raise ValueError("no eligible live evidence")
             prior_data = {"prior_hypotheses": prior.model_dump(mode="json"),
                           "update": describe_update(prior, snapshot)} if prior else {}
             plan = call("planner", "planner", prior_data, AnalysisOutput)
@@ -324,6 +359,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     *(question for role in ("business", "accounting", "expectations", "management")
                       for question in outputs[role].get("followup_questions", []))]))
             gaps.extend(unresolved)
+            gaps.extend(valuation.get("limitations", []))
+            gaps.extend(_prompt_evidence(snapshot).get("context_gaps", []))
             challenge = call("reconcile_challenge", "challenger",
                              {"analyses": outputs, "valuation": valuation}, AnalysisOutput)
             outputs["reconciled_challenge"] = challenge.model_dump(mode="json")
@@ -366,6 +403,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             save_resources()
 
         gaps.extend(item.message for item in reviews if item.severity in {"critical", "warning"})
+        gaps.extend(valuation.get("limitations", []))
         if draft:
             gaps.extend(draft.limitations)
         assessment = Assessment(status="needs_review", findings=tuple(reviews))
@@ -385,6 +423,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 "model_service_kind": getattr(services.models, "kind", "injected"),
                 "usage_measurement": "saved_response_counters" if getattr(services.models, "kind", None)
                 == "replay" else "provider_reported",
+                "hard_output_token_cap": getattr(services.models, "supports_hard_output_cap", False),
                 "report_language": request.report_language, "usage": tracker.usage,
                 "usage_by_stage": usage_by_stage,
                 "total_tokens": tracker.usage.total_tokens, "stop_reason": stop_reason,

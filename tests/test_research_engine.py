@@ -260,18 +260,56 @@ def test_supported_base_inputs_and_all_assumptions_are_required(tmp_path):
     facts = [{"id": name, "source_id": "filing", "metric": metric, "value": value,
               "unit": "shares" if "shares" in name else "USD",
               "currency": None if "shares" in name else "USD", "period_end": "2024-12-31",
-              "basis": "synthetic", "location": "fixture"} for name, (metric, value) in opening.items()]
+              "basis": "US GAAP", "location": "fixture"} for name, (metric, value) in opening.items()]
+    facts[0].update(period_start="2024-01-01", period_type="duration")
     snapshot = EvidenceSnapshot(ticker="TEST", cutoff=request.cutoff, sources=(source,), facts=facts)
     model = _model()
     required = {*opening, "discount_rate", "terminal_growth", "units.currency",
                 "units.amount_scale", "units.share_scale"}
     for i, period in enumerate(model.periods):
         required.update(f"periods.{i}.{field.name}" for field in fields(period)
-                        if field.name not in {"label", "period_start", "period_end", "discount_years"})
+                        if field.name not in {"label", "discount_years"})
     assumptions = {name: {"kind": "reported" if name in opening else "assumption",
                            "rationale": "Synthetic scenario for tests only",
                            "evidence_ids": [name if name in opening else "filing"]} for name in required}
-    proposal = ValuationProposal(model=asdict(model), evidence_ids=("filing",), assumptions=assumptions)
+    proposal = ValuationProposal(model=asdict(model), evidence_ids=("filing",), assumptions=assumptions,
+                                 accounting_basis="US GAAP")
     assert _calculate(proposal, request, snapshot)["status"] == "illustrative"
     changed = proposal.model_copy(update={"model": {**proposal.model, "net_debt": "200"}})
     assert _calculate(changed, request, snapshot)["status"] == "unavailable"
+    stale = snapshot.model_copy(update={"facts": tuple(
+        fact.model_copy(update={"period_end": fact.period_end.replace(year=2010)}) for fact in snapshot.facts)})
+    assert _calculate(proposal, request, stale)["status"] == "unavailable"
+
+
+def test_interruption_after_provider_reply_keeps_unsettled_dispatch(tmp_path, monkeypatch):
+    from tradingagents.research.budget import BudgetTracker
+
+    request, services = setup(tmp_path)
+
+    def interrupt(*args):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(BudgetTracker, "complete", interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        run_research(request, services)
+    monkeypatch.undo()
+    replay = ReplayModelService(replies())
+    result = run_research(request, ResearchServices(services.evidence, replay))
+    assert result.stop_reason == "usage_incomplete"
+    assert not replay.calls
+
+
+def test_valuation_caveats_cannot_be_omitted_by_editor(tmp_path):
+    request, services = setup(tmp_path)
+    run_research(request, services)
+    assert "Synthetic fixture has no financials" in (request.output_dir / "reader_report.md").read_text()
+
+
+def test_live_calls_are_withheld_when_no_eligible_source_text(tmp_path):
+    request, services = setup(tmp_path)
+    services.models.kind = "codex"
+    result = run_research(request, services)
+    assert result.stop_reason == "stage_failed"
+    assert not services.models.calls
+    assert any("live model calls withheld" in gap for gap in result.unresolved_gaps)

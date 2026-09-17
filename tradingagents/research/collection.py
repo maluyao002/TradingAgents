@@ -17,7 +17,7 @@ from .sources import (
     is_exact_sec_archive_filing_url,
     normalize_public_https_url,
 )
-from .storage import parse_json
+from .storage import canonical_json, parse_json
 
 
 class PublicEvidenceCollector:
@@ -38,6 +38,7 @@ class PublicEvidenceCollector:
             "Historical extraction uses filing accession dates; completeness of historical API contents is unproven.",
         ]
         documents = []
+        text_bytes = 0
         by_accession = {}
         discovered = self.sources.discover_sec_filings(instrument.cik, cutoff=request.cutoff)
         if discovered.status == DiscoveryStatus.UNAVAILABLE:
@@ -70,6 +71,11 @@ class PublicEvidenceCollector:
             if not fetched.text or fetched.text_sha256 is None:
                 gaps.append(f"critical: filing full text unavailable: {filing.accession}")
                 continue
+            document_bytes = len(fetched.text.encode("utf-8"))
+            if text_bytes + document_bytes > 16 * 1024 * 1024:
+                gaps.append(f"critical: aggregate source-text limit omitted filing {filing.accession}")
+                continue
+            text_bytes += document_bytes
             identifier = f"sec:{filing.accession}"
             document = SourceDocument(
                 id=identifier,
@@ -138,7 +144,7 @@ class PublicEvidenceCollector:
                 )
         if not facts:
             gaps.append("critical: no eligible normalized financial facts.")
-        return EvidenceSnapshot(
+        snapshot = EvidenceSnapshot(
             ticker=request.ticker,
             cutoff=request.cutoff,
             sources=tuple(documents),
@@ -146,3 +152,6 @@ class PublicEvidenceCollector:
             gaps=tuple(gaps),
             instrument=instrument,
         )
+        if len(canonical_json(snapshot)) > 24 * 1024 * 1024:
+            raise ValueError("collected evidence exceeds snapshot allowance")
+        return snapshot

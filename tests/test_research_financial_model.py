@@ -148,3 +148,23 @@ def test_negative_equity_is_flagged_without_inventing_a_tax_asset():
     )
     assert result.negative_equity and result.balance_reconciles
     assert recovery_cash_tax(D("-150"), D("0")) == D("0")
+
+
+@pytest.mark.parametrize(
+    ("calculation", "message"),
+    [
+        (lambda: fabless_revenue(D("1e18"), D("1e30")), "fabless revenue"),
+        (lambda: foundry_revenue(D("1e18"), D("1"), D("1e30")), "foundry revenue"),
+        (lambda: sum_mixed_segments({"a": D("1e30"), "b": D("1e30")}),
+         "mixed segment revenue"),
+        (
+            lambda: build_one_period(
+                opening(shares=D("1e18")), drivers(shares_issued=D("1e18"))
+            ),
+            "ending_shares",
+        ),
+    ],
+)
+def test_derived_results_cannot_escape_declared_model_bounds(calculation, message):
+    with pytest.raises(FinancialModelError, match=message):
+        calculation()

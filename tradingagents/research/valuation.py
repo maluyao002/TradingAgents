@@ -263,8 +263,10 @@ class FCFFModelInput:
             if period.label in labels:
                 raise ValuationError("forecast period labels must be unique")
             labels.add(period.label)
-            if period.period_start < previous_end:
-                raise ValuationError("forecast periods must be ordered and non-overlapping")
+            if period.period_start != previous_end:
+                raise ValuationError(
+                    "forecast periods must start at as_of_date and remain contiguous"
+                )
             dated_discount_years = _period_end_years(self.as_of_date, period.period_end)
             if abs(period.discount_years - dated_discount_years) > DISCOUNT_TIME_TOLERANCE:
                 raise ValuationError(

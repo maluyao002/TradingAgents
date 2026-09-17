@@ -44,6 +44,7 @@ class AssumptionSupport(Contract):
 
 class ValuationProposal(Contract):
     model: dict[str, Any] | None = None
+    accounting_basis: Literal["US GAAP", "IFRS"] | None = None
     assumption_rationale: dict[str, str] = Field(default_factory=dict)
     assumptions: dict[str, AssumptionSupport] = Field(default_factory=dict)
     evidence_ids: tuple[str, ...] = ()

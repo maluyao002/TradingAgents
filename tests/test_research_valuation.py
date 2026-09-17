@@ -101,6 +101,25 @@ def test_stub_period_uses_actual_fraction_of_surrounding_calendar_year():
     assert result.forecasts[1].discount_years == second_period_years
 
 
+@pytest.mark.parametrize(
+    "periods",
+    [
+        lambda model: (
+            replace(model.periods[0], period_start=date(2025, 1, 31)),
+            model.periods[1],
+        ),
+        lambda model: (
+            model.periods[0],
+            replace(model.periods[1], period_start=date(2026, 1, 31)),
+        ),
+    ],
+)
+def test_forecast_periods_reject_implicit_initial_and_interperiod_gaps(periods):
+    model = _model()
+    with pytest.raises(ValuationError, match="start at as_of_date and remain contiguous"):
+        replace(model, periods=periods(model))
+
+
 def _period(
     label: str,
     start: date,

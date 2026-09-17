@@ -220,9 +220,12 @@ def build_one_period(opening: OpeningBalance, drivers: PeriodDrivers) -> PeriodR
         ("accounting_cfo", accounting_cfo),
         ("economic_fcff", economic_fcff),
         ("ending_cash", ending_cash),
+        ("ending_net_ppe", ending_ppe),
+        ("ending_debt", ending_debt),
         ("ending_equity", ending_equity),
     ):
         _decimal(value, name)
+    _units(ending_shares, "ending_shares")
     for name, value in (
         ("ending_assets", ending_assets),
         ("ending_liabilities", ending_liabilities),
@@ -251,9 +254,10 @@ def fabless_revenue(units_sold: Decimal, average_selling_price: Decimal) -> Deci
     """Explicit product mechanics: units sold times ASP, with no demand inference."""
     with localcontext() as context:
         context.prec = 40
-        return _units(units_sold, "units_sold") * _decimal(
+        result = _units(units_sold, "units_sold") * _decimal(
             average_selling_price, "average_selling_price", allow_negative=False
         )
+    return _decimal(result, "fabless revenue", allow_negative=False)
 
 
 def foundry_revenue(
@@ -266,7 +270,10 @@ def foundry_revenue(
         raise FinancialModelError("utilization must be between 0 and 1")
     with localcontext() as context:
         context.prec = 40
-        return capacity * utilization * _decimal(wafer_price, "wafer_price", allow_negative=False)
+        result = capacity * utilization * _decimal(
+            wafer_price, "wafer_price", allow_negative=False
+        )
+    return _decimal(result, "foundry revenue", allow_negative=False)
 
 
 def recovery_cash_tax(pre_tax_income: Decimal, cash_tax: Decimal) -> Decimal:
@@ -279,10 +286,10 @@ def sum_mixed_segments(segments: Mapping[str, Decimal]) -> Decimal:
     """Sum explicitly named segments; valuation weighting is deliberately unsupported."""
     if not segments or any(not isinstance(name, str) or not name.strip() for name in segments):
         raise FinancialModelError("mixed business requires explicitly named segments")
-    return sum(
-        (
+    with localcontext() as context:
+        context.prec = 40
+        result = sum(
             _decimal(value, f"segment {name}", allow_negative=False)
             for name, value in segments.items()
-        ),
-        ZERO,
-    )
+        )
+    return _decimal(result, "mixed segment revenue", allow_negative=False)
