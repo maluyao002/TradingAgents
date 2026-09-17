@@ -101,6 +101,16 @@ placeholders such as `{{fact:revenue-id}}` are rendered by code before final rev
 including the distinction between billion and 亿. This is not a language-cost
 benchmark; live language comparisons remain an explicit later experiment.
 
+For paired final reports from one analysis, set `report_language: "English"` and
+`additional_report_languages: ["Chinese"]` (or reverse them). The additional
+editor translates the verified primary draft; a separate verifier checks it
+against the original and the shared evidence. Specialist research is not rerun.
+Both finalization calls share the same budget and durable usage ledger. Successful
+pairs add `reader_report_en.md` and `reader_report_zh.md`; `reader_report.md` remains
+the primary language. A failed translation/review is withheld and the run is not
+marked complete. This paired export measures incremental finalization usage, not
+the cost of researching independently in Chinese versus English.
+
 ## Service integration and limits
 
 `run_research(request, ResearchServices(...))` accepts evidence, model and optional

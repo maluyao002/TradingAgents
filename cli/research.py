@@ -98,6 +98,7 @@ def safe_summary(request: ResearchRequest) -> dict[str, object]:
         if request.prior_dossier_path
         else None,
         "report_language": request.report_language,
+        "additional_report_languages": list(request.additional_report_languages),
         "return_months": request.return_months,
         "schema_version": request.schema_version,
         "source_policy": request.source_policy,

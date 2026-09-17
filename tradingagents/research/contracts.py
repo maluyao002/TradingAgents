@@ -22,6 +22,7 @@ from pydantic import (
 Identifier = Annotated[str, Field(min_length=1, max_length=128, pattern=r"^[\w.:/-]+$")]
 NonnegativeInt = Annotated[StrictInt, Field(ge=0)]
 Severity = Literal["info", "warning", "critical"]
+ReportLanguage = Literal["English", "Chinese"]
 
 
 class Contract(BaseModel):
@@ -94,8 +95,9 @@ class ResearchRequest(Contract):
     mandate: str = "Long-term fundamental company research"
     valuation_months: Annotated[StrictInt, Field(gt=0)] = 12
     return_months: Annotated[StrictInt, Field(gt=0)] = 36
-    internal_language: Literal["English", "Chinese"] = "English"
-    report_language: Literal["English", "Chinese"] = "Chinese"
+    internal_language: ReportLanguage = "English"
+    report_language: ReportLanguage = "Chinese"
+    additional_report_languages: tuple[ReportLanguage, ...] = ()
     source_policy: Literal["public_first"] = "public_first"
     models: dict[str, ModelSetting] = Field(default_factory=default_roles)
     budget: Budget = Field(default_factory=Budget)
@@ -119,6 +121,12 @@ class ResearchRequest(Contract):
             raise ValueError("explicit assignments required for every research role")
         if self.backend == "replay" and self.evidence_path is None:
             raise ValueError("replay requires a frozen evidence snapshot")
+        if len(set(self.additional_report_languages)) != len(self.additional_report_languages):
+            raise ValueError("additional report languages must be unique")
+        if self.report_language in self.additional_report_languages:
+            raise ValueError("primary report language cannot be repeated")
+        if len(self.additional_report_languages) > 1:
+            raise ValueError("at most one additional report language is supported")
         return self
 
 

@@ -21,6 +21,7 @@ from .contracts import (
     Assessment,
     Dossier,
     EvidenceSnapshot,
+    ReportLanguage,
     ResearchRequest,
     ResearchResult,
     Usage,
@@ -44,6 +45,20 @@ from .storage import (
 )
 from .updates import describe_update, eligible_prior
 from .valuation import FCFFModelInput, ForecastPeriod, ValuationUnits, dcf_valuation
+
+_REPORT_FILENAMES = {"English": "reader_report_en.md", "Chinese": "reader_report_zh.md"}
+
+
+def _required_artifacts(request: ResearchRequest):
+    required = {"reader_report.md", "audit_report.md", "evidence.json", "research.json",
+                "valuation_inputs.json", "valuation_results.json", "quality.json",
+                "run_metadata.json"}
+    if request.additional_report_languages:
+        required.update(_REPORT_FILENAMES[language] for language in (
+            request.report_language, *request.additional_report_languages))
+    if request.dossier_dir:
+        required.add("dossier.json")
+    return required
 
 
 def _known_ids(snapshot):
@@ -143,8 +158,9 @@ def _calculate(proposal: ValuationProposal, request: ResearchRequest, snapshot):
                             "Sector schedules and source-linked assumptions need independent review."]}
 
 
-def _report(request, draft, snapshot, gaps):
-    chinese = request.report_language == "Chinese"
+def _report(request, draft, snapshot, gaps, language: ReportLanguage | None = None):
+    language = language or request.report_language
+    chinese = language == "Chinese"
     title = "深度研究报告" if chinese else "Deep research report"
     status = "需要复核 / 未评级" if chinese else "Needs review / Unrated"
     text = [f"# {request.ticker} — {title}", f"\n{status}",
@@ -161,7 +177,8 @@ def _report(request, draft, snapshot, gaps):
                 body = body.replace(f"[{sid}]", f"[{number[sid]}]")
             text.append(f"\n## {section.title}\n\n{body}")
     text.append("\n## 重要限制 / Material limitations\n")
-    text.extend(f"- {gap}" for gap in dict.fromkeys(gaps))
+    limitations = (*gaps, *(draft.limitations if draft else ()))
+    text.extend(f"- {gap}" for gap in dict.fromkeys(limitations))
     text.append("\n## 来源 / Sources\n")
     text.extend(f"{number[sid]}. {source.title} — {source.url}"
                 for sid, source in sources.items())
@@ -186,11 +203,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
         if result_path.exists():
             saved_result = ResearchResult.model_validate(read_json(result_path))
             if saved_result.stop_reason == "completed_needs_review":
-                required = {"reader_report.md", "audit_report.md", "evidence.json", "research.json",
-                            "valuation_inputs.json", "valuation_results.json", "quality.json",
-                            "run_metadata.json"}
-                if request.dossier_dir:
-                    required.add("dossier.json")
+                required = _required_artifacts(request)
                 if (saved_result.ticker != request.ticker or saved_result.cutoff != request.cutoff
                         or not required <= saved_result.artifacts.keys()
                         or store.load_stage("completed-result", {}) != saved_result.model_dump(mode="json")):
@@ -215,7 +228,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
         outputs, reviews = {}, []
         gaps = ["V2 source coverage and company-specific model acceptance remain pending."]
         snapshot = EvidenceSnapshot(ticker=request.ticker, cutoff=request.cutoff)
-        draft, valuation = None, {"status": "unavailable"}
+        draft, drafts, valuation = None, {}, {"status": "unavailable"}
         proposal = ValuationProposal(unsupported_inputs=("valuation has not completed",))
         stop_reason = "completed_needs_review"
         failure_type = None
@@ -226,7 +239,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                                "dispatched": dispatch_unsettled if dispatched is None else dispatched,
                                                "by_stage": usage_by_stage})
 
-        def call(stage, role, data, schema, finalization=False):
+        def call(stage, role, data, schema, finalization=False, language=None):
             nonlocal dispatch_unsettled
             role_index = role_indices[role]
             role_indices[role] += 1
@@ -235,8 +248,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                        "mandate": request.mandate, "stage": stage, "role_call_index": role_index,
                        "valuation_months": request.valuation_months,
                        "return_months": request.return_months,
-                       "language": request.report_language if role == "editor"
-                       else request.internal_language}
+                       "language": language or request.internal_language}
             if role == "valuation":
                 payload["financial_model_schema"] = TypeAdapter(FCFFModelInput).json_schema()
             cached = store.load_stage(stage, payload)
@@ -284,6 +296,26 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                         raise ValueError("ambiguous claim identifier across stages")
             store.save_stage(stage, payload, output.model_dump(mode="json"))
             return output
+
+        def prepare_draft(candidate, language):
+            if any(set(section.evidence_ids) - _known_ids(snapshot)
+                   for section in candidate.sections):
+                raise ValueError("draft invented evidence identifiers")
+            eligible_facts = tuple(fact for fact in snapshot.facts
+                                   if fact.id in _known_ids(snapshot))
+            return candidate.model_copy(update={"sections": tuple(
+                section.model_copy(update={"text": render_references(
+                    section.text, eligible_facts, language)})
+                for section in candidate.sections)})
+
+        def validate_translation(source, translated):
+            if (translated.investment_view != source.investment_view
+                    or len(translated.sections) != len(source.sections)
+                    or len(translated.limitations) != len(source.limitations)
+                    or any(translated_section.evidence_ids != source_section.evidence_ids
+                           for source_section, translated_section
+                           in zip(source.sections, translated.sections, strict=True))):
+                raise ValueError("translated draft changed report structure or evidence links")
 
         try:
             cached_evidence = store.load_stage("evidence", {})
@@ -375,14 +407,10 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 raise ValueError("verifier supplied conflicting claim decisions")
             missing = claim_ids - set(review.supported_claim_ids)
             gaps.extend(f"Unverified claim: {identifier}" for identifier in sorted(missing))
-            draft = call("editor", "editor", {"analyses": outputs, "limitations": gaps,
-                                                "valuation": valuation}, ReportDraft, True)
-            if any(set(section.evidence_ids) - _known_ids(snapshot) for section in draft.sections):
-                raise ValueError("draft invented evidence identifiers")
-            eligible_facts = tuple(fact for fact in snapshot.facts if fact.id in _known_ids(snapshot))
-            draft = draft.model_copy(update={"sections": tuple(
-                section.model_copy(update={"text": render_references(
-                    section.text, eligible_facts, request.report_language)}) for section in draft.sections)})
+            editor_data = {"analyses": outputs, "limitations": gaps, "valuation": valuation}
+            source_draft = call("editor", "editor", editor_data, ReportDraft, True,
+                                language=request.report_language)
+            draft = prepare_draft(source_draft, request.report_language)
             final_review = call("verify_report", "verifier",
                                 {"draft": draft.model_dump(mode="json"), "analyses": outputs,
                                  "valuation": valuation}, VerificationOutput, True)
@@ -393,21 +421,57 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 draft = None
                 stop_reason = "verification_failed"
                 gaps.append("Reader draft withheld because final verification did not pass.")
+            else:
+                drafts[request.report_language] = draft
+                translation_requirements = {
+                    "mode": "faithful_translation",
+                    "preserve": ["claims", "numbers", "limitations", "investment_view",
+                                 "section_evidence_ids"],
+                    "structure": ["same_section_count_and_order",
+                                  "same_limitation_count_and_order",
+                                  "same_evidence_ids_order_per_section"],
+                }
+                for language in request.additional_report_languages:
+                    translation_data = {
+                        **editor_data,
+                        "source_verified_draft": draft.model_dump(mode="json"),
+                        "source_draft_with_placeholders": source_draft.model_dump(mode="json"),
+                        "translation_requirements": translation_requirements,
+                    }
+                    translated = call(f"editor-{language.lower()}", "editor", translation_data,
+                                      ReportDraft, True, language=language)
+                    validate_translation(draft, translated)
+                    translated = prepare_draft(translated, language)
+                    translated_review = call(
+                        f"verify-report-{language.lower()}", "verifier",
+                        {"draft": translated.model_dump(mode="json"),
+                         "source_verified_draft": draft.model_dump(mode="json"),
+                         "source_draft_with_placeholders": source_draft.model_dump(mode="json"),
+                         "translation_requirements": translation_requirements,
+                         "analyses": outputs, "valuation": valuation},
+                        VerificationOutput, True)
+                    reviews.extend(translated_review.findings)
+                    if not translated_review.reviewed_report or any(
+                            item.severity == "critical"
+                            for item in translated_review.findings):
+                        stop_reason = "verification_failed"
+                        gaps.append(f"{language} reader draft withheld because final verification "
+                                    "did not pass.")
+                        break
+                    drafts[language] = translated
         except Exception as exc:
             # Do not emit provider errors or arbitrary validation inputs into reports.
             stop_reason = str(exc) if isinstance(exc, BudgetExhausted) else "stage_failed"
             failure_type = type(exc).__name__
             gaps.append(f"Research stopped: {stop_reason}; inspect saved valid stages.")
-            draft = None
         finally:
             save_resources()
 
         gaps.extend(item.message for item in reviews if item.severity in {"critical", "warning"})
         gaps.extend(valuation.get("limitations", []))
-        if draft:
-            gaps.extend(draft.limitations)
         assessment = Assessment(status="needs_review", findings=tuple(reviews))
-        reader = _report(request, draft, snapshot, gaps)
+        primary_draft = drafts.get(request.report_language)
+        reader = _report(request, primary_draft, snapshot, gaps, request.report_language)
         artifacts = {
             "reader_report.md": reader.encode("utf-8"),
             "audit_report.md": ("# Research audit\n\n```json\n"
@@ -430,8 +494,15 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 "failure_type": failure_type,
                 "elapsed_seconds": tracker.elapsed_seconds, "production_accepted": False}),
         }
+        if request.additional_report_languages:
+            for language, completed_draft in drafts.items():
+                artifacts[_REPORT_FILENAMES[language]] = _report(
+                    request, completed_draft, snapshot, gaps, language).encode("utf-8")
         artifacts["run_metadata.json"] = canonical_json({
-            **parse_json(artifacts["run_metadata.json"]), "update": describe_update(prior, snapshot)})
+            **parse_json(artifacts["run_metadata.json"]),
+            **({"additional_report_languages": request.additional_report_languages}
+               if request.additional_report_languages else {}),
+            "update": describe_update(prior, snapshot)})
         if request.dossier_dir is not None:
             created = datetime.now(timezone.utc)
             if created < request.cutoff:

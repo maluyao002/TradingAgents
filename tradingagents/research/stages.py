@@ -102,7 +102,9 @@ ROLE_INSTRUCTIONS = {
     "verifier": "Verify cited evidence actually supports each material claim's scope, period, "
                 "unit and causal wording. Check the draft if supplied. Unsupported is not "
                 "verified. Return IDs explicitly covered and critical issues; never override "
-                "deterministic checks. A citation existing alone is not evidence of entailment.",
+                "deterministic checks. A citation existing alone is not evidence of entailment. "
+                "When a source_verified_draft is supplied, also verify that its translation "
+                "preserves every claim, number, limitation, investment view and evidence link.",
     "editor": "Author one coherent deep investment report in the requested report language. "
               "Explain the central disagreement, business and financial drivers, expectations, "
               "management, counter-thesis and decisive unknowns. Preserve ALL supplied material "
@@ -110,6 +112,11 @@ ROLE_INSTRUCTIONS = {
               "Insert financial facts with {{fact:FACT_ID}} placeholders; code renders their "
               "values and units before final verification. Never convert billion to 亿 yourself. "
               "Use only supplied evidence IDs, readable headings and concise paragraphs. "
+              "When source_verified_draft is supplied, translate it faithfully without adding, "
+              "removing or changing claims, numbers, limitations, evidence links or investment view. "
+              "Keep the same section count and order, limitation count and order, and evidence_ids "
+              "order within every section; use source_draft_with_placeholders to retain matching "
+              "financial fact placeholders for language-specific deterministic rendering. "
               "No trading instructions, tactical signals, sizing, stops or scheduling.",
 }
 
