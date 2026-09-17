@@ -5,6 +5,15 @@ interactive CLI. It has no broker integration and never falls back from Codex to
 an API provider. Publishing is a separate, resumable step performed through the
 connected Google Drive tools in Codex; the Python code has no Google credentials.
 
+## Planned deep-research engine
+
+The proposed [Deep Research V2 design](DEEP-RESEARCH-DESIGN.md) and
+[implementation plan](DEEP-RESEARCH-PLAN.md) separate report research from trading
+and application orchestration. Weekly scheduling and publication would consume
+the new engine through an external adapter; they are not part of its core.
+These documents describe planned work, not current behavior. The runner,
+configuration, schedules, and publication instructions below remain unchanged.
+
 ## Run locally
 
 From the repository with its locked environment installed:
@@ -113,3 +122,14 @@ Enable scheduling only after an unattended AMD/INTC pilot, a full watchlist run,
 and a verified Drive publication have succeeded. Offline tests verify failure
 handling and report conversion; they do not prove provider availability or model
 research quality.
+
+## TODO
+
+- [ ] Systematically compare Chinese token consumption against English and
+  final-report-only translation. First persist the analysis and publication
+  languages in `run_metadata.json`, then run paired benchmarks with the same
+  ticker, saved evidence snapshot, model profile, debate rounds, and report
+  requirements. Compare input, output, reasoning, cached-input, and total tokens
+  by role and model, along with elapsed time and research-quality results. Use
+  repeated trials before choosing between end-to-end Chinese generation and an
+  English canonical report followed by Chinese publication translation.
