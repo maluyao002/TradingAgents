@@ -10,7 +10,7 @@ import hashlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Context, Decimal, Inexact, InvalidOperation, localcontext
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -24,6 +24,7 @@ from tradingagents.research.contracts import (
     ResearchRequest,
     SourceDocument,
 )
+from tradingagents.research.sources import is_exact_sec_archive_filing_url
 from tradingagents.research.storage import read_json
 
 _AWARE_DATETIME = TypeAdapter(AwareDatetime)
@@ -44,6 +45,7 @@ _METRICS: dict[str, tuple[str, ...]] = {
     ),
 }
 _BASIS_BY_NAMESPACE = {"us-gaap": "US GAAP", "ifrs-full": "IFRS"}
+_DERIVED_DECIMAL_PRECISION = 50
 
 
 @dataclass(frozen=True)
@@ -69,23 +71,17 @@ def _critical(message: str) -> str:
     return f"critical: {message}"
 
 
-def load_snapshot(path: Path, request: ResearchRequest) -> EvidenceSnapshot:
-    """Load an immutable JSON snapshot and remove point-in-time-ineligible records.
+def validate_snapshot(snapshot: EvidenceSnapshot, request: ResearchRequest) -> EvidenceSnapshot:
+    """Apply identity and point-in-time policy to a validated snapshot.
 
-    Contract validation fail-closes known future publications, future facts, and
-    historical facts or expectations attached to unknown-publication sources.
-    Unknown-publication sources may remain as metadata only.
+    Mutable content retrieved after the cutoff is rejected.  A later retrieval is
+    allowed only for an accession-bound SEC filing at its exact public archive
+    path.  Unknown-publication sources remain metadata with explicit gaps, while
+    their dependent facts, events, and expectations are removed.
     """
     try:
-        payload = read_json(path)
-    except (OSError, UnicodeError, ValueError):
-        raise ValueError("evidence snapshot must be readable bounded JSON") from None
-    if not isinstance(payload, dict):
-        raise ValueError("evidence snapshot must be a JSON object")
-
-    try:
-        snapshot = EvidenceSnapshot.model_validate(payload)
-    except ValidationError as exc:
+        snapshot = EvidenceSnapshot.model_validate_json(snapshot.model_dump_json())
+    except (TypeError, ValueError, ValidationError) as exc:
         raise ValueError(f"evidence snapshot contract validation failed: {exc}") from exc
     if snapshot.ticker != request.ticker:
         raise ValueError("evidence snapshot ticker must exactly match the request")
@@ -106,6 +102,18 @@ def load_snapshot(path: Path, request: ResearchRequest) -> EvidenceSnapshot:
     for source in snapshot.sources:
         if source.content_sha256 != _content_hash(source.content):
             raise ValueError(f"source content hash mismatch: {source.id}")
+        immutable_sec_filing = bool(
+            request.instrument is not None
+            and source.kind == "filing"
+            and source.accession is not None
+            and is_exact_sec_archive_filing_url(
+                source.url,
+                cik=request.instrument.cik,
+                accession=source.accession,
+            )
+        )
+        if source.retrieved_at > request.cutoff and not immutable_sec_filing:
+            raise ValueError(f"mutable source was retrieved after the evidence cutoff: {source.id}")
         if source.published_at is None:
             ineligible_source_ids.add(source.id)
             gaps.append(_critical(f"source {source.id} has unknown publication time"))
@@ -147,6 +155,23 @@ def load_snapshot(path: Path, request: ResearchRequest) -> EvidenceSnapshot:
         gaps=tuple(dict.fromkeys(gaps)),
         instrument=snapshot.instrument,
     )
+
+
+def load_snapshot(path: Path, request: ResearchRequest) -> EvidenceSnapshot:
+    """Load bounded JSON, validate its contract, then apply point-in-time policy."""
+
+    try:
+        payload = read_json(path)
+    except (OSError, UnicodeError, ValueError):
+        raise ValueError("evidence snapshot must be readable bounded JSON") from None
+    if not isinstance(payload, dict):
+        raise ValueError("evidence snapshot must be a JSON object")
+
+    try:
+        snapshot = EvidenceSnapshot.model_validate(payload)
+    except ValidationError as exc:
+        raise ValueError(f"evidence snapshot contract validation failed: {exc}") from exc
+    return validate_snapshot(snapshot, request)
 
 
 def _accession_source(
@@ -280,11 +305,19 @@ def derive_quarter(current_ytd: FinancialFact, previous_ytd: FinancialFact) -> F
     identifier = (
         "derived:" + hashlib.sha256(f"{current_ytd.id}\x00{previous_ytd.id}".encode()).hexdigest()
     )
+    try:
+        with localcontext(Context(prec=_DERIVED_DECIMAL_PRECISION)) as context:
+            context.traps[Inexact] = True
+            derived_value = current_ytd.value - previous_ytd.value
+    except Inexact as exc:
+        raise ValueError(
+            f"derived quarter exceeds {_DERIVED_DECIMAL_PRECISION}-digit precision"
+        ) from exc
     return FinancialFact(
         id=identifier,
         source_id=current_ytd.source_id,
         metric=current_ytd.metric,
-        value=current_ytd.value - previous_ytd.value,
+        value=derived_value,
         unit=current_ytd.unit,
         currency=current_ytd.currency,
         scale=current_ytd.scale,
@@ -328,11 +361,12 @@ def normalize_news(
     if limit is not None and limit < 0:
         raise ValueError("limit must be nonnegative")
 
-    eligible: list[tuple[Mapping[str, Any], str, datetime]] = []
+    eligible: list[tuple[Mapping[str, Any], str, datetime, datetime]] = []
     gaps: list[str] = []
     for record in records:
         entities = record.get("entities")
         published_at = _news_datetime(record.get("published_at"))
+        retrieved_at = _news_datetime(record.get("retrieved_at"))
         origin = _news_origin(record)
         if (
             not isinstance(entities, Sequence)
@@ -348,9 +382,18 @@ def normalize_news(
             continue
         if published_at > cutoff:
             continue
-        eligible.append((record, origin, published_at))
+        if retrieved_at is None:
+            gaps.append(_critical(f"news origin {origin} has unknown retrieval time"))
+            continue
+        if retrieved_at > cutoff:
+            gaps.append(_critical(f"news origin {origin} was retrieved after the cutoff"))
+            continue
+        if retrieved_at < published_at:
+            gaps.append(_critical(f"news origin {origin} was retrieved before publication"))
+            continue
+        eligible.append((record, origin, published_at, retrieved_at))
 
-    unique: list[tuple[Mapping[str, Any], str, datetime]] = []
+    unique: list[tuple[Mapping[str, Any], str, datetime, datetime]] = []
     origins: set[str] = set()
     for item in eligible:
         if item[1] not in origins:
@@ -361,7 +404,7 @@ def normalize_news(
 
     sources: list[SourceDocument] = []
     events: list[ResearchEvent] = []
-    for index, (record, origin, published_at) in enumerate(unique, start=1):
+    for index, (record, origin, published_at, retrieved_at) in enumerate(unique, start=1):
         url = record.get("url")
         if not isinstance(url, str) or not url:
             gaps.append(_critical(f"news origin {origin} lacks a URL"))
@@ -374,7 +417,7 @@ def normalize_news(
             url=url,
             title=str(record.get("title") or "Untitled news item"),
             publisher=str(record.get("publisher") or "Unknown publisher"),
-            retrieved_at=_news_datetime(record.get("retrieved_at")) or published_at,
+            retrieved_at=retrieved_at,
             published_at=published_at,
             content=content,
             content_sha256=_content_hash(content),

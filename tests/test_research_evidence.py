@@ -3,7 +3,7 @@
 import hashlib
 import json
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, localcontext
 
 import pytest
 
@@ -19,6 +19,7 @@ from tradingagents.research.evidence import (
     load_snapshot,
     normalize_company_facts,
     normalize_news,
+    validate_snapshot,
 )
 
 CUTOFF = "2026-09-17T12:00:00+00:00"
@@ -136,6 +137,60 @@ def test_load_snapshot_blocks_cutoff_leakage_and_marks_unknown_publication_sourc
     path.write_text(json.dumps(future_expectation), encoding="utf-8")
     with pytest.raises(ValueError, match="expectation is after"):
         load_snapshot(path, request())
+
+
+def test_validate_snapshot_rejects_late_mutable_content_but_allows_exact_sec_archive() -> None:
+    mutable = source(
+        id="late-news",
+        kind="news",
+        published_at="2026-09-16T12:00:00Z",
+        retrieved_at="2026-09-18T12:00:00Z",
+    )
+    with pytest.raises(ValueError, match="retrieved after"):
+        validate_snapshot(
+            EvidenceSnapshot(ticker="AMD", cutoff=CUTOFF, sources=[mutable]), request()
+        )
+
+    instrument = {
+        "issuer": "AMD",
+        "cik": "0000002488",
+        "exchange": "NASDAQ",
+        "share_class": "common",
+        "quote_currency": "USD",
+        "reporting_currency": "USD",
+        "identity_source": "issuer filing",
+    }
+    accession = "0000002488-26-000001"
+    filing = source(
+        id="sec-filing",
+        url=("https://www.sec.gov/Archives/edgar/data/2488/000000248826000001/report.htm"),
+        kind="filing",
+        accession=accession,
+        published_at="2026-09-16T12:00:00Z",
+        retrieved_at="2026-09-18T12:00:00Z",
+    )
+    snapshot = EvidenceSnapshot(
+        ticker="AMD", cutoff=CUTOFF, sources=[filing], instrument=instrument
+    )
+    validated = validate_snapshot(snapshot, request_data_as_request(instrument=instrument))
+    assert validated.sources == (filing,)
+
+    wrong_archive = filing.model_copy(update={"url": "https://www.sec.gov/report.htm"})
+    with pytest.raises(ValueError, match="retrieved after"):
+        validate_snapshot(
+            snapshot.model_copy(update={"sources": (wrong_archive,)}),
+            request_data_as_request(instrument=instrument),
+        )
+
+
+def test_validate_snapshot_revalidates_model_copy_nested_contents() -> None:
+    valid = source(id="source-valid", published_at="2026-09-16T12:00:00Z")
+    invalid = valid.model_copy(update={"content_sha256": "0" * 64})
+    copied = EvidenceSnapshot(ticker="AMD", cutoff=CUTOFF, sources=(valid,)).model_copy(
+        update={"sources": (invalid,)}
+    )
+    with pytest.raises(ValueError, match="hash mismatch"):
+        validate_snapshot(copied, request())
 
 
 def test_load_snapshot_rejects_adr_ratio_not_effective_at_cutoff(tmp_path):
@@ -293,6 +348,28 @@ def test_derive_quarter_requires_comparable_contiguous_ytd_operands():
         )
 
 
+def test_derive_quarter_is_independent_of_ambient_decimal_context() -> None:
+    current = fact(
+        id="large-ytd",
+        value="123456789012345678901234567890.12",
+        period_start="2026-01-01",
+        period_end="2026-06-30",
+    )
+    previous = fact(
+        id="zero-ytd",
+        value="0",
+        period_start="2026-01-01",
+        period_end="2026-03-31",
+    )
+    with localcontext() as context:
+        context.prec = 6
+        low_precision = derive_quarter(current, previous).value
+    with localcontext() as context:
+        context.prec = 60
+        high_precision = derive_quarter(current, previous).value
+    assert low_precision == high_precision == current.value
+
+
 def test_normalize_news_filters_before_deduplication_limit_and_marks_empty_incomplete():
     records = [
         {
@@ -310,6 +387,7 @@ def test_normalize_news_filters_before_deduplication_limit_and_marks_empty_incom
             "publisher": "Wire",
             "entities": ["AMD"],
             "published_at": "2026-09-16T00:00:00+00:00",
+            "retrieved_at": "2026-09-16T01:00:00+00:00",
             "content": "full",
         },
         {
@@ -319,6 +397,7 @@ def test_normalize_news_filters_before_deduplication_limit_and_marks_empty_incom
             "publisher": "Wire",
             "entities": ["AMD"],
             "published_at": "2026-09-15T00:00:00+00:00",
+            "retrieved_at": "2026-09-15T01:00:00+00:00",
         },
         {
             "url": "https://news.test/irrelevant",
@@ -333,6 +412,25 @@ def test_normalize_news_filters_before_deduplication_limit_and_marks_empty_incom
     assert len(normalized.events) == len(normalized.sources) == 1
     assert normalized.events[0].title == "Eligible"
     assert normalized.sources[0].availability == "full_text"
+
+    late = normalize_news(
+        [
+            {
+                "url": "https://news.test/late",
+                "origin_id": "late",
+                "title": "Retrieved later",
+                "publisher": "Wire",
+                "entities": ["AMD"],
+                "published_at": "2026-09-16T00:00:00+00:00",
+                "retrieved_at": "2026-09-18T00:00:00+00:00",
+                "content": "possibly edited",
+            }
+        ],
+        "AMD",
+        datetime.fromisoformat(CUTOFF),
+    )
+    assert not late.sources and not late.events
+    assert any("retrieved after the cutoff" in gap for gap in late.gaps)
 
     empty = normalize_news([], "AMD", datetime.fromisoformat(CUTOFF))
     assert not empty.events

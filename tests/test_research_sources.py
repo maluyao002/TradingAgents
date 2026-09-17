@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import ssl
 from collections import deque
 from datetime import datetime, timedelta, timezone
@@ -21,6 +22,7 @@ from tradingagents.research.sources import (
     SourceAccessError,
     TransportResponse,
     discover_ir_links,
+    is_exact_sec_archive_filing_url,
     normalize_public_https_url,
     parse_sec_accession_list,
     parse_sec_submissions,
@@ -344,6 +346,53 @@ def test_memory_and_file_cache_return_exact_content_without_transport(tmp_path):
         assert len(transport.calls) == 1
 
 
+@pytest.mark.unit
+def test_file_cache_reextracts_raw_and_rejects_cross_bound_text_blob(tmp_path):
+    cache_root = tmp_path / "cache"
+    cache = FileSourceCache(cache_root)
+    first, _, _ = fetcher(
+        FakeTransport(response(body=b"<p>First filing</p>", **{"content-type": "text/html"})),
+        cache=cache,
+    )
+    second, _, _ = fetcher(
+        FakeTransport(response(body=b"<p>Second filing</p>", **{"content-type": "text/html"})),
+        cache=cache,
+    )
+    first.fetch("https://example.com/first")
+    second.fetch("https://example.com/second")
+
+    indexes = [json.loads(path.read_text()) for path in (cache_root / "indexes").iterdir()]
+    first_index = next(item for item in indexes if item["requested_url"].endswith("/first"))
+    second_index = next(item for item in indexes if item["requested_url"].endswith("/second"))
+    first_path = next(
+        path
+        for path in (cache_root / "indexes").iterdir()
+        if json.loads(path.read_text())["requested_url"].endswith("/first")
+    )
+    first_index["text_sha256"] = second_index["text_sha256"]
+    first_path.write_text(json.dumps(first_index, sort_keys=True, separators=(",", ":")))
+
+    with pytest.raises(SourceAccessError, match="not bound") as failure:
+        cache.get("https://example.com/first")
+    assert failure.value.code == "cache_corrupt"
+
+
+@pytest.mark.unit
+def test_exact_sec_archive_url_requires_host_cik_accession_and_document_path():
+    accession = "0000320193-26-000001"
+    valid = "https://www.sec.gov/Archives/edgar/data/320193/000032019326000001/first.htm"
+    assert is_exact_sec_archive_filing_url(valid, cik="0000320193", accession=accession)
+    assert not is_exact_sec_archive_filing_url(
+        valid.replace("www.sec.gov", "example.com"), cik="0000320193", accession=accession
+    )
+    assert not is_exact_sec_archive_filing_url(
+        valid.replace("320193/", "2488/"), cik="0000320193", accession=accession
+    )
+    assert not is_exact_sec_archive_filing_url(
+        valid + "?download=1", cik="0000320193", accession=accession
+    )
+
+
 def sec_payload(*, accepted: str = "2026-09-16T12:00:00Z", form: str = "10-Q"):
     return {
         "cik": 320193,
@@ -380,9 +429,7 @@ def test_sec_submissions_parser_filters_by_acceptance_instant_and_exposes_contin
 @pytest.mark.unit
 def test_accession_parser_distinguishes_no_events_from_unavailable():
     cutoff = datetime(2026, 9, 17, 12, tzinfo=UTC)
-    no_events = parse_sec_accession_list(
-        sec_payload(form="S-1"), cik="320193", cutoff=cutoff
-    )
+    no_events = parse_sec_accession_list(sec_payload(form="S-1"), cik="320193", cutoff=cutoff)
     malformed = sec_payload()
     malformed["filings"]["recent"]["form"] = []
     unavailable = parse_sec_submissions(malformed, cutoff=cutoff)
@@ -425,9 +472,7 @@ def test_service_reports_fetch_failure_as_unavailable_not_no_events():
     )
     service = PublicSourceService(client)
 
-    result = service.discover_sec_filings(
-        "320193", cutoff=datetime(2026, 9, 17, 12, tzinfo=UTC)
-    )
+    result = service.discover_sec_filings("320193", cutoff=datetime(2026, 9, 17, 12, tzinfo=UTC))
 
     assert result.status is DiscoveryStatus.UNAVAILABLE
     assert result.reason == "sec_acquisition_failed"

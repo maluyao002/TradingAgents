@@ -47,8 +47,18 @@ _SAFE_SEC_FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$")
 _SAFE_CIK = re.compile(r"^[0-9]{1,10}$")
 _SEC_USER_AGENT = re.compile(r"^[\x20-\x7e]{8,256}$")
 _IR_KEYWORDS = (
-    "10-k", "10-q", "20-f", "6-k", "8-k", "annual report", "quarterly report",
-    "earnings", "financial results", "results", "presentation", "transcript",
+    "10-k",
+    "10-q",
+    "20-f",
+    "6-k",
+    "8-k",
+    "annual report",
+    "quarterly report",
+    "earnings",
+    "financial results",
+    "results",
+    "presentation",
+    "transcript",
 )
 
 
@@ -117,7 +127,9 @@ class SystemDNSResolver:
             raise SourceAccessError("dns_unavailable", "public source DNS resolution timed out")
         outcome = result.get()
         if isinstance(outcome, Exception):
-            raise SourceAccessError("dns_unavailable", "public source DNS resolution failed") from None
+            raise SourceAccessError(
+                "dns_unavailable", "public source DNS resolution failed"
+            ) from None
         answers = outcome
         result: list[str] = []
         for answer in answers:
@@ -206,9 +218,7 @@ class PinnedHTTPSClientTransport:
         if timeout_seconds <= 0 or max_bytes < 1:
             raise ValueError("transport bounds must be positive")
         deadline = self._monotonic() + timeout_seconds
-        connection = _PinnedHTTPSConnection(
-            target, timeout=timeout_seconds, context=self._context
-        )
+        connection = _PinnedHTTPSConnection(target, timeout=timeout_seconds, context=self._context)
         try:
             connection.request("GET", request_target, headers=dict(headers))
             response = connection.getresponse()
@@ -219,13 +229,17 @@ class PinnedHTTPSClientTransport:
                 except ValueError:
                     declared = -1
                 if declared > max_bytes:
-                    raise SourceAccessError("response_too_large", "public source exceeded byte allowance")
+                    raise SourceAccessError(
+                        "response_too_large", "public source exceeded byte allowance"
+                    )
 
             body = bytearray()
             while True:
                 remaining = deadline - self._monotonic()
                 if remaining <= 0:
-                    raise SourceAccessError("timeout", "public source request exceeded its deadline")
+                    raise SourceAccessError(
+                        "timeout", "public source request exceeded its deadline"
+                    )
                 if connection.sock is not None:
                     connection.sock.settimeout(remaining)
                 chunk = response.read(min(self._chunk_bytes, max_bytes + 1 - len(body)))
@@ -233,13 +247,17 @@ class PinnedHTTPSClientTransport:
                     break
                 body.extend(chunk)
                 if len(body) > max_bytes:
-                    raise SourceAccessError("response_too_large", "public source exceeded byte allowance")
+                    raise SourceAccessError(
+                        "response_too_large", "public source exceeded byte allowance"
+                    )
             response_headers = {key.lower(): value for key, value in response.getheaders()}
             return TransportResponse(response.status, response_headers, bytes(body))
         except SourceAccessError:
             raise
         except (OSError, ssl.SSLError, http.client.HTTPException) as exc:
-            raise SourceAccessError("transport_unavailable", "public source transport failed") from exc
+            raise SourceAccessError(
+                "transport_unavailable", "public source transport failed"
+            ) from exc
         finally:
             connection.close()
 
@@ -342,6 +360,11 @@ class FileSourceCache:
                 if _sha256(text_bytes) != text_hash:
                     raise ValueError
                 text = text_bytes.decode("utf-8")
+            media_type = metadata["media_type"]
+            charset = metadata.get("charset")
+            if not isinstance(media_type, str) or not isinstance(charset, (str, type(None))):
+                raise ValueError
+            _validate_text_binding(raw, media_type, charset, text, text_hash)
             retrieved_at = datetime.fromisoformat(metadata["retrieved_at"])
             if retrieved_at.tzinfo is None:
                 raise ValueError
@@ -350,8 +373,8 @@ class FileSourceCache:
                 final_url=metadata["final_url"],
                 retrieved_at=retrieved_at,
                 status=metadata["status"],
-                media_type=metadata["media_type"],
-                charset=metadata.get("charset"),
+                media_type=media_type,
+                charset=charset,
                 raw=raw,
                 raw_sha256=raw_hash,
                 text=text,
@@ -359,10 +382,24 @@ class FileSourceCache:
                 redirects=tuple(metadata.get("redirects", ())),
                 from_cache=True,
             )
-        except (KeyError, OSError, UnicodeError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        except (
+            KeyError,
+            OSError,
+            UnicodeError,
+            ValueError,
+            TypeError,
+            json.JSONDecodeError,
+        ) as exc:
             raise SourceAccessError("cache_corrupt", "source cache record is invalid") from exc
 
     def put(self, source: FetchedSource) -> None:
+        _validate_text_binding(
+            source.raw,
+            source.media_type,
+            source.charset,
+            source.text,
+            source.text_sha256,
+        )
         raw_path = self._blob("raw", source.raw_sha256)
         _write_content_blob(raw_path, source.raw, source.raw_sha256)
         if source.text is not None and source.text_sha256 is not None:
@@ -460,7 +497,9 @@ class PublicSourceFetcher:
                 current = destination
                 continue
             if not 200 <= response.status < 300:
-                raise SourceAccessError("http_unavailable", "public source returned an unavailable status")
+                raise SourceAccessError(
+                    "http_unavailable", "public source returned an unavailable status"
+                )
             media_type, charset = _content_type(response.headers.get("content-type"))
             encoding = response.headers.get("content-encoding", "identity").strip().lower()
             if encoding not in {"", "identity"}:
@@ -472,7 +511,9 @@ class PublicSourceFetcher:
             text_hash = _sha256(text.encode("utf-8")) if text is not None else None
             retrieved_at = self.clock.now()
             if retrieved_at.tzinfo is None or retrieved_at.utcoffset() is None:
-                raise SourceAccessError("invalid_clock", "source clock must return an aware timestamp")
+                raise SourceAccessError(
+                    "invalid_clock", "source clock must return an aware timestamp"
+                )
             source = FetchedSource(
                 requested_url=requested,
                 final_url=current,
@@ -501,7 +542,9 @@ class PublicSourceFetcher:
         except SourceAccessError:
             raise
         except Exception as exc:
-            raise SourceAccessError("dns_unavailable", "public source DNS resolution failed") from exc
+            raise SourceAccessError(
+                "dns_unavailable", "public source DNS resolution failed"
+            ) from exc
         if not addresses or len(addresses) > self.policy.max_dns_addresses:
             raise SourceAccessError("dns_unavailable", "public source DNS answer is unusable")
         # Fail closed when a name returns a mix of public and private answers.
@@ -563,11 +606,17 @@ class PublicSourceFetcher:
 
             if response is not None:
                 if not isinstance(response.status, int) or not 100 <= response.status <= 599:
-                    raise SourceAccessError("invalid_response", "public source returned invalid metadata")
+                    raise SourceAccessError(
+                        "invalid_response", "public source returned invalid metadata"
+                    )
                 if not isinstance(response.body, bytes):
-                    raise SourceAccessError("invalid_response", "public source returned invalid content")
+                    raise SourceAccessError(
+                        "invalid_response", "public source returned invalid content"
+                    )
                 if len(response.body) > self.policy.max_bytes:
-                    raise SourceAccessError("response_too_large", "public source exceeded byte allowance")
+                    raise SourceAccessError(
+                        "response_too_large", "public source exceeded byte allowance"
+                    )
                 response = TransportResponse(
                     response.status,
                     {str(key).lower(): str(value) for key, value in response.headers.items()},
@@ -638,10 +687,18 @@ def parse_sec_accession_list(
     normalized_cik = _normalize_cik(cik)
     try:
         decoded = _decode_json_object(payload)
-        recent = decoded.get("filings", {}).get("recent") if isinstance(decoded.get("filings"), dict) else None
+        recent = (
+            decoded.get("filings", {}).get("recent")
+            if isinstance(decoded.get("filings"), dict)
+            else None
+        )
         table = recent if isinstance(recent, dict) else decoded
         required = (
-            "accessionNumber", "filingDate", "reportDate", "acceptanceDateTime", "form",
+            "accessionNumber",
+            "filingDate",
+            "reportDate",
+            "acceptanceDateTime",
+            "form",
             "primaryDocument",
         )
         columns = [table[name] for name in required]
@@ -658,6 +715,8 @@ def parse_sec_accession_list(
             if form not in allowed:
                 continue
             if not isinstance(accession, str) or _ACCESSION.fullmatch(accession) is None:
+                raise ValueError
+            if accession[:10] != normalized_cik:
                 raise ValueError
             if not isinstance(document, str) or _SAFE_SEC_FILE.fullmatch(document) is None:
                 raise ValueError
@@ -732,7 +791,9 @@ def parse_sec_submissions(
         )
         return SecDiscoveryResult(status, parsed.filings, tuple(continuations))
     except (KeyError, TypeError, ValueError, json.JSONDecodeError, UnicodeError):
-        return SecDiscoveryResult(status=DiscoveryStatus.UNAVAILABLE, reason="malformed_sec_submissions")
+        return SecDiscoveryResult(
+            status=DiscoveryStatus.UNAVAILABLE, reason="malformed_sec_submissions"
+        )
 
 
 @dataclass(frozen=True)
@@ -840,8 +901,31 @@ class PublicSourceService:
 
 class _VisibleTextParser(HTMLParser):
     _BLOCKS = frozenset(
-        {"address", "article", "aside", "blockquote", "br", "div", "footer", "h1", "h2", "h3",
-         "h4", "h5", "h6", "header", "li", "main", "nav", "p", "section", "table", "td", "th", "tr"}
+        {
+            "address",
+            "article",
+            "aside",
+            "blockquote",
+            "br",
+            "div",
+            "footer",
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "h5",
+            "h6",
+            "header",
+            "li",
+            "main",
+            "nav",
+            "p",
+            "section",
+            "table",
+            "td",
+            "th",
+            "tr",
+        }
     )
     _HIDDEN = frozenset({"script", "style", "noscript", "template"})
 
@@ -881,7 +965,9 @@ def extract_text(raw: bytes, *, media_type: str, charset: str | None = None) -> 
     try:
         decoded = raw.decode(encoding, errors="replace")
     except LookupError as exc:
-        raise SourceAccessError("unsupported_charset", "public source declared an unknown charset") from exc
+        raise SourceAccessError(
+            "unsupported_charset", "public source declared an unknown charset"
+        ) from exc
     if media_type != "text/html":
         return decoded
     parser = _VisibleTextParser()
@@ -893,6 +979,28 @@ def extract_text(raw: bytes, *, media_type: str, charset: str | None = None) -> 
     return _collapse_text("".join(parser.parts))
 
 
+def _validate_text_binding(
+    raw: bytes,
+    media_type: str,
+    charset: str | None,
+    text: str | None,
+    text_hash: str | None,
+) -> None:
+    """Require cached extracted text to be exactly reproducible from raw bytes."""
+
+    try:
+        expected = extract_text(raw, media_type=media_type, charset=charset)
+    except SourceAccessError as exc:
+        raise SourceAccessError(
+            "cache_corrupt", "source cache extraction metadata is invalid"
+        ) from exc
+    expected_hash = _sha256(expected.encode("utf-8")) if expected is not None else None
+    if text != expected or text_hash != expected_hash:
+        raise SourceAccessError(
+            "cache_corrupt", "source cache text is not bound to its raw response"
+        )
+
+
 def normalize_public_https_url(url: str) -> str:
     if not isinstance(url, str) or not url or len(url) > 8192:
         raise SourceAccessError("invalid_url", "public source URL is invalid")
@@ -900,7 +1008,11 @@ def normalize_public_https_url(url: str) -> str:
         raise SourceAccessError("invalid_url", "public source URL contains unsafe characters")
     try:
         parsed = urlsplit(url)
-        if parsed.scheme.lower() != "https" or parsed.username is not None or parsed.password is not None:
+        if (
+            parsed.scheme.lower() != "https"
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
             raise ValueError
         if parsed.fragment:
             raise ValueError
@@ -917,7 +1029,9 @@ def normalize_public_https_url(url: str) -> str:
             address = ipaddress.ip_address(host)
         except ValueError:
             if any(
-                not label or len(label) > 63 or re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", label) is None
+                not label
+                or len(label) > 63
+                or re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", label) is None
                 for label in host.split(".")
             ):
                 raise ValueError from None
@@ -930,6 +1044,28 @@ def normalize_public_https_url(url: str) -> str:
         raise SourceAccessError("invalid_url", "public source URL is invalid") from None
 
 
+def is_exact_sec_archive_filing_url(url: str, *, cik: str, accession: str) -> bool:
+    """Return whether URL is the exact public SEC archive directory for an accession."""
+
+    try:
+        normalized_cik = _normalize_cik(cik)
+        if _ACCESSION.fullmatch(accession) is None or accession[:10] != normalized_cik:
+            return False
+        normalized = normalize_public_https_url(url)
+        parsed = urlsplit(normalized)
+        if parsed.hostname != "www.sec.gov" or parsed.query:
+            return False
+        filing_cik = normalized_cik.lstrip("0") or "0"
+        compact_accession = accession.replace("-", "")
+        prefix = f"/Archives/edgar/data/{filing_cik}/{compact_accession}/"
+        if not parsed.path.startswith(prefix):
+            return False
+        document = parsed.path[len(prefix) :]
+        return _SAFE_SEC_FILE.fullmatch(document) is not None
+    except (SourceAccessError, TypeError, ValueError):
+        return False
+
+
 def _require_public_ip(value: str) -> None:
     try:
         address = ipaddress.ip_address(value)
@@ -938,7 +1074,9 @@ def _require_public_ip(value: str) -> None:
     if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
         address = address.ipv4_mapped
     if not address.is_global:
-        raise SourceAccessError("unsafe_destination", "public source resolved to a non-public address")
+        raise SourceAccessError(
+            "unsafe_destination", "public source resolved to a non-public address"
+        )
 
 
 def _is_sec_host(host: str) -> bool:
@@ -994,7 +1132,11 @@ def _decode_json_object(payload: bytes | str | Mapping[str, object]) -> dict[str
             result[key] = value
         return result
 
-    decoded = json.loads(payload, object_pairs_hook=unique, parse_constant=lambda _value: (_ for _ in ()).throw(ValueError()))
+    decoded = json.loads(
+        payload,
+        object_pairs_hook=unique,
+        parse_constant=lambda _value: (_ for _ in ()).throw(ValueError()),
+    )
     if not isinstance(decoded, dict):
         raise ValueError("SEC payload must be an object")
     return decoded
@@ -1031,7 +1173,9 @@ def _sha256(value: bytes) -> str:
 
 
 def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
 
 
 def _atomic_write(path: Path, content: bytes) -> None:
@@ -1093,6 +1237,7 @@ __all__ = [
     "TransportResponse",
     "discover_ir_links",
     "extract_text",
+    "is_exact_sec_archive_filing_url",
     "normalize_public_https_url",
     "parse_sec_accession_list",
     "parse_sec_submissions",
