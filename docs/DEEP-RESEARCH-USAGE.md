@@ -2,7 +2,7 @@
 
 This is an opt-in, research-only implementation. It does not change the existing
 weekly runner, trading graph, model settings, schedules, publishing or AMD task.
-No live provider is instantiated by the new CLI. Reports produced here are
+No live provider is instantiated without the separate opt-in flag. Reports are
 `Needs review / Unrated`, not accepted investment assessments.
 
 ## Configuration and replay
@@ -53,6 +53,34 @@ The CLI exits 0 for a completed review-required preview, 1 for a recoverable sto
 run, and 2 for configuration/input failure or an unconfigured live backend. A zero
 exit code is not financial acceptance.
 
+## Explicit live Codex entrypoint (not exercised during implementation)
+
+For a request with `backend: "codex"`, an authorized caller can use:
+
+```sh
+.venv/bin/python -m cli.research --config request.json \
+  --allow-live --codex-home /absolute/path/to/existing/isolated-runtime
+```
+
+An existing authenticated, isolated runtime is required; the shared `~/.codex`
+runtime is rejected by the existing adapter. The command does not switch models,
+copy authentication, create a login, publish, or schedule anything. Model/effort
+choices are preflighted exactly, with no silent fallback. Generic API execution is
+still unconfigured.
+
+Prefer an explicitly frozen evidence snapshot for the first comparison. If no
+snapshot is supplied, the request must contain complete instrument identity and
+the environment must provide `SEC_USER_AGENT` identifying the SEC client. The live
+worker then acquires a limited public SEC baseline with raw caching under the run
+directory; missing sources/coverage remain explicit gaps. No live call occurs in
+`--dry-run`, even when these live flags are present.
+
+The adapter uses per-turn structured output and provider usage events, as described
+in the [official Codex App Server documentation](https://learn.chatgpt.com/docs/app-server).
+Malformed output is not silently repaired; known usage remains charged. Missing
+usage blocks subsequent calls. Codex's output-token allowance is advisory here,
+not a hard provider cap; metadata says so, and observed overshoot stops the run.
+
 ## Artifacts and recovery
 
 Each run writes `reader_report.md`, `audit_report.md`, `evidence.json`, `research.json`,
@@ -81,11 +109,19 @@ available as separate, explicitly instantiated services. SEC acquisition require
 an identified User-Agent and explicit instrument identity; no email, CIK, ADR ratio
 or currency is guessed. No data subscription is purchased.
 
-Model services must honor each call's `timeout_seconds` and `max_output_tokens` and
-return actual usage; synchronous injection cannot forcibly interrupt an arbitrary
-noncompliant service. Admission reservations, finalization reserves, overshoot
-recording and unknown-usage stops are implemented. A production process supervisor
-and live-backend integration remain prerequisites for unattended live execution.
+Injected model services must report actual usage and declare their output-cap
+behavior. Synchronous injection alone cannot forcibly interrupt an arbitrary
+noncompliant service. The live CLI adds a POSIX parent supervisor and per-call Codex
+deadline; cleanup protects transport ownership from timeout interruption. Admission
+reservations, finalization reserves, overshoot recording and unknown-usage stops
+are implemented. Detached descendants observed by the supervisor are cleaned up;
+unobserved rapid double-fork/reparenting requires OS containment beyond this trusted-
+worker boundary. The supervisor is not a sandbox for arbitrary hostile code.
+
+Source context is deterministically excerpted with exact character offsets and
+original content hashes. Truncation/omission is visible in the prompt and report.
+Structured records remain retained; the complete serialized prompt is subject to
+budget admission. Keyword excerpts do not establish complete semantic coverage.
 
 Financial modules contain tested deterministic mechanics, not calibrated NVDA/AMD/
 TSM/INTC/AVGO models. Model assumption coverage and source-linked opening inputs are
@@ -99,10 +135,11 @@ summary identifies input changes but does not claim full economic change attribu
 Forecast vintages use their real creation time separately from the evidence cutoff;
 only subsequently published comparable actuals are scored.
 
-## Before a live pilot or release
+## Before production acceptance
 
 Complete the remaining gates in `DEEP-RESEARCH-PLAN.md`: calibrated company schedules,
-eight-quarter/five-year source reconciliation, reliable context selection, hard live
-deadlines, semantic claim review, matched single-agent comparison, human-reviewed
-reference cases, and explicit pilot authorization. No production-default switch is
-part of this preview. A live pilot is a validation exercise, not release acceptance.
+eight-quarter/five-year source reconciliation, evaluated context selection and live
+recovery, semantic claim review, matched single-agent comparison, human-reviewed
+reference cases, and explicitly authorized live pilots. No production-default switch
+is part of this preview. An initial engineering validation run is not a completed
+M6 benchmark or release acceptance; the plan's full milestone gates remain required.
