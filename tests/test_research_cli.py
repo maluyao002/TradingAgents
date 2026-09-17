@@ -204,3 +204,33 @@ def test_dry_run_does_not_read_unavailable_replay_responses(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert not (tmp_path / "must-not-exist").exists()
+
+
+def test_codex_execution_requires_explicit_live_flag_and_runtime(tmp_path):
+    config = tmp_path / "request.json"
+    write_config(config, backend="codex", output_dir="must-not-exist")
+    result = run_cli(config)
+    assert result.returncode == 2
+    assert "--allow-live" in result.stderr
+    assert not (tmp_path / "must-not-exist").exists()
+    result = run_cli(config, "--allow-live")
+    assert result.returncode == 2
+    assert "--codex-home" in result.stderr
+
+
+def test_live_dry_run_remains_completely_passive(tmp_path):
+    config = tmp_path / "request.json"
+    write_config(config, backend="codex", output_dir="must-not-exist")
+    result = run_cli(config, "--dry-run", "--allow-live", "--codex-home", str(tmp_path / "no-runtime"))
+    assert result.returncode == 0
+    assert not (tmp_path / "no-runtime").exists()
+    assert not (tmp_path / "must-not-exist").exists()
+
+
+def test_live_acquisition_missing_identity_never_launches(tmp_path):
+    config = tmp_path / "request.json"
+    write_config(config, backend="codex", output_dir="must-not-exist")
+    result = run_cli(config, "--allow-live", "--codex-home", str(tmp_path / "no-runtime"))
+    assert result.returncode == 2
+    assert "identity" in result.stderr
+    assert not (tmp_path / "no-runtime").exists()

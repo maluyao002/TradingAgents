@@ -1,13 +1,14 @@
 """Standalone configuration boundary for the opt-in research workflow.
 
-Dry run supports side-effect-free validation. Execution is explicit offline replay;
-this command never contacts providers or initializes a live model client.
+Dry run supports side-effect-free validation. Execution is offline replay unless
+the caller explicitly selects Codex and passes the separate live opt-in flag.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -51,6 +52,10 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         help="Frozen replay-response JSON; relative paths are resolved from the caller's cwd.",
     )
+    parser.add_argument("--allow-live", action="store_true",
+                        help="Explicitly authorize live research calls for this invocation.")
+    parser.add_argument("--codex-home", type=Path,
+                        help="Existing isolated research runtime home; never the shared ~/.codex.")
     return parser
 
 
@@ -144,6 +149,37 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.dry_run:
         print(json.dumps(safe_summary(request), ensure_ascii=False, indent=2, sort_keys=True))
         return 0
+
+    if request.backend == "codex":
+        if not args.allow_live or args.codex_home is None:
+            print("live Codex execution requires --allow-live and --codex-home", file=sys.stderr)
+            return 2
+        if args.responses is not None:
+            print("saved responses cannot be combined with live execution", file=sys.stderr)
+            return 2
+        sec_user_agent = os.environ.get("SEC_USER_AGENT")
+        if request.evidence_path is None and (not sec_user_agent or request.instrument is None):
+            print("live acquisition requires instrument identity and SEC_USER_AGENT; or provide frozen evidence",
+                  file=sys.stderr)
+            return 2
+        if not args.codex_home.is_dir():
+            print("use an existing isolated Codex runtime home; authentication setup is separate", file=sys.stderr)
+            return 2
+        from tradingagents.research.live import CodexResearchWorker
+        from tradingagents.research.supervisor import run_supervised
+
+        try:
+            outcome = run_supervised(CodexResearchWorker(args.codex_home, sec_user_agent), request)
+        except (OSError, ValueError):
+            print("live research could not start; check configuration and checkpoint integrity", file=sys.stderr)
+            return 2
+        if outcome.result is None:
+            print(json.dumps({"status": outcome.status, "code": outcome.code}), file=sys.stderr)
+            return 1
+        result = outcome.result
+        print(json.dumps({"assessment": result.assessment.status, "artifacts": result.artifacts,
+                          "stop_reason": result.stop_reason, "ticker": result.ticker}, ensure_ascii=False))
+        return 0 if result.stop_reason == "completed_needs_review" else 1
 
     if request.backend == "replay":
         if args.responses is None:
