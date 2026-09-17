@@ -1,6 +1,7 @@
 """M0 contract boundaries for the standalone research workflow."""
 
 from copy import deepcopy
+from hashlib import sha256
 
 import pytest
 from pydantic import ValidationError
@@ -37,8 +38,9 @@ def source_data(**overrides):
         "title": "Filing",
         "publisher": "Issuer",
         "retrieved_at": "2026-09-16T12:00:00+00:00",
+        "published_at": "2026-09-15T12:00:00+00:00",
         "content": "reported revenue",
-        "content_sha256": "a" * 64,
+        "content_sha256": sha256(b"reported revenue").hexdigest(),
     }
     data.update(overrides)
     return data
@@ -185,3 +187,20 @@ def test_evidence_requires_resolvable_references_and_expectation_support():
 def test_assessment_fails_closed_when_not_accepted():
     with pytest.raises(ValidationError, match="unaccepted research"):
         Assessment(status="needs_review", investment_view="favorable")
+
+
+def test_source_hash_cutoff_unknown_availability_and_operand_cycle():
+    with pytest.raises(ValidationError, match="hash mismatch"):
+        SourceDocument.model_validate(source_data(content="changed"))
+    future = SourceDocument.model_validate(source_data(published_at="2027-01-01T00:00:00Z"))
+    with pytest.raises(ValidationError, match="after evidence cutoff"):
+        EvidenceSnapshot(ticker="AMD", cutoff="2026-09-17T00:00:00Z", sources=[future])
+    unknown = SourceDocument.model_validate(source_data(published_at=None))
+    fact = FinancialFact.model_validate(fact_data())
+    with pytest.raises(ValidationError, match="known source publication"):
+        EvidenceSnapshot(ticker="AMD", cutoff="2026-09-17T00:00:00Z", sources=[unknown], facts=[fact])
+    source = SourceDocument.model_validate(source_data())
+    a = FinancialFact.model_validate(fact_data(id="a", inputs=["b"], formula="b"))
+    b = FinancialFact.model_validate(fact_data(id="b", inputs=["a"], formula="a"))
+    with pytest.raises(ValidationError, match="cycle"):
+        EvidenceSnapshot(ticker="AMD", cutoff="2026-09-17T00:00:00Z", sources=[source], facts=[a, b])

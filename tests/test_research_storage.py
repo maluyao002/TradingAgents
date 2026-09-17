@@ -95,3 +95,29 @@ def test_missing_telemetry_blocks_further_calls():
     tracker.record(Usage(complete=False))
     with pytest.raises(BudgetExhausted, match="usage_incomplete"):
         tracker.admit(finalization=True)
+
+
+def test_concurrent_reservations_and_uncertain_dispatch_fail_closed():
+    tracker = BudgetTracker(Budget())
+    permit = tracker.reserve(800_000)
+    with pytest.raises(BudgetExhausted):
+        tracker.reserve(800_000)
+    tracker.complete(permit, Usage(input_tokens=400, output_tokens=50))
+    with pytest.raises(ValueError, match="already completed"):
+        tracker.complete(permit, Usage())
+    permit = tracker.reserve(1000)
+    tracker.cancel(permit, dispatched=True)
+    with pytest.raises(BudgetExhausted, match="usage_incomplete"):
+        tracker.reserve(1, finalization=True)
+
+
+def test_symlink_stage_directory_rejected(tmp_path):
+    output = tmp_path / "output"
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    store = CheckpointStore(output, "id")
+    with store.lock():
+        (output / "stages").symlink_to(elsewhere, target_is_directory=True)
+        with pytest.raises(ValueError, match="symlinks"):
+            store.save_stage("plan", {}, {})
+    assert not list(elsewhere.iterdir())

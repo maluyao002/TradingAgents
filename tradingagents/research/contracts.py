@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -31,6 +32,24 @@ class Contract(BaseModel):
 class ModelSetting(Contract):
     model: str = Field(min_length=1)
     effort: Literal["low", "medium", "high", "xhigh", "max", "ultra"] = "high"
+
+
+class InstrumentIdentity(Contract):
+    issuer: str = Field(min_length=1)
+    cik: str = Field(pattern=r"^\d{10}$")
+    exchange: str = Field(min_length=1)
+    share_class: str = Field(min_length=1)
+    quote_currency: str = Field(pattern=r"^[A-Z]{3}$")
+    reporting_currency: str = Field(pattern=r"^[A-Z]{3}$")
+    ordinary_shares_per_adr: Decimal | None = Field(default=None, gt=0)
+    adr_ratio_effective_at: date | None = None
+    identity_source: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def adr_effective_date(self):
+        if (self.ordinary_shares_per_adr is None) != (self.adr_ratio_effective_at is None):
+            raise ValueError("ADR ratios require an effective date")
+        return self
 
 
 def default_roles() -> dict[str, ModelSetting]:
@@ -83,6 +102,7 @@ class ResearchRequest(Contract):
     evidence_path: Path | None = None
     prior_dossier_path: Path | None = None
     dossier_dir: Path | None = None
+    instrument: InstrumentIdentity | None = None
 
     @field_validator("timezone")
     @classmethod
@@ -116,6 +136,12 @@ class SourceDocument(Contract):
     kind: Literal["filing", "ir", "news", "regulatory", "market", "other"] = "other"
     availability: Literal["full_text", "snippet", "unavailable"] = "full_text"
 
+    @model_validator(mode="after")
+    def content_bound(self):
+        if hashlib.sha256(self.content.encode("utf-8")).hexdigest() != self.content_sha256:
+            raise ValueError("source content hash mismatch (UTF-8 extracted text)")
+        return self
+
 
 class FinancialFact(Contract):
     """A sourced value, not an LLM interpretation of a narrative."""
@@ -134,6 +160,13 @@ class FinancialFact(Contract):
     segment: str | None = None
     inputs: tuple[str, ...] = ()
     formula: str | None = None
+    period_type: Literal["instant", "duration"] = "instant"
+    supersedes_id: str | None = None
+
+    @property
+    def normalized_value(self) -> Decimal:
+        """value retains the source number; scale converts to unscaled base units."""
+        return self.value * self.scale
 
     @model_validator(mode="after")
     def valid_period_and_value(self):
@@ -141,6 +174,8 @@ class FinancialFact(Contract):
             raise ValueError("financial values must be finite with a positive scale")
         if self.period_start and self.period_start > self.period_end:
             raise ValueError("financial period ends before it begins")
+        if self.period_type == "duration" and self.period_start is None:
+            raise ValueError("duration facts require a start date")
         if bool(self.inputs) != bool(self.formula):
             raise ValueError("derived facts require both operands and a formula")
         return self
@@ -228,6 +263,7 @@ class EvidenceSnapshot(Contract):
     events: tuple[ResearchEvent, ...] = ()
     expectations: tuple[Expectation, ...] = ()
     gaps: tuple[str, ...] = ()
+    instrument: InstrumentIdentity | None = None
 
     @model_validator(mode="after")
     def referential_integrity(self):
@@ -236,16 +272,47 @@ class EvidenceSnapshot(Contract):
         if len(ids) != len(set(ids)):
             raise ValueError("evidence identifiers must be unique")
         source_ids = {source.id for source in self.sources}
+        sources = {source.id: source for source in self.sources}
         fact_ids = {fact.id for fact in self.facts}
+        for source in self.sources:
+            if source.published_at is not None and source.published_at > self.cutoff:
+                raise ValueError("source publication is after evidence cutoff")
         for item in (*self.facts, *self.events):
             if item.source_id not in source_ids:
                 raise ValueError("unknown source reference")
         for fact in self.facts:
             if set(fact.inputs) - fact_ids or fact.id in fact.inputs:
                 raise ValueError("invalid calculated fact operands")
+            if sources[fact.source_id].published_at is None:
+                raise ValueError("financial facts require known source publication availability")
+            if fact.period_end > self.cutoff.date():
+                raise ValueError("reported financial period is after evidence cutoff")
+        edges = {fact.id: fact.inputs for fact in self.facts}
+        visiting, visited = set(), set()
+
+        def visit(identifier):
+            if identifier in visiting:
+                raise ValueError("calculated fact operands form a cycle")
+            if identifier in visited:
+                return
+            visiting.add(identifier)
+            for operand in edges[identifier]:
+                visit(operand)
+            visiting.remove(identifier)
+            visited.add(identifier)
+
+        for identifier in edges:
+            visit(identifier)
+        for event in self.events:
+            if event.published_at is not None and event.published_at > self.cutoff:
+                raise ValueError("event publication is after evidence cutoff")
         for expectation in self.expectations:
             if set(expectation.source_ids) - source_ids:
                 raise ValueError("unknown expectation source")
+            if expectation.as_of > self.cutoff:
+                raise ValueError("expectation is after evidence cutoff")
+            if any(sources[sid].published_at is None for sid in expectation.source_ids):
+                raise ValueError("expectations require known source publication availability")
         return self
 
 
@@ -295,6 +362,24 @@ class ResearchResult(Contract):
     unresolved_gaps: tuple[str, ...] = ()
     promoted_dossier_id: str | None = None
     stop_reason: str
+
+    @model_validator(mode="after")
+    def artifacts_consistent(self):
+        import re
+
+        if self.artifacts.keys() != self.artifact_hashes.keys():
+            raise ValueError("artifact and hash keys must match")
+        if any(not re.fullmatch(r"[a-f0-9]{64}", value)
+               for value in self.artifact_hashes.values()):
+            raise ValueError("invalid artifact hash")
+        required = {"reader_report.md", "audit_report.md", "evidence.json", "research.json",
+                    "valuation_inputs.json", "valuation_results.json", "quality.json",
+                    "run_metadata.json"}
+        if self.assessment.status == "accepted" and (
+            not required <= self.artifacts.keys() or not self.usage.complete
+        ):
+            raise ValueError("accepted research requires complete artifacts and telemetry")
+        return self
 
 
 class Dossier(Contract):

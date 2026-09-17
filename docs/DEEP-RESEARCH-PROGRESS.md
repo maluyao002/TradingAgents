@@ -40,3 +40,17 @@ or pull request is implicit.
 Each worker owns disjoint paths and does not commit or initiate live research.
 Delegation telemetry is not an efficiency benchmark; aggregate subagent token cost
 is unavailable here.
+
+## Review resolutions
+
+Independent Sol/high review identified real contract gaps before orchestration:
+token admission did not reserve concurrent calls; source hashes and publication
+cutoffs were not authoritative; ADR identity was underspecified; derived-fact
+cycles were possible; accepted artifact manifests could be empty; replay hashing
+could reread changed files; storage lacked an injected protocol.
+
+The follow-up hardening adds atomic reservations, source-text hash checks,
+cutoff/reference validation, instrument identity, raw-times-scale semantics and
+duration metadata, DAG validation, accepted artifact requirements, bounded read-
+once input helpers, and a storage interface. Semantic verification and historical
+source availability still require M1/M4 implementation and external acceptance.

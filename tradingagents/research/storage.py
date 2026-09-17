@@ -39,9 +39,15 @@ def digest(value) -> str:
     return hashlib.sha256(canonical_json(value)).hexdigest()
 
 
-def read_json(path: Path, *, max_bytes: int = 32 * 1024 * 1024):
-    if path.stat().st_size > max_bytes:
+def read_bytes(path: Path, *, max_bytes: int = 32 * 1024 * 1024) -> bytes:
+    with path.open("rb") as stream:
+        content = stream.read(max_bytes + 1)
+    if len(content) > max_bytes:
         raise ValueError("artifact exceeds size allowance")
+    return content
+
+
+def parse_json(content: bytes):
 
     def unique_object(pairs):
         result = {}
@@ -54,15 +60,26 @@ def read_json(path: Path, *, max_bytes: int = 32 * 1024 * 1024):
     def invalid_constant(value):
         raise ValueError("non-finite JSON constant")
 
-    return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_object,
+    return json.loads(content.decode("utf-8"), object_pairs_hook=unique_object,
                       parse_constant=invalid_constant)
 
 
-def request_identity(request: ResearchRequest) -> str:
+def read_json(path: Path, *, max_bytes: int = 32 * 1024 * 1024):
+    return parse_json(read_bytes(path, max_bytes=max_bytes))
+
+
+def load_request_inputs(request: ResearchRequest) -> dict[str, bytes]:
+    """Read each external artifact once; hash and parse these same immutable bytes."""
+    return {name: read_bytes(path) for name in ("evidence_path", "prior_dossier_path")
+            if (path := getattr(request, name)) is not None}
+
+
+def request_identity(request: ResearchRequest, inputs: dict[str, bytes] | None = None) -> str:
+    inputs = load_request_inputs(request) if inputs is None else inputs
     settings = request.model_dump(mode="json", exclude={"output_dir", "dossier_dir"})
     for name in ("evidence_path", "prior_dossier_path"):
         path = getattr(request, name)
-        settings[name] = hashlib.sha256(path.read_bytes()).hexdigest() if path else None
+        settings[name] = hashlib.sha256(inputs[name]).hexdigest() if path else None
     return digest({"engine": ENGINE_VERSION, "settings": settings})
 
 
@@ -104,6 +121,8 @@ class CheckpointStore:
                 raise ValueError("research destination is in use") from exc
             self._locked = True
             manifest_path = self.directory / "research_checkpoint.json"
+            if manifest_path.is_symlink():
+                raise ValueError("checkpoint manifest cannot be a symlink")
             if manifest_path.exists():
                 manifest = read_json(manifest_path)
                 if manifest != {"schema_version": 1, "identity": self.identity}:
@@ -121,7 +140,11 @@ class CheckpointStore:
     def _stage_path(self, stage: str) -> Path:
         if not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", stage):
             raise ValueError("invalid checkpoint stage")
-        return self.directory / "stages" / f"{stage}.json"
+        directory = self.directory / "stages"
+        path = directory / f"{stage}.json"
+        if directory.is_symlink() or path.is_symlink():
+            raise ValueError("checkpoint paths cannot be symlinks")
+        return path
 
     def save_stage(self, stage: str, inputs, output) -> None:
         if not self._locked:
