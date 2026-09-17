@@ -725,6 +725,21 @@ def test_turn_timeout_is_bounded_interrupted_unsubscribed_and_invalidated(tmp_pa
     assert methods[-2:] == ["turn/interrupt", "thread/unsubscribe"]
 
 
+@pytest.mark.parametrize("limit", ["_MAX_TURN_EVENTS", "_MAX_STREAM_EVENTS", "_MAX_STREAM_CHARS"])
+def test_stream_guard_failure_interrupts_unsubscribes_and_invalidates(tmp_path, monkeypatch, limit):
+    import tradingagents.codex.adapter as adapter_module
+
+    monkeypatch.setattr(adapter_module, limit, 0)
+    adapter, log = _adapter(tmp_path)
+    with adapter:
+        with pytest.raises(CodexInferenceError, match="safety limit"):
+            adapter.complete("Role", "Evidence", "gpt-test-terra", "medium")
+        with pytest.raises(CodexAdapterError, match="context manager"):
+            adapter.list_models()
+    methods = [request.get("method") for request in _requests(log)]
+    assert methods[-2:] == ["turn/interrupt", "thread/unsubscribe"]
+
+
 def test_malformed_started_turn_is_interrupted_before_unsubscribe(tmp_path):
     adapter, log = _adapter(tmp_path, "malformed-turn-start")
     with adapter:

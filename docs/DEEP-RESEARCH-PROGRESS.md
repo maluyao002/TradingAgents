@@ -188,7 +188,24 @@ per-token disk overhead in future diagnostics; this change was not exercised by
 a second live call. A completed validated planner reply, if any, is explicitly
 separate from diagnostic logs. Next: redesign the stream/control-event bounds
 while retaining deadline, payload-size and tool-isolation protections, then
-validate before returning to bilingual generation. The production cap is unchanged.
+validate before returning to bilingual generation. At that point the production
+cap was unchanged.
+
+The next user-authorized repair separates the 10,000 control-event limit from
+250,000 validated nonempty agent-message deltas, bounded additionally by 4,000,000
+cumulative streamed characters. Empty chunks, advisory messages and retired or
+unrelated traffic still consume the control budget. Deltas require a started turn
+and matching uncompleted agent-message item; completed item types cannot change.
+The original absolute deadline, completed-output cap, transport message-byte
+limit and isolation checks remain in force. Stream fragments are not retained.
+Regression coverage exercises more than 10,000 legitimate deltas, all count/size
+boundaries, Unicode, empty/malformed/out-of-order streams, usage retention and
+interrupt/unsubscribe/invalidation on cap failure. One further diagnostic is
+authorized under unchanged 300-second call / 360-second parent bounds, using the
+same frozen evidence and planner configuration in a separate output directory.
+Independent Terra/medium review found no remaining issue after checking an initial
+false-positive empty-delta finding against the code and added regressions. Final
+offline validation: **1,676 passed, 2 skipped, 18 existing warnings, 65 subtests**.
 
 Baseline review also illustrates why the Claude report is not a gold label and
 why reviewers need checks: an initial criticism of its 18.6% EPS premium mistakenly

@@ -158,6 +158,10 @@ _THREAD_ONLY_NOTIFICATIONS = frozenset(
 _PROTOCOL_NOTIFICATION_NAMES = frozenset(["account/login/completed", "account/rateLimits/updated", "account/updated", "app/list/updated", "autoApprovalReview/strictReviewRequired", "command/exec/outputDelta", "configWarning", "deprecationNotice", "error", "externalAgentConfig/import/completed", "externalAgentConfig/import/progress", "fs/changed", "fuzzyFileSearch/sessionCompleted", "fuzzyFileSearch/sessionUpdated", "guardianWarning", "hook/completed", "hook/started", "item/agentMessage/delta", "item/autoApprovalReview/completed", "item/autoApprovalReview/started", "item/commandExecution/outputDelta", "item/commandExecution/terminalInteraction", "item/completed", "item/fileChange/outputDelta", "item/fileChange/patchUpdated", "item/mcpToolCall/progress", "item/plan/delta", "item/reasoning/summaryPartAdded", "item/reasoning/summaryTextDelta", "item/reasoning/textDelta", "item/started", "mcpServer/event/stream/notification", "mcpServer/oauthLogin/completed", "mcpServer/startupStatus/updated", "model/rerouted", "model/safetyBuffering/updated", "model/verification", "modelProvider/authRecoveryCompleted", "modelProvider/authRecoveryStarted", "process/exited", "process/outputDelta", "project/changed", "remoteControl/status/changed", "serverRequest/resolved", "skills/changed", "thread/archived", "thread/closed", "thread/compacted", "thread/deleted", "thread/environment/connected", "thread/environment/disconnected", "thread/goal/cleared", "thread/goal/updated", "thread/name/updated", "thread/project/updated", "thread/queue/changed", "thread/realtime/closed", "thread/realtime/error", "thread/realtime/item/completed", "thread/realtime/item/started", "thread/realtime/item/transcript/delta", "thread/realtime/itemAdded", "thread/realtime/outputAudio/delta", "thread/realtime/sdp", "thread/realtime/started", "thread/realtime/transcript/delta", "thread/realtime/transcript/done", "thread/reverted", "thread/settings/updated", "thread/started", "thread/status/changed", "thread/tokenUsage/updated", "thread/unarchived", "turn/completed", "turn/diff/updated", "turn/moderationMetadata", "turn/plan/updated", "turn/started", "warning", "windows/worldWritableWarning", "windowsSandbox/setupCompleted"])
 _FORBIDDEN_RUNTIME_NAMES = frozenset({"AGENTS.md", "config.toml"})
 _MAX_TURN_EVENTS = 10_000
+# Text fragmentation is not control activity. Bound it separately, including
+# cumulative content, without retaining or reconstructing streamed messages.
+_MAX_STREAM_EVENTS = 250_000
+_MAX_STREAM_CHARS = 4_000_000
 _MAX_OUTPUT_CHARS = 4_000_000
 _EXPECTED_FEATURES = {
     "apply_patch_freeform": False,
@@ -972,19 +976,42 @@ class CodexAdapter:
         transport = self._require_transport()
         turn_started = False
         started_items: set[str] = set()
+        item_types: dict[str, str] = {}
         completed_items: set[str] = set()
         final_messages: list[str] = []
         unphased_messages: list[str] = []
         output_chars = 0
         usage: CodexTokenUsage | None = None
         usage_is_invalid = False
-        for _ in range(_MAX_TURN_EVENTS):
+        control_events = stream_events = stream_chars = 0
+        while True:
             notification = transport.wait_notification(timeout=self._remaining(deadline))
             method = notification.get("method")
             params = notification.get("params")
             if not isinstance(method, str) or not isinstance(params, dict):
                 raise CodexInferenceError("Codex emitted an invalid turn notification")
             event_thread = params.get("threadId")
+            if (method == "item/agentMessage/delta" and event_thread == thread_id
+                    and params.get("turnId") == turn_id):
+                item_id = _safe_identifier(params.get("itemId"))
+                delta = params.get("delta")
+                if (not turn_started or item_types.get(item_id) != "agentMessage"
+                        or item_id in completed_items or not isinstance(delta, str)):
+                    raise CodexInferenceError("Codex emitted an invalid agent message delta")
+                if delta:
+                    stream_events += 1
+                    stream_chars += len(delta)
+                    if stream_events > _MAX_STREAM_EVENTS:
+                        raise CodexInferenceError("Codex turn exceeded the streaming event safety limit")
+                    if stream_chars > _MAX_STREAM_CHARS:
+                        raise CodexInferenceError("Codex streamed output exceeded the adapter safety limit")
+                    continue
+            # Empty chunks, retired/unrelated traffic and other notifications
+            # still consume the control budget; none can keep this loop alive
+            # indefinitely. Every read also uses the original absolute deadline.
+            control_events += 1
+            if control_events > _MAX_TURN_EVENTS:
+                raise CodexInferenceError("Codex turn exceeded the notification safety limit")
             # Official warning notifications are advisory thread metadata, not
             # turn lifecycle events or permission to execute tools. Do not echo
             # their free-form text: it may contain private runtime details.
@@ -1079,8 +1106,10 @@ class CodexAdapter:
                     if item_id in started_items:
                         raise CodexInferenceError("Codex emitted a duplicate item start event")
                     started_items.add(item_id)
+                    item_types[item_id] = item_type
                 else:
-                    if item_id not in started_items or item_id in completed_items:
+                    if (item_id not in started_items or item_id in completed_items
+                            or item_types[item_id] != item_type):
                         raise CodexInferenceError("Codex emitted an invalid item completion event")
                     completed_items.add(item_id)
                     if item_type == "agentMessage":
@@ -1123,7 +1152,6 @@ class CodexAdapter:
                 if not messages or not any(message.strip() for message in messages):
                     raise CodexInferenceError("Codex completed without a final text response")
                 return CodexCompletion("\n".join(messages), usage)
-        raise CodexInferenceError("Codex turn exceeded the notification safety limit")
 
     def _cleanup_thread(
         self,

@@ -89,8 +89,13 @@ The September 17 first NVDA pilot attempt failed at the planner provider boundar
 without returned usage counters. The authorized one-call diagnostic retry streamed
 output but hit the adapter's 10,000-notification guard before completion. Neither
 is successful live validation. See the progress log; preserve both failed attempts
-and their unknown usage. The streaming-event guard needs a bounded redesign before
-another report run; do not simply disable deadline, output-size or tool protections.
+and their unknown usage. The adapter now separates up to 250,000 validated nonempty
+agent-message chunks (4,000,000 cumulative characters) from 10,000 control events.
+Empty chunks and retired/unrelated traffic still use the control limit. Completed
+text has its own unchanged 4,000,000-character limit, and transport message-byte,
+absolute-deadline and tool-isolation protections remain in place. Streamed chunks
+are not reconstructed; completed items remain authoritative. These engineering
+bounds are not token allowances or evidence of successful live research.
 
 ## Artifacts and recovery
 
