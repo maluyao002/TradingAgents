@@ -290,15 +290,48 @@ Integration validation: **1,712 passed, 2 skipped, 18 existing warnings and 65
 subtests**. The next live stage is challenge reconciliation, followed by claim
 verification, English editing/verification and Chinese translation/verification.
 
+The authorized recovery completed successfully under `run_recovered_1`, producing
+both English and Chinese research previews with `completed_needs_review`. All six
+new calls returned complete counters; aggregate usage remains incomplete because
+of the original valuation rejection. Known spend is **648,933 input + 100,189
+output = 749,122 tokens**: 197,067 historical + 64,623 diagnostic + 487,432 new.
+Reasoning output (35,133) is included in output, not added again. Earlier diagnostic
+attempts and coding/reviewer agents are outside this ledger. Chinese translation
+and verification add 185,102 tokens (92,213 + 92,889); this is not a controlled
+Chinese-versus-English research comparison. Retained elapsed time is 2,320.45s.
+
+Final checks passed: 11 artifact hashes, 17 unchanged source-run hashes, eight
+sections per language, and identical ordering of all 46 fact insertions and
+section evidence IDs. Both verifiers returned no critical findings; the combined
+assessment has eight warnings and eight informational findings. Independent
+Terra/medium review found a more coherent question-led narrative than legacy,
+while Claude remains more complete as a valuation/scenario memo. Different input
+scopes prevent a controlled quality claim. No price target or production acceptance
+is supported by this issuer-only, truncated evidence packet.
+
+Next quality work exposed by the actual rendered artifacts:
+
+- Separate concise decision-relevant reader limitations from the full audit log:
+  each current reader appends 175 bullets, overwhelming the main narrative.
+- Fully localize the Chinese reader wrapper and audit presentation; its narrative
+  is translated but raw gaps/status boilerplate still include English.
+- Add a compact synthesis and ranked evidence/monitoring agenda, improve pinpoint
+  citation scope, and remove stale placeholder/process prose from the reader.
+- Supply complete relevant filing context, independent evidence and reconciled
+  valuation inputs before attempting an accepted valuation-bearing report.
+
+The saved pilot artifacts remain unchanged. The detailed three-way comparison and
+usage breakdown are in `reports/NVDA_V2_20260917/comparison.md` (local run output).
+
 Baseline review also illustrates why the Claude report is not a gold label and
 why reviewers need checks: an initial criticism of its 18.6% EPS premium mistakenly
 used Q2 instead of H1; H1 EPS $4.85/$4.09 supports 18.6%. That criticism was withdrawn.
 Human source/model review and matched evaluations remain outstanding.
 
-Next validate the opt-in backend on a bounded authorized pilot, and use verified
-reference evidence to calibrate company models, coverage and comparison runners.
+Next extend validation beyond this narrow pilot, and use verified reference
+evidence to calibrate company models, coverage and comparison runners.
 These are additional acceptance/implementation tasks, not silently completed features.
-Before any live pilot, obtain explicit authorization and agree the reference window; the existing NVDA
+Before additional live pilots, obtain explicit authorization and agree the reference window; the existing NVDA
 report and Claude comparison are candidate baselines, not gold factual labels.
 Human source/model review and matched evaluations remain mandatory before acceptance.
 The separate Chinese token-comparison TODO remains in `WEEKLY-REPORTS.md`.
