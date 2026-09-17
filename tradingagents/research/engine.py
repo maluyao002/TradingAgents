@@ -217,9 +217,35 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                         raise ValueError("completed research artifact mismatch")
                 return saved_result
         previous = store.load_stage("resources", {}) or {}
-        tracker = BudgetTracker(request.budget,
-                                previous_usage=Usage.model_validate(previous.get("usage", {})),
-                                elapsed_seconds=previous.get("elapsed_seconds", 0))
+        recovery = getattr(services.models, "recovery_context", None)
+        if recovery is not None:
+            if not isinstance(recovery, dict) or recovery.get("schema_version") != 1:
+                raise ValueError("invalid explicit recovery context")
+            restore = getattr(services.models, "restore_recovery_context", None)
+            if previous.get("recovery") is not None:
+                if restore is None:
+                    raise ValueError("recovery service cannot restore provenance")
+                restore(previous["recovery"])
+                recovery = services.models.recovery_context
+            previous_usage = Usage.model_validate(
+                previous.get(
+                    "budget_usage",
+                    recovery["initial_budget_usage"],
+                )
+            )
+            previous_elapsed = previous.get(
+                "elapsed_seconds", recovery["previous_elapsed_seconds"]
+            )
+        else:
+            if "budget_usage" in previous or "recovery" in previous:
+                raise ValueError("explicit recovery checkpoint requires its recovery service")
+            previous_usage = Usage.model_validate(previous.get("usage", {}))
+            previous_elapsed = previous.get("elapsed_seconds", 0)
+        tracker = BudgetTracker(
+            request.budget,
+            previous_usage=previous_usage,
+            elapsed_seconds=previous_elapsed,
+        )
         if previous.get("dispatched"):
             tracker.record(Usage(complete=False))
         dispatch_unsettled = bool(previous.get("dispatched"))
@@ -233,11 +259,27 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
         stop_reason = "completed_needs_review"
         failure_type = None
 
+        def aggregate_usage():
+            if recovery is None:
+                return tracker.usage
+            # The known historical counters are useful for budget accounting, but
+            # the source dispatch was never measured.  It remains incomplete for
+            # every cumulative artifact and result produced by recovery.
+            return tracker.usage.model_copy(update={"complete": False})
+
         def save_resources(dispatched=None):
-            store.save_stage("resources", {}, {"usage": tracker.usage.model_dump(mode="json"),
-                                               "elapsed_seconds": tracker.elapsed_seconds,
-                                               "dispatched": dispatch_unsettled if dispatched is None else dispatched,
-                                               "by_stage": usage_by_stage})
+            resource_data = {
+                "usage": aggregate_usage().model_dump(mode="json"),
+                "elapsed_seconds": tracker.elapsed_seconds,
+                "dispatched": dispatch_unsettled if dispatched is None else dispatched,
+                "by_stage": usage_by_stage,
+            }
+            if recovery is not None:
+                resource_data.update(
+                    budget_usage=tracker.usage.model_dump(mode="json"),
+                    recovery=services.models.recovery_context,
+                )
+            store.save_stage("resources", {}, resource_data)
 
         def call(stage, role, data, schema, finalization=False, language=None):
             nonlocal dispatch_unsettled
@@ -256,21 +298,49 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 return schema.model_validate(cached)
             # UTF-8 bytes are a conservative input bound, plus an output envelope.
             envelope = len(canonical_json(payload)) + 16_000
-            permit = tracker.reserve(envelope, finalization=finalization)
-            dispatch_unsettled = True
-            save_resources()
+            origin = "current_live"
+            origin_resolver = getattr(services.models, "call_origin", None)
+            if recovery is not None and origin_resolver is None:
+                raise ValueError("explicit recovery service must classify every model call")
+            if origin_resolver is not None:
+                if recovery is None:
+                    raise ValueError("model-call origin overrides require explicit recovery")
+                origin = origin_resolver(role, payload, request)
+            if origin not in {"current_live", "imported_historical", "validated_diagnostic"}:
+                raise ValueError("invalid model-call usage origin")
+            if origin == "validated_diagnostic" and any(
+                item.get("usage_origin") == "validated_diagnostic"
+                for item in usage_by_stage.get(stage, [])
+                if isinstance(item, dict)
+            ):
+                raise BudgetExhausted("validated_diagnostic_already_consumed")
+            permit = None
+            if origin == "current_live":
+                permit = tracker.reserve(envelope, finalization=finalization)
+                dispatch_unsettled = True
+                save_resources()
+                timeout_seconds = permit.timeout_seconds
+            else:
+                # Imported replies and diagnostics are already materialized and
+                # cannot dispatch here. Their known usage is already in the
+                # explicit recovery seed before the first stage admission.
+                timeout_seconds = tracker.admit(finalization=finalization)
             try:
                 reply = services.models.complete(role, {**payload,
-                    "timeout_seconds": permit.timeout_seconds, "max_output_tokens": 16_000}, request)
+                    "timeout_seconds": timeout_seconds, "max_output_tokens": 16_000}, request)
                 reply = ModelReply.model_validate(reply)
-                tracker.complete(permit, reply.usage)
+                if origin == "current_live":
+                    tracker.complete(permit, reply.usage)
                 usage_by_stage.setdefault(stage, []).append({
                     "role": role, "model": request.models[role].model,
-                    "effort": request.models[role].effort, **reply.usage.model_dump(mode="json")})
+                    "effort": request.models[role].effort,
+                    "usage_origin": origin,
+                    **reply.usage.model_dump(mode="json")})
                 save_resources(dispatched=False)
                 dispatch_unsettled = False
             except BaseException:
-                tracker.record(Usage(complete=False))
+                if origin == "current_live":
+                    tracker.record(Usage(complete=False))
                 save_resources()
                 raise
             if not reply.usage.complete:
@@ -328,6 +398,11 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             snapshot = validate_snapshot(snapshot, request)
             store.save_stage("evidence", {}, snapshot.model_dump(mode="json"))
             gaps.extend(snapshot.gaps)
+            if recovery is not None:
+                gaps.append(
+                    "Explicit recovery reused six validated historical stages; the source run "
+                    "contains an unmeasured dispatched call, so cumulative usage remains incomplete."
+                )
             if getattr(services.models, "kind", None) == "codex" and not any(
                     source.id in _known_ids(snapshot) and source.content.strip() for source in snapshot.sources):
                 gaps.append("No eligible source text; live model calls withheld.")
@@ -485,15 +560,30 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 "identity": identity, "ticker": request.ticker, "cutoff": request.cutoff,
                 "backend": request.backend, "internal_language": request.internal_language,
                 "model_service_kind": getattr(services.models, "kind", "injected"),
-                "usage_measurement": "saved_response_counters" if getattr(services.models, "kind", None)
-                == "replay" else "provider_reported",
+                "usage_measurement": (
+                    "mixed_imported_historical_diagnostic_and_current"
+                    if recovery is not None
+                    else "saved_response_counters"
+                    if getattr(services.models, "kind", None) == "replay"
+                    else "provider_reported"
+                ),
                 "hard_output_token_cap": getattr(services.models, "supports_hard_output_cap", False),
-                "report_language": request.report_language, "usage": tracker.usage,
+                "report_language": request.report_language, "usage": aggregate_usage(),
                 "usage_by_stage": usage_by_stage,
-                "total_tokens": tracker.usage.total_tokens, "stop_reason": stop_reason,
+                "total_tokens": aggregate_usage().total_tokens, "stop_reason": stop_reason,
                 "failure_type": failure_type,
                 "elapsed_seconds": tracker.elapsed_seconds, "production_accepted": False}),
         }
+        if recovery is not None:
+            recovery_provenance = {
+                **services.models.recovery_context,
+                "aggregate_usage": aggregate_usage().model_dump(mode="json"),
+                "known_token_lower_bound": aggregate_usage().total_tokens,
+                "usage_total_unknown": True,
+                "budget_usage": tracker.usage.model_dump(mode="json"),
+                "elapsed_seconds": tracker.elapsed_seconds,
+            }
+            artifacts["recovery_provenance.json"] = canonical_json(recovery_provenance)
         if request.additional_report_languages:
             for language, completed_draft in drafts.items():
                 artifacts[_REPORT_FILENAMES[language]] = _report(
@@ -502,6 +592,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             **parse_json(artifacts["run_metadata.json"]),
             **({"additional_report_languages": request.additional_report_languages}
                if request.additional_report_languages else {}),
+            **({"known_token_lower_bound": aggregate_usage().total_tokens,
+                "usage_total_unknown": True}
+               if recovery is not None else {}),
             "update": describe_update(prior, snapshot)})
         if request.dossier_dir is not None:
             created = datetime.now(timezone.utc)
@@ -531,7 +624,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 artifacts={name: str(store.directory / name) for name in artifacts},
                                 artifact_hashes={name: hashlib.sha256(data).hexdigest()
                                                  for name, data in artifacts.items()},
-                                assessment=assessment, usage=tracker.usage,
+                                assessment=assessment, usage=aggregate_usage(),
                                 unresolved_gaps=tuple(dict.fromkeys(gaps)), stop_reason=stop_reason)
         if result.stop_reason == "completed_needs_review":
             store.save_stage("completed-result", {}, result.model_dump(mode="json"))

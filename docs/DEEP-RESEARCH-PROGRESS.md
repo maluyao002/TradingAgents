@@ -270,6 +270,26 @@ a successful reply to its exact payload, source hashes and wire version. It does
 not edit source checkpoints or settle prior unknown usage. Initial focused tests:
 52 passed; real source-prefix verification passed without live calls.
 
+The repaired schema diagnostic then succeeded in **59.31 seconds**, returning
+**61,532 input + 3,091 output = 64,623 tokens**, including 2,033 reasoning-output
+tokens within output. It returned a valid `model=null` proposal with explicit
+missing inputs rather than an unsupported target; this validates the wire path,
+not a populated valuation model. The artifact/provenance are retained under
+`valuation_diagnostic_1`. The six source stages plus the diagnostic have **261,690
+known tokens**; the original rejected valuation call remains unknown. Before the
+probe, 1,699 offline tests and 65 subtests passed (2 skips, 18 existing warnings).
+
+Explicit recovery is implemented with source/payload/provenance validation and a
+new output directory. It imports the six stages and validated valuation reply,
+seeds all **261,690 known tokens and 1,207.58 elapsed seconds** before the first
+admission, and never changes the original incomplete-usage record. Imported calls
+are not dispatched or charged again; any new unmeasured call stops continuation.
+The accounting regression tests cover early stops and diagnostic replay, along
+with tampering, symlinks/FIFOs, explicit authorization and bilingual outputs.
+Integration validation: **1,712 passed, 2 skipped, 18 existing warnings and 65
+subtests**. The next live stage is challenge reconciliation, followed by claim
+verification, English editing/verification and Chinese translation/verification.
+
 Baseline review also illustrates why the Claude report is not a gold label and
 why reviewers need checks: an initial criticism of its 18.6% EPS premium mistakenly
 used Q2 instead of H1; H1 EPS $4.85/$4.09 supports 18.6%. That criticism was withdrawn.

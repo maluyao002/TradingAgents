@@ -119,6 +119,38 @@ be reset for automatic continuation. Valid stages are retained in `run_final_1`,
 but neither English nor Chinese final reports have been generated. See the
 progress log for the required scoped schema diagnostic/recovery next step.
 
+## Explicit recovery after an acknowledged unmeasured call
+
+Normal resume still stops on unknown usage. The separate recovery command requires
+explicit acknowledgement and a new output directory; it never resets the old run:
+
+```sh
+.venv/bin/python -m scripts.research_diagnostic --config original_request.json \
+  --output valuation_diagnostic --role valuation --source-run failed_run \
+  --codex-home /absolute/path/to/isolated-runtime --allow-live
+.venv/bin/python -m scripts.research_recover --config original_request.json \
+  --source-run failed_run --output recovered_run \
+  --valuation-diagnostic valuation_diagnostic \
+  --codex-home /absolute/path/to/isolated-runtime \
+  --allow-live --acknowledge-unknown-usage
+```
+
+This deliberately narrow migration supports the validated six-stage wire-v1
+prefix ending at management. Request, evidence, model settings, payload and output
+hashes must match; mismatches fail rather than rerunning the prefix. Wire-v2
+valuation uses exact decimal strings with local finite-value/domain checks. A
+successful diagnostic is bound to its exact payload and source hashes and reused
+without another valuation call. Missing financial inputs still yield unavailable
+valuation, not fabricated assumptions.
+
+Recovery provenance distinguishes imported historical counters, the diagnostic,
+and new provider calls. Known prior spend and elapsed time remain charged against
+the original budget; unknown historical spend cannot be guaranteed to fit a
+measurable token ceiling. Cumulative usage therefore remains incomplete and the
+reported token count is a known lower bound. New unknown usage still stops further
+admissions. The old artifacts and unsettled flag remain unchanged. Recovery is not
+production acceptance or permission to publish, trade, or change schedules.
+
 ## Artifacts and recovery
 
 Each run writes `reader_report.md`, `audit_report.md`, `evidence.json`, `research.json`,
