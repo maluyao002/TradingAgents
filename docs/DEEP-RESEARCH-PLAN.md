@@ -1,6 +1,10 @@
 # Deep Research V2: implementation and acceptance plan
 
-Status: planned, not implemented. Updated 2026-09-17.
+Status: implementation started; milestone acceptance remains gated. Updated 2026-09-17.
+
+See [implementation progress](DEEP-RESEARCH-PROGRESS.md) and the
+[offline runner guide](DEEP-RESEARCH-USAGE.md) for what actually works today.
+The milestone exit criteria below remain requirements, not completion claims.
 
 The [system design](DEEP-RESEARCH-DESIGN.md) is authoritative for scope, contracts,
 roles, source policy, budgets, and report behavior. This plan supersedes the earlier

@@ -1,11 +1,12 @@
 # Deep Research V2: system design
 
-Status: agreed design direction; not implemented. Updated 2026-09-17.
+Status: agreed design; opt-in offline foundations under implementation. Updated 2026-09-17.
 
 This is the canonical design for the next research engine. The companion
 [implementation plan](DEEP-RESEARCH-PLAN.md) defines delivery and acceptance.
 Existing runtime behavior remains described by the current integration and
-weekly-report documentation; this document does not claim those changes exist.
+weekly-report documentation. This document describes the target, not a completion
+claim; see the [implementation log](DEEP-RESEARCH-PROGRESS.md) for verified scope.
 
 ## 1. Objective and boundaries
 
