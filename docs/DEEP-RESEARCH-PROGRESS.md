@@ -207,6 +207,20 @@ Independent Terra/medium review found no remaining issue after checking an initi
 false-positive empty-delta finding against the code and added regressions. Final
 offline validation: **1,676 passed, 2 skipped, 18 existing warnings, 65 subtests**.
 
+The authorized second diagnostic succeeded after **258.30 seconds** with the same
+Sol/high planner, frozen evidence and 300-second call / 360-second parent bounds.
+It received **10,010 agent-message delta events**, demonstrating why a shared
+10,000-event control/stream cap was insufficient. The separate validated planner
+reply and redacted diagnostic are under `reports/NVDA_V2_20260917/diagnostic_retry_2`.
+Returned usage is complete: **23,154 input + 14,118 output = 37,272 total tokens**,
+including 4,076 reasoning-output tokens (a subset of output, not added again),
+with zero cached-input tokens reported. Exactly one planner inference was made;
+no full-engine or bilingual finalization calls followed. The first two failed
+attempts still have unknown usage and unchanged artifacts. This is successful live
+planner/wire/stream validation, not full-pipeline or research-quality acceptance.
+Next: an authorized fresh full-engine run, keeping the failed run's unsettled
+checkpoint intact; this diagnostic artifact is not an engine resume checkpoint.
+
 Baseline review also illustrates why the Claude report is not a gold label and
 why reviewers need checks: an initial criticism of its 18.6% EPS premium mistakenly
 used Q2 instead of H1; H1 EPS $4.85/$4.09 supports 18.6%. That criticism was withdrawn.

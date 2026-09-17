@@ -97,6 +97,13 @@ absolute-deadline and tool-isolation protections remain in place. Streamed chunk
 are not reconstructed; completed items remain authoritative. These engineering
 bounds are not token allowances or evidence of successful live research.
 
+The subsequent authorized one-call diagnostic succeeded within the original
+timeout after 258.30 seconds and 10,010 text chunks, returning a validated planner
+reply with 37,272 known tokens. This validates the repaired planner path only;
+English/Chinese final reports remain ungenerated. Keep all three attempts separate;
+the successful diagnostic neither settles earlier unknown usage nor creates an
+engine checkpoint that can safely resume those failed runs.
+
 ## Artifacts and recovery
 
 Each run writes `reader_report.md`, `audit_report.md`, `evidence.json`, `research.json`,
