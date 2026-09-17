@@ -53,7 +53,7 @@ The CLI exits 0 for a completed review-required preview, 1 for a recoverable sto
 run, and 2 for configuration/input failure or an unconfigured live backend. A zero
 exit code is not financial acceptance.
 
-## Explicit live Codex entrypoint (not exercised during implementation)
+## Explicit live Codex entrypoint
 
 For a request with `backend: "codex"`, an authorized caller can use:
 
@@ -77,9 +77,18 @@ directory; missing sources/coverage remain explicit gaps. No live call occurs in
 
 The adapter uses per-turn structured output and provider usage events, as described
 in the [official Codex App Server documentation](https://learn.chatgpt.com/docs/app-server).
+The research service uses closed, required-field wire schemas; valuation maps are
+serialized as unique key/value entries and converted back to the unchanged domain
+contracts. Unknown schemas are rejected before adapter construction. These follow
+the [strict structured-output requirements](https://developers.openai.com/api/docs/guides/structured-outputs).
 Malformed output is not silently repaired; known usage remains charged. Missing
 usage blocks subsequent calls. Codex's output-token allowance is advisory here,
 not a hard provider cap; metadata says so, and observed overshoot stops the run.
+
+The September 17 first NVDA pilot attempt failed at the planner provider boundary
+without returned usage counters. It is not successful live validation. See the
+progress log; another live attempt requires separately acknowledged unknown usage,
+preserved failed artifacts and an explicitly bounded retry.
 
 ## Artifacts and recovery
 

@@ -18,6 +18,7 @@ from tradingagents.codex.adapter import CodexAdapter
 from .contracts import ResearchRequest, Usage
 from .services import ModelReply
 from .storage import canonical_json, digest, parse_json
+from .wire import WIRE_SCHEMA_VERSION, codec_for, system_instruction_suffix
 
 
 class ModelCallTimeout(TimeoutError):
@@ -80,7 +81,8 @@ class CodexModelService:
 
     def __init__(self, home: Path, *, adapter_factory=_ClosingSafeAdapter):
         self.home = Path(home).resolve()
-        self.identity = digest({"service": "isolated-codex-v1", "home": str(self.home)})
+        self.identity = digest({"service": "isolated-codex-v1", "wire": WIRE_SCHEMA_VERSION,
+                                "home": str(self.home)})
         self._factory = adapter_factory
         self._adapter = None
         self._preflighted = None
@@ -104,6 +106,7 @@ class CodexModelService:
         output_limit = payload["max_output_tokens"]
         if type(output_limit) is not int or output_limit <= 0:
             raise ValueError("output allowance must be a positive integer")
+        codec = codec_for(role, payload.get("response_schema"))
         setting = request.models[role]
         choices = tuple(sorted({(item.model, item.effort) for item in request.models.values()}))
         with _call_deadline(timeout):
@@ -120,14 +123,14 @@ class CodexModelService:
                 for model, effort in choices:
                     self._adapter.preflight(model, effort)
                 self._preflighted = choices
-            instructions = payload["system"] + (
+            instructions = payload["system"] + system_instruction_suffix(role) + (
                 f" Keep the final JSON within the requested {output_limit}-token output allowance."
             )
             prompt = canonical_json({key: value for key, value in payload.items()
                                      if key not in {"system", "response_schema", "timeout_seconds"}}).decode()
             completion = self._adapter.complete_with_usage(
                 instructions, prompt, setting.model, setting.effort,
-                output_schema=payload["response_schema"])
+                output_schema=codec.output_schema)
         usage = Usage(complete=False) if completion.usage is None else Usage(
             input_tokens=completion.usage.input_tokens,
             output_tokens=completion.usage.output_tokens,
@@ -139,7 +142,8 @@ class CodexModelService:
             data = parse_json(completion.text.encode("utf-8"))
             if not isinstance(data, dict):
                 raise ValueError("response must be a JSON object")
-        except (ValueError, UnicodeError):
+            data = codec.decode(data)
+        except (TypeError, ValueError, UnicodeError):
             # Preserve known spend, then let the stage contract fail closed. Raw
             # malformed text is never echoed into diagnostics or silently repaired.
             data = {"_invalid_model_response": True}

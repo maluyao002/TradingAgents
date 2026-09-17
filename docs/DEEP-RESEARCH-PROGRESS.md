@@ -135,6 +135,43 @@ is included in this implementation task.
 
 ## Next decisions and work
 
+### September 17 bilingual NVDA pilot
+
+The user authorized one live NVDA pilot with English and Chinese final reports.
+Commit `01f06e2` adds paired finalization using one shared research pass, a faithful
+translation, separate verification, one budget/usage ledger and hashed outputs.
+It also adds explicitly curated pilot acquisition/table helpers; these are not
+automatic production discovery or calibrated financial models.
+
+Five public NVIDIA sources were acquired and frozen at 2026-09-17 15:21:06 UTC,
+with 52 source-table-bound financial facts. The paired-export regression subset
+passed 69 tests; the research suite passed 309 tests; the full offline suite passed
+1,615 tests and 65 subtests (2 skips, 18 existing warnings).
+
+The first live attempt stopped at the planner provider boundary after 4.64 seconds
+with `CodexInferenceError`, before a research stage completed. No substantive final
+reports were produced. The provider returned no token counters; usage is unknown,
+not zero. Its artifacts/checkpoint remain under `reports/NVDA_V2_20260917/run` and
+must not be reset to conceal unsettled dispatch. The comparison in the parent
+folder is explicitly interim. A separate bounded diagnostic retry was requested
+from the user, not automatically launched.
+
+Inspection found Pydantic/domain schemas do not directly meet the strict provider
+wire requirements (all object fields required, no open dictionaries). The initial
+error alone does not prove this was its cause. The schema adapter now uses closed,
+required-field wire contracts and typed valuation input; unique key/value arrays
+round-trip into the unchanged domain maps. Unknown schemas fail before adapter
+startup; decoding failures preserve returned usage. Wire identity is versioned and
+field-drift guards cover the financial dataclasses. Safe schema-error classification
+does not expose upstream prose or authorize retries. Final offline validation:
+**1,639 passed, 2 skipped, 18 existing warnings, 65 subtests passed**. The live
+schema repair remains unverified until an authorized retry.
+
+Baseline review also illustrates why the Claude report is not a gold label and
+why reviewers need checks: an initial criticism of its 18.6% EPS premium mistakenly
+used Q2 instead of H1; H1 EPS $4.85/$4.09 supports 18.6%. That criticism was withdrawn.
+Human source/model review and matched evaluations remain outstanding.
+
 Next validate the opt-in backend on a bounded authorized pilot, and use verified
 reference evidence to calibrate company models, coverage and comparison runners.
 These are additional acceptance/implementation tasks, not silently completed features.

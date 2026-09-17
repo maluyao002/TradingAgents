@@ -38,6 +38,10 @@ class CodexInferenceError(CodexAdapterError):
     """A Codex turn did not produce a valid text response."""
 
 
+class CodexStructuredOutputError(CodexInferenceError):
+    """Provider rejected the output schema; raw error details stay private."""
+
+
 class CodexUsageLimitError(CodexInferenceError):
     """Stop an unattended batch until subscription capacity is available."""
 
@@ -47,7 +51,15 @@ class CodexTransientError(CodexInferenceError):
 
 
 def _turn_error(error: object) -> CodexAdapterError:
-    """Classify only protocol codes; never expose free-form upstream details."""
+    """Classify codes and narrow schema signatures; never expose upstream prose."""
+    # Classify a narrow provider validation signature without echoing its body.
+    # This does not assert zero usage or authorize an automatic retry.
+    message = error.get("message") if isinstance(error, dict) else None
+    if isinstance(message, str) and any(signature in message.lower() for signature in (
+        "invalid schema for response_format", "invalid schema for response format",
+        "invalid schema for text.format", "invalid_json_schema",
+    )):
+        return CodexStructuredOutputError("Codex rejected the structured-output schema; details redacted")
     info = error.get("codexErrorInfo") if isinstance(error, dict) else None
     if isinstance(info, str):
         if info in {"usageLimitExceeded", "sessionBudgetExceeded"}:
