@@ -10,18 +10,27 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, WithJsonSchema, field_validator
+from pydantic_core import SchemaError, SchemaValidator, core_schema
 
 from .contracts import Identifier
 from .stages import AnalysisOutput, ReportDraft, ValuationProposal, VerificationOutput
 
-WIRE_SCHEMA_VERSION = "research-wire-v1"
+WIRE_SCHEMA_VERSION = "research-wire-v2"
+# Keep exact financial values as strings at the generation boundary. Pydantic's
+# default Decimal schema contains a lookahead pattern that is not portable across
+# structured-output regex engines. Decimal still validates finite values locally;
+# the financial domain retains all range, unit and schedule checks.
+WireDecimal = Annotated[Decimal, WithJsonSchema({
+    "type": "string", "description": "Finite decimal encoded as an exact string, e.g. 0.125."
+})]
 _VALUATION_WIRE_INSTRUCTION = (
     " For this valuation response only, encode assumption_rationale and assumptions as arrays "
     "of {key, value} entries, with no duplicate keys. The model field must be null or match the "
-    "typed FCFF model in the response schema, including every required field."
+    "typed FCFF model in the response schema, including every required field. "
+    "Encode financial amounts, scales and rates as exact decimal strings, not JSON numbers."
 )
 
 
@@ -79,35 +88,35 @@ class WireAssumptionSupport(_WireContract):
 
 class WireValuationUnits(_WireModel):
     currency: str
-    amount_scale: Decimal
-    share_scale: Decimal
+    amount_scale: WireDecimal
+    share_scale: WireDecimal
 
 
 class WireForecastPeriod(_WireModel):
     label: str
     period_start: date
     period_end: date
-    discount_years: Decimal
-    revenue_growth: Decimal
-    operating_margin: Decimal
+    discount_years: WireDecimal
+    revenue_growth: WireDecimal
+    operating_margin: WireDecimal
     operating_margin_basis: Literal["after_sbc", "before_sbc"]
-    tax_rate: Decimal
-    depreciation_amortization_pct_revenue: Decimal
-    capex_pct_revenue: Decimal
-    working_capital_pct_revenue: Decimal
-    sbc_pct_revenue: Decimal
+    tax_rate: WireDecimal
+    depreciation_amortization_pct_revenue: WireDecimal
+    capex_pct_revenue: WireDecimal
+    working_capital_pct_revenue: WireDecimal
+    sbc_pct_revenue: WireDecimal
     external_funding_required: bool
 
 
 class WireFCFFModelInput(_WireModel):
     as_of_date: date
-    current_revenue: Decimal
-    current_working_capital: Decimal
+    current_revenue: WireDecimal
+    current_working_capital: WireDecimal
     periods: tuple[WireForecastPeriod, ...] = Field(min_length=1, max_length=50)
-    discount_rate: Decimal
-    terminal_growth: Decimal
-    net_debt: Decimal
-    current_diluted_shares: Decimal
+    discount_rate: WireDecimal
+    terminal_growth: WireDecimal
+    net_debt: WireDecimal
+    current_diluted_shares: WireDecimal
     units: WireValuationUnits
     funding_caveats: tuple[str, ...]
 
@@ -181,6 +190,11 @@ def validate_strict_schema(schema: dict[str, Any]) -> None:
             return
         if "default" in value:
             raise ValueError(f"strict output schema contains a default at {path}")
+        if isinstance(value.get("pattern"), str):
+            try:
+                SchemaValidator(core_schema.str_schema(pattern=value["pattern"]))
+            except SchemaError:
+                raise ValueError(f"strict output schema has a nonportable pattern at {path}") from None
         if value.get("type") == "object" or "properties" in value:
             properties = value.get("properties")
             if not isinstance(properties, dict):

@@ -258,6 +258,18 @@ plus explicit recovery that retains the six valid stages and the failed call's
 unknown usage. Do not clear `dispatched`, invent zero usage, or silently rerun the
 entire research pass. Live valuation validation and continuation require direction.
 
+The user subsequently authorized valuation-schema repair, bounded validation and
+explicit recovery of the six-stage prefix. Wire v2 represents financial Decimals
+as exact strings, avoiding Pydantic's generated lookahead regex while keeping
+finite-value/domain validation and date validation. The old rejection did not
+retain a precise keyword path, so regex compatibility remains a hypothesis until
+the repaired schema is exercised. Nonportable regex patterns now fail offline.
+The diagnostic supports a single valuation call using the original six analyses;
+it checks source identity/artifact/stage hashes before provider startup and binds
+a successful reply to its exact payload, source hashes and wire version. It does
+not edit source checkpoints or settle prior unknown usage. Initial focused tests:
+52 passed; real source-prefix verification passed without live calls.
+
 Baseline review also illustrates why the Claude report is not a gold label and
 why reviewers need checks: an initial criticism of its 18.6% EPS premium mistakenly
 used Q2 instead of H1; H1 EPS $4.85/$4.09 supports 18.6%. That criticism was withdrawn.

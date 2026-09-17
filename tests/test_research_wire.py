@@ -1,5 +1,6 @@
 from copy import deepcopy
 from dataclasses import asdict, fields
+from decimal import Decimal
 
 import pytest
 from pydantic import TypeAdapter, ValidationError
@@ -116,3 +117,37 @@ def test_valuation_wire_rejects_duplicate_map_keys(field):
 def test_domain_contract_defaults_remain_available_for_replay():
     output = AnalysisOutput(summary="Synthetic")
     assert output.questions == output.findings == output.claims == ()
+
+
+def test_valuation_decimal_wire_schema_has_no_generated_pattern_or_numeric_union():
+    schema = codec_for("valuation", ValuationProposal.model_json_schema()).output_schema
+    for model in ("WireFCFFModelInput", "WireForecastPeriod", "WireValuationUnits"):
+        properties = schema["$defs"][model]["properties"]
+        for value in properties.values():
+            if "Finite decimal" in value.get("description", ""):
+                assert value["type"] == "string"
+                assert "pattern" not in value and "anyOf" not in value
+
+
+def test_exact_financial_decimal_string_round_trips_without_float_loss():
+    codec = codec_for("valuation", ValuationProposal.model_json_schema())
+    payload = _valuation_wire_payload()
+    exact = "12345678901234567890.12345678901234567890"
+    payload["model"]["current_revenue"] = exact
+    assert Decimal(codec.decode(payload)["model"]["current_revenue"]) == Decimal(exact)
+
+
+@pytest.mark.parametrize("invalid", ["NaN", "Infinity", "-Infinity", "not-a-number", "--", True])
+def test_string_wire_keeps_local_decimal_validation(invalid):
+    payload = _valuation_wire_payload()
+    payload["model"]["current_revenue"] = invalid
+    with pytest.raises(ValidationError):
+        codec_for("valuation", ValuationProposal.model_json_schema()).decode(payload)
+
+
+def test_strict_schema_rejects_nonportable_decimal_lookahead_before_dispatch():
+    schema = {"type": "object", "properties": {"value": {
+        "type": "string", "pattern": r"^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$"}},
+        "required": ["value"], "additionalProperties": False}
+    with pytest.raises(ValueError, match="nonportable pattern"):
+        validate_strict_schema(schema)

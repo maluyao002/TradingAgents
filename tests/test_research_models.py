@@ -111,7 +111,7 @@ def test_unknown_schema_fails_before_adapter_construction(tmp_path):
 
 def test_model_identity_includes_wire_contract_version(tmp_path):
     first = CodexModelService(tmp_path / "runtime", adapter_factory=Adapter)
-    assert WIRE_SCHEMA_VERSION == "research-wire-v1"
+    assert WIRE_SCHEMA_VERSION == "research-wire-v2"
     assert first.identity != CodexModelService(
         tmp_path / "different-runtime", adapter_factory=Adapter).identity
 
