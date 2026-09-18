@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "benchmark_status": "reference_registration_only",
+  "measured_quality_baseline": "pending_matched_model_runs",
+  "reference_cases": [
+    {
+      "schema_version": 1,
+      "id": "hood-editorial-2026-09-18",
+      "ticker": "HOOD",
+      "report_basename": "HOOD_Equity_Research_2026-09-18.html",
+      "reference_sha256": "9a240c3355fa150217b08d65f6376345cd940e1f9bfa0edaa4de6579154d8aa0",
+      "report_date": "2026-09-18",
+      "evidence_cutoff": "unknown",
+      "reference_role": "editorial_comparator",
+      "questions": [
+        "Which disclosed drivers support or rebut durable growth across transaction, interest, and subscription revenue?",
+        "How should event-contract competition and regulatory uncertainty change the scenario analysis?",
+        "Which valuation assumptions remain defensible after accounting for cyclicality, dilution, and broker balance-sheet effects?"
+      ],
+      "required_claim_areas": [
+        "revenue architecture and net-deposit durability",
+        "earnings quality and cash-flow interpretation",
+        "event-contract competition and regulation",
+        "valuation assumptions, sensitivities, and scenario logic",
+        "risks, catalysts, and falsification triggers"
+      ],
+      "source_backed_reference_facts": "pending_human_review",
+      "heldout_window": "unselected",
+      "human_reviewed": false,
+      "quality_certified": false
+    },
+    {
+      "schema_version": 1,
+      "id": "nvda-editorial-r2a-2026-09-17",
+      "ticker": "NVDA",
+      "report_basename": "NVDA_Equity_Research_R2a_2026-09-17.html",
+      "reference_sha256": "4825116c0ec2f87a255fedaa06b3c8a6345ec5b9f53b3c4d38def03c43fba9e3",
+      "report_date": "2026-09-17",
+      "evidence_cutoff": "unknown",
+      "reference_role": "editorial_comparator",
+      "questions": [
+        "What evidence supports or rebuts the financial-base and earnings-quality interpretation?",
+        "Do valuation inputs, reverse solves, and scenario weights use dated and sourced assumptions?",
+        "Which tracked risks, counterarguments, and trigger conditions could change the conclusion?"
+      ],
+      "required_claim_areas": [
+        "financial definitions and earnings quality",
+        "valuation inputs, reverse solves, and sensitivities",
+        "scenario construction and revision audit",
+        "counterarguments, risks, and kill criteria",
+        "open items and monitoring calendar"
+      ],
+      "source_backed_reference_facts": "pending_human_review",
+      "heldout_window": "unselected",
+      "human_reviewed": false,
+      "quality_certified": false
+    }
+  ]
+}
