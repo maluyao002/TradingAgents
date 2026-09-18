@@ -179,6 +179,45 @@ Ruff and `git diff --check` passed. Independent final review found no remaining
 P1/P2 findings in the bounded-finalization or one-call probe changes. All commits
 remain local on `codex/deep-research-v2`; no push, publication or schedule change.
 
+### Authorized 600-second valuation diagnostic follow-up
+
+The user authorized exactly one NVDA valuation diagnostic with a 600-second cap.
+Commit `891d43a` allows an explicit request to extend the call to 600 seconds and
+caps parent supervision at 600 seconds as well (bounded cleanup may follow).
+Default 300-second calls retain 360-second supervision. No prior request or failed
+run was altered. Six new deadline cases passed; the full offline suite passed
+**1,900 tests, 2 existing skips, 18 existing warnings and 65 subtests**. A first
+restricted-sandbox supervisor run failed because process inspection was unavailable;
+the same focused suite passed all 76 cases with authorized process permissions.
+Ruff and whitespace checks passed.
+
+The one-call Sol/high probe at
+`reports/RESEARCH_EN_20260917/nvda_model_probe_600_1` completed in **106.10 seconds**,
+with no retry. Usage is complete: **30,085 input + 5,530 output = 35,615 tokens**,
+including 4,257 reasoning-output tokens within output; cached input was zero.
+All five output artifacts passed the CLI's path/hash checks. The frozen source
+hash before/after matches, and all 52 files checked across the two failed runs and
+NVDA input directory are unchanged. Campaign known usage is now **719,674 tokens**;
+the two earlier failed calls remain unknown and coordinator/subagent usage is not
+included.
+
+The valid proposal remains `model=null`, with calculation status `unavailable`.
+It recognizes the source-derived revenue, working-capital and cash-only net-debt
+anchors and the explicit share proxy. Unlike the earlier proposal, it does not
+treat forecast dates or period labels as unavailable reported facts. Remaining
+objections concern the cost-of-capital and perpetual-growth basis, calibrated
+multi-period revenue/margin/tax paths, and normalized reinvestment, working-capital
+and stock-compensation assumptions. This demonstrates a successful diagnostic
+runtime, not a populated valuation or a causal proof that the prompt change alone
+caused the narrower objections: this standalone probe omitted prior stage context.
+
+Recommendation: build a source-grounded assumption/calibration packet with explicit
+analyst ranges, economic rationales and limits before another valuation-bearing
+full run. Separate externally observable inputs from model conventions and uncertain
+forecasts; do not force a target by relabeling unsupported inputs. Neither a further
+probe nor a full-report retry was launched. Bounded full-report finalization and
+completed-report comparator evaluation remain unvalidated live.
+
 ## Baseline (2026-09-17)
 
 - Luna/medium read-only scout: 1,325 existing tests passed, two failed, one skipped,
