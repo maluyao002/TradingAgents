@@ -1,10 +1,18 @@
 # Deep Research V2: implementation and acceptance plan
 
-Status: implementation started; milestone acceptance remains gated. Updated 2026-09-17.
+Status: implementation advanced; milestone acceptance remains gated. Updated 2026-09-18.
 
 See [implementation progress](DEEP-RESEARCH-PROGRESS.md) and the
 [offline runner guide](DEEP-RESEARCH-USAGE.md) for what actually works today.
 The milestone exit criteria below remain requirements, not completion claims.
+
+Latest numerical checkpoint: three independently reviewed conditional NVDA scenarios
+now compile through the deterministic engine into an English valuation development
+memo with annual cash-flow bridges and mechanical sensitivities. A 600-second-capped
+live diagnostic completed but returned `model=null`; report acceptance is not implied.
+Exact market-row delivery, the complete equity/funding bridge, opening-date alignment,
+and core-reader integration remain priorities. See the progress log for measured
+usage, review caveats and the distinction between a calculable case and a final report.
 
 The [system design](DEEP-RESEARCH-DESIGN.md) is authoritative for scope, contracts,
 roles, source policy, budgets, and report behavior. This plan supersedes the earlier

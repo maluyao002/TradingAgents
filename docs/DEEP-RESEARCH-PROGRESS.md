@@ -5,6 +5,168 @@ checkout). Live schedules, provider settings, historical reports, and user tasks
 are unchanged. Local commits are used as reviewable checkpoints; no remote push
 or pull request is implicit.
 
+## Reviewed NVDA scenarios — September 18, 2026
+
+This checkpoint advances the agreed financial-input → economic-assumption →
+deterministic-model sequence. It does **not** mark the full English research
+campaign or production acceptance complete. English remains the only new output
+language; Robinhood remains the contrasting company, not an FCFF-template target.
+
+| Current step | Delivered | Boundary / remaining work |
+| --- | --- | --- |
+| 1: Normalize financial and market inputs | Eight exact-source facts added, preserving all 81 prior facts; D&A, pretax/tax comparators and reinvestment context; four dated public market sources cached | Full operating-WC, available-cash/securities/lease and point-in-time share reconciliation still incomplete |
+| 2: Author economic scenarios | Explicit ten-year downside/base/upside growth, margin, tax, WC, capex, D&A and SBC paths; dated schedules, rate rationale and terminal ROIC/reinvestment bridge | Conditional analyst judgments, not company/consensus forecasts, probabilities or human-accepted cases |
+| 3: Integrate and review | Typed FCFF compilation through the existing deterministic engine; all 30 annual cash-flow rows, positive modeled FCFF, three terminal reinvestment reconciliations and 27 recomputed sensitivity cells; English valuation memo | Standalone reviewed-case adapter, not yet integrated throughout the core planner, challenges and final reader |
+| 4: Conditional bounded diagnostic | One Sol/high call completed in 63.29 seconds under 600-second call/parent bounds; complete returned usage | Returned `model=null` / valuation unavailable; no automatic retry, stage replay or final-report publication |
+
+### Inputs and economic choices
+
+Local artifacts: `reports/RESEARCH_MODEL_20260918/market_cache`,
+`nvda_forecast_evidence.json`, `scenario_packet_1`, `conditional_review_1.json`,
+`compiled_model_1`, and `model_probe_1` under that same campaign directory.
+Generated artifacts are local/ignored outputs; implementation and this log are
+version-controlled. Old snapshots and failed run directories are unchanged.
+
+The eight new facts are tied to exact original table/line/offset/hash locations.
+They include consolidated H1 D&A and compatible pretax/tax values; no quarter
+D&A or statutory operating tax is inferred. The new snapshot contains 89 facts
+and nine sources. It retains the prior source documents and advances its cutoff to
+`2026-09-18T07:37:28.073967Z` for separately acquired market evidence; this is not a
+retroactive change to the old report vintage.
+
+Public references are the [Fed H.15 Treasury table](https://www.federalreserve.gov/releases/h15/),
+[Damodaran ERP page](https://pages.stern.nyu.edu/adamodar/New_Home_Page/home.htm),
+[Damodaran sector beta table](https://pages.stern.nyu.edu/adamodar/New_Home_Page/datafile/Betas.html),
+and [September Fed projections](https://www.federalreserve.gov/monetarypolicy/fomcprojtabl20260916.htm).
+The cached observations use a September 16 nominal 10-year Treasury reference,
+September 1 ERP, January 2026 US semiconductor cash-corrected unlevered beta and
+September 16 long-run macro context. Retrieval/first-observed availability and
+dataset observation dates are separate. No subscription or new paid data provider
+was purchased. These rate inputs do not independently corroborate NVIDIA demand.
+
+Discount references are 12.669%, 11.220% and 10.185%; terminal growth is 2%, 3% and
+4%, with terminal ROIC of 15%, 20% and 25%. These are authored conditional cases,
+not measured company WACC. The older ERP is explicitly held fixed against a newer
+Treasury yield. GAAP after-SBC margins keep SBC's economic cost without an addback
+or duplicate charge. Terminal capex is solved to match g/ROIC reinvestment after
+D&A and working-capital needs. Sensitivities hold operating cash flows fixed;
+they do not claim economically recalibrated reinvestment at each changed growth rate.
+
+Deterministic per-current-share present values are approximately $42.15 / $148.57 /
+$297.80, with terminal value representing 30.4% / 44.8% / 56.3% of enterprise value.
+These are **conditional development outputs, not price targets or trading returns**.
+Their spread is driven by the authored economics and does not establish probability
+or predictive accuracy. The incomplete equity bridge and share proxy remain material.
+The memo includes every annual revenue→NOPAT→reinvestment→FCFF bridge and falsifiers.
+
+### Review, verification and version control
+
+Sol/high workers owned financial normalization and the generic compiler;
+Terra/medium owned market parsing and independently reviewed the probe;
+Astra/high independently reviewed the economics, packet and release gates.
+Review found and fixed loss of material limitations, incomplete manifest admission,
+self-attested review approval, unsafe path re-reading, and relative-path resolution.
+Regression tests include coherent replacement of the entire embedded review/proposal
+chain, actual packet tampering, symlink substitution and nonregular-file rejection.
+
+The actual automated review clears only conditional modeling and one untrusted
+no-retry diagnostic. The probe receives an independently selected approved-review
+digest, verifies every packet artifact, parses captured verified request bytes and
+rebuilds the exact base proposal before dispatch. This establishes artifact integrity,
+not authenticated human sign-off. Review limitations propagate into the memo and
+candidate. A model-returned change is not covered by the original review.
+
+Final full non-live suite: **1,982 passed, 2 existing skips, 18 existing warnings,
+65 subtests passed**. Focused final probe/scenario suite: **52 passed**.
+The test suite requires the configured PDF runtime for its PDF fixtures. No live
+provider integration suite was run as part of these regression counts. Changed-file
+Ruff and `git diff --check` passed. Sixteen manifest/result-bound artifact hashes
+were independently recomputed; the model input and authored-context hashes remained
+unchanged before/after the diagnostic.
+
+Reviewable local implementation commits:
+
+- `1e27b7f`: exact-source financial normalization and dated market-input parsing.
+- `d6980c9`: reviewed conditional scenario compilation, economic cases and memo.
+- `d3aa1ac`: externally anchored reviewed-packet admission for the bounded probe.
+
+### Live diagnostic outcome and remaining work
+
+The new candidate passed offline preflight with a 327,197-token **admission
+heuristic envelope**, including the 16,000-output-token allowance; this is not
+measured usage or a guaranteed provider cap. The request retains a 1.5-million-token
+admission budget and 600-second call/parent deadline.
+
+The one authorized Sol/high call completed in **63.29 seconds**, with zero retries:
+**87,993 input + 3,169 output = 91,162 total tokens**. Reasoning output is 2,447
+tokens within output, not additional usage; cached input is zero. Counters are
+complete and no observed budget overshoot occurred. This brings the English
+campaign's known report-runtime lower bound from 719,674 to **810,836 tokens**;
+the prior NVDA and HOOD failed calls still have unknown usage. Coding, review and
+coordinator agents are excluded because their usage counters are unavailable.
+
+Operational status is `model_probe_completed`, but the proposal is `model=null`
+and deterministic calculation is `unavailable`. The diagnostic must not be labeled
+a successful valuation or completed final report. It recognized the source-derived
+historical anchors and conditional forecast status, but raised five objections:
+
+- The delivered excerpts do not expose the exact selected Treasury maturity/yield
+  and semiconductor beta row, preventing reproduction of the discount rate from
+  its received evidence. Cached source availability alone is not delivered evidence.
+- Cash-only net debt leaves securities, leases and availability/classification
+  unresolved in the enterprise-to-equity bridge.
+- The blanket no-external-funding assumption is not reconciled against purchase,
+  cloud, investment, lease and capital commitments.
+- Terminal ROIC/reinvestment is calculated in the sidecar but is not an explicit
+  typed model-input contract available for independent reconstruction downstream.
+- July 26 opening proxies are not rolled forward to the September 18 cutoff.
+
+The deterministic memo remains a separately reviewed **conditional case**. The
+model's rejection is retained unchanged, not overwritten with the authored model.
+No second call or full-report run followed. Exact input/candidate bytes remained
+unchanged; the saved payload hash reproduces. The new evidence-delivery defect
+should be addressed offline before another live run, without suppressing the
+substantive capital/funding/timing objections.
+
+Post-call Astra/high review independently reproduced the exact payload and
+confirmed **two delivery gaps**: market-input values/selected rows and the economic
+audit's terminal ROIC/formula were not delivered, although their artifact hashes
+were present. Hashes are not usable supporting evidence. This is not evidence that
+the underlying rate or reconciled terminal calculation is numerically wrong.
+ROIC can remain an analyst assumption carried in a typed derivation; it need not
+become another calculator primitive or be “proved” by issuer forecasts.
+
+The reviewer also distinguished operating-asset calculability from accepted equity
+valuation. A disclosed static July opening proxy can support a September conditional
+calculation, but not certify September capitalization. Positive modeled FCFF does
+not establish company-wide funding sufficiency: broader funding should remain
+`not assessed` until reconciled. Commitment reconciliation must avoid deducting
+costs, capex or working-capital needs twice. Lease classification must likewise be
+consistent with the operating-profit convention; automatically subtracting every
+lease liability could double-count costs. These distinctions should become explicit
+result-contract states rather than a single all-or-nothing “model available” gate.
+
+Next core work, irrespective of a mechanically successful diagnostic:
+
+1. Deliver the verified market-input and economic-audit contents plus pinned source
+   rows, headers, observation dates, units and provenance. Add offline assertions
+   that each material input's support reaches the actual payload; source-ID presence
+   and a hash alone are insufficient. Separate operating-asset calculability,
+   equity-bridge completeness, funding assessment and opening-date reconciliation.
+2. Reconcile operating working capital, securities/leases/cash availability and
+   diluted capitalization; broaden issuer history and independent demand evidence.
+3. Promote the reviewed-case adapter into an explicit core-engine input contract,
+   carrying the same assumptions, hashes, challenges and caveats through valuation,
+   scenario tables, narrative synthesis and exact-reader verification.
+4. Calibrate Robinhood separately with the common-equity cash-flow model and its
+   capital-retention/regulatory economics; do not transplant NVDA industrial FCFF.
+5. Produce verified English final readers and then compare them with the supplied
+   Claude HTMLs. A valuation development memo alone cannot establish superiority
+   in business depth, narrative synthesis, independent evidence or final readability.
+
+No trading, position sizing, scheduling, Chinese generation, user-task changes,
+remote push or final-report release is included in this checkpoint.
+
 ## English NVDA / Robinhood campaign — September 17, 2026
 
 The approved sequence now uses Robinhood as the early contrast and English-only
@@ -19,7 +181,7 @@ recovery payloads remain compatible.
 | 1: Freeze evaluation cases | Both supplied English HTMLs registered by basename/hash; decisive questions, required areas and defect-case inventory saved | Human-reviewed primary-source labels, held-out windows and matched model runs; comparator files are not gold |
 | 2: Reader and repair | Separate lossless audit, footnotes, typed per-limitation dispositions, exact rendered-text/hash verification, one budgeted repair, warning/critical withholding after repair | Real-report readability and semantic verification evaluation; literal excerpts do not prove entailment |
 | 3: Targeted investigation | Bounded question-specific full-text passages; valuation blockers included; cycle/provenance ledger; explicit evidence-linked closure; tests for revised analysis and still-open gaps | Autonomous external discovery/follow-up provider, semantic classification of unstructured gaps and selective dependent-role reruns |
-| 4: NVDA numerical slice | 52 original facts preserved plus 29 strict source-bound anchors; common-period TTM/WC/net-debt/share reconciliation; typed model/result references through exact verified synthetic reader | Live source-calibrated report, company economic review, scenarios/sensitivities and horizon bridges in the reader; no accepted target |
+| 4: NVDA numerical slice | 52 original facts plus 29 source-bound anchors, subsequently eight forecast-context facts; typed model references; three reviewed conditional scenarios and sensitivities in the September 18 memo | Full equity/funding/timing reconciliation, core-reader integration and live verified report; no accepted target |
 | 5: HOOD contrast | Independently tested common-equity cash-flow DCF, source binding, attribution/scale/timing checks, matching strict wire codec, no customer-debt/FCFF mixing; six primary issuer PDFs frozen and 32 source-bound facts normalized | Bounded live contrast and economic review; automatic discovery, capital-retention calibration and regulatory-event model remain incomplete |
 | 6: Broader evaluation/release | Existing evaluation contracts retained; engineering regressions expanded | Matched workflow versus acquisition experiments, broader companies/windows, human/blind review, longitudinal and release gates |
 
@@ -38,7 +200,7 @@ denominator basis, input/result hashes, opening inputs, rates, and discount timi
 separate from reported facts. Materiality and forecasts still need independent
 financial review. A successful illustrative calculation is not production acceptance.
 
-Latest coordinator full non-live suite: **1,806 passed, 2 skipped, 18 existing
+Initial campaign coordinator full non-live suite: **1,806 passed, 2 skipped, 18 existing
 warnings, 65 subtests passed**. Separate final attribution/materiality/recovery tests
 passed 18 cases. Changed-file Ruff and `git diff --check` passed. A broader research
 test-file Ruff invocation also surfaced two pre-existing import-order warnings in

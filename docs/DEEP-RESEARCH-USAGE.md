@@ -399,6 +399,78 @@ be presented as a forecast that existed at the earlier cutoff. New external data
 needs a separately validated snapshot/vintage under existing acquisition policy;
 do not append later mutable data to the frozen old case.
 
+### Reviewed conditional scenario development
+
+The dated NVDA development workflow now has three separate layers:
+
+1. `scripts.research_nvda_forecast_facts` normalizes exact consolidated D&A,
+   pretax-income and tax/capex comparators from the frozen issuer documents. It
+   preserves all original facts and source bytes; half-year facts are not relabeled
+   as quarter facts, and effective tax rates are not statutory operating taxes.
+2. `scripts.research_market_inputs` parses separately cached public Fed Treasury,
+   Damodaran ERP/sector beta and Fed SEP pages. Source availability is conservatively
+   first-observed retrieval time, distinct from the dataset observation date.
+   `scripts.research_nvda_scenarios prepare` creates a **new-cutoff** seven-file
+   packet with explicit analyst-authored paths and a manifest. It never changes an
+   earlier frozen evidence vintage or claims those forecasts existed earlier.
+3. `scripts.research_nvda_scenarios compile` requires a separately recorded actual
+   automated review, bound to the manifest, assumptions and scenarios. It converts
+   the reviewed paths to typed model inputs and calls the existing deterministic
+   engine. Output is a conditional valuation memo, **not a final deep research report**.
+
+```sh
+.venv/bin/python -m scripts.research_nvda_forecast_facts \
+  /path/to/frozen_evidence.json /path/to/new_forecast_evidence.json
+.venv/bin/python -m scripts.research_nvda_scenarios prepare \
+  --config /path/to/nvda_request.json --evidence /path/to/new_forecast_evidence.json \
+  --market-cache /path/to/public_market_cache --output /path/to/new_packet
+# Perform independent economic/code review before recording an approval artifact.
+.venv/bin/python -m scripts.research_nvda_scenarios compile \
+  --packet /path/to/new_packet --review /path/to/actual_review.json \
+  --output /path/to/new_compiled_model
+```
+
+The generic compiler accepts one to three FCFF cases with dated schedules, source-bound
+opening inputs, compatible scales, reviewed ranges and explicit limitations. The
+NVDA adapter supplies ten-year downside/base/upside paths; these are development
+judgments, not consensus, management forecasts or probabilities. GAAP margins retain
+SBC without a duplicate deduction. Terminal capex reconciles reinvestment to the
+authored terminal growth/ROIC assumption. Positive modeled FCFF is checked in every
+year but does not certify off-model financing needs. The rate is an all-equity
+operating-asset reference with mixed-vintage public inputs, not a measured NVIDIA
+WACC. The nine sensitivity cells per case hold operating cash flows fixed; they are
+mechanical rate/growth sensitivities, not recalibrated economic scenarios.
+
+Review records require `decision: conditional_modeling_cleared`,
+`reviewer_kind: automated_agent`, actual reviewer/time, nonempty limitations,
+`prerequisites: []`, and exact canonical `manifest_sha256`, `assumptions_sha256`
+and `scenarios_sha256`. Do not invent clearance or automatically fill these fields.
+Their integrity is checked; they are not cryptographic identity verification or
+human sign-off. Reviewer and source limitations propagate into the model and memo.
+All destinations must be fresh; `manifest.json` is the completion marker.
+
+The opt-in one-call probe can consume the compiled base case:
+
+```sh
+.venv/bin/python -m scripts.research_model_probe \
+  --config /path/to/new_packet/request.json --output /path/to/new_probe \
+  --codex-home /path/to/isolated_runtime --allow-live \
+  --authored-context /path/to/new_compiled_model/authored_context.json \
+  --approved-review-sha256 SEPARATELY_SELECTED_APPROVED_REVIEW_DIGEST \
+  --reviewed-packet /path/to/new_packet
+```
+
+Use only after live-call authorization. The approved review digest must be selected
+from the actual approved record, **not taken on trust from the context**. The probe
+verifies every packet file, uses captured verified request bytes, rebuilds the base
+case and requires exact proposal equality before dispatch. Context and packet reads
+are bounded and reject final-component symlinks/nonregular files. The full authored
+context enters budget admission. Existing one-call/no-retry rules, returned usage
+retention, evidence/context hashes and at-most-600-second call/parent bounds remain;
+bounded cleanup can add overhead. A model reply is untrusted: changed assumptions
+need a fresh review. This diagnostic does not import the case into every core
+research stage, resume a failed run, settle old unknown usage, or publish a report.
+
 ### Runtime boundaries
 
 `run_research(request, ResearchServices(...))` accepts evidence, model and optional
