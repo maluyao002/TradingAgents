@@ -136,11 +136,67 @@ def _bullet(value: str) -> str:
 
 
 def _source_ids_by_evidence(snapshot: EvidenceSnapshot) -> dict[str, tuple[str, ...]]:
-    result = {source.id: (source.id,) for source in snapshot.sources}
-    result.update({fact.id: (fact.source_id,) for fact in snapshot.facts})
-    result.update({event.id: (event.source_id,) for event in snapshot.events})
-    result.update({item.id: item.source_ids for item in snapshot.expectations})
+    source_order = tuple(source.id for source in snapshot.sources)
+    source_ids = set(source_order)
+    facts = {fact.id: fact for fact in snapshot.facts}
+    if len(facts) != len(snapshot.facts):
+        raise ValueError("evidence snapshot contains duplicate fact identifiers")
+    memo: dict[str, frozenset[str]] = {}
+    visiting: set[str] = set()
+
+    def fact_sources(identifier: str) -> frozenset[str]:
+        if identifier in memo:
+            return memo[identifier]
+        if identifier in visiting:
+            raise ValueError("fact source ancestry contains a cycle")
+        fact = facts.get(identifier)
+        if fact is None:
+            raise ValueError(f"fact source ancestry references unknown fact {identifier!r}")
+        if fact.source_id not in source_ids:
+            raise ValueError(
+                f"fact {identifier!r} references unknown source {fact.source_id!r}"
+            )
+        visiting.add(identifier)
+        resolved = {fact.source_id}
+        for input_id in fact.inputs:
+            resolved.update(fact_sources(input_id))
+        visiting.remove(identifier)
+        memo[identifier] = frozenset(resolved)
+        return memo[identifier]
+
+    result = {source_id: (source_id,) for source_id in source_order}
+    for fact in snapshot.facts:
+        resolved = fact_sources(fact.id)
+        result[fact.id] = tuple(source_id for source_id in source_order if source_id in resolved)
+    for event in snapshot.events:
+        if event.source_id not in source_ids:
+            raise ValueError(f"event {event.id!r} references unknown source {event.source_id!r}")
+        result[event.id] = (event.source_id,)
+    for item in snapshot.expectations:
+        unknown = set(item.source_ids) - source_ids
+        if unknown:
+            raise ValueError(f"expectation {item.id!r} references unknown sources")
+        selected = set(item.source_ids)
+        result[item.id] = tuple(
+            source_id for source_id in source_order if source_id in selected
+        )
     return result
+
+
+def _append_missing_footnotes(
+    body: str,
+    required_source_ids: tuple[str, ...],
+    cited_source_ids: set[str],
+    source_numbers: dict[str, int],
+) -> tuple[str, set[str]]:
+    missing = [
+        source_id for source_id in required_source_ids if source_id not in cited_source_ids
+    ]
+    if not missing:
+        return body, cited_source_ids
+    footnotes = "".join(f"[^{source_numbers[source_id]}]" for source_id in missing)
+    separator = "" if not body or body[-1].isspace() else " "
+    return body + separator + footnotes, cited_source_ids | set(missing)
 
 
 def _coerce_issues(gaps: Iterable[GapInput]) -> list[dict[str, Any]]:
@@ -364,6 +420,19 @@ def render_reader(
             if unknown:
                 raise ValueError("draft invented or used ineligible evidence identifiers")
             body, cited_source_ids = _replace_source_references(section.text, source_numbers)
+            required_set = {
+                source_id
+                for evidence_id in section.evidence_ids
+                for source_id in source_ids_by_evidence[evidence_id]
+            }
+            required_source_ids = tuple(
+                source.id for source in eligible_sources if source.id in required_set
+            )
+            if required_set != set(required_source_ids):
+                raise ValueError("eligible evidence has ineligible source ancestry")
+            body, cited_source_ids = _append_missing_footnotes(
+                body, required_source_ids, cited_source_ids, source_numbers
+            )
             for source_id in cited_source_ids:
                 body_citations.setdefault(source_id, set()).add(section_index)
             for evidence_id in section.evidence_ids:
