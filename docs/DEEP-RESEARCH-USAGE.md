@@ -246,6 +246,100 @@ the cost of researching independently in Chinese versus English.
 
 ## Service integration and limits
 
+### Already-downloaded public sources
+
+`scripts.research_local_evidence` imports an explicitly curated local packet when
+ordinary browser downloads are available but direct retrieval is not. It performs
+no network requests and does not authenticate the original URL: the operator must
+establish the document's public origin. A manifest has `schema_version: 1`, `ticker`,
+`gaps`, and `sources`. Each source requires `id`, `local_file`, `original_url`,
+`title`, `publisher`, `published_at` (nullable), timezone-aware `retrieved_at`,
+`kind`, and `acquisition` (`browser` or `local`). Unknown publication availability
+remains unknown and is not admitted to historical reasoning.
+
+```sh
+.venv/bin/python -m scripts.research_local_evidence \
+  --manifest /path/to/manifest.json --output /path/to/new_frozen_packet \
+  --pdf-python /path/to/python-with-pypdf
+.venv/bin/python -m scripts.research_hood_model_facts \
+  /path/to/new_frozen_packet /path/to/new_derived/evidence.json
+```
+
+The importer archives exact raw bytes, extracted text, hashes and extractor
+metadata. PDF text extraction is not OCR or proof that charts/tables were completely
+represented; omissions and empty text pages are explicitly retained as gaps. It
+refuses existing destinations, including a concurrently created empty directory.
+`evidence.json` is published last as the completeness marker. A publication failure
+may leave an inspectable partial directory without that marker; use a new output
+path, never treat the partial packet as complete or overwrite it to hide failure.
+`--pdf-python` is unnecessary for HTML/text-only packets.
+
+The HOOD adapter is deliberately narrow: the specific FY2025 and Q2 2026 release
+tables, common-shareholder income rather than consolidated income, mechanical TTM
+bridges and an explicitly labeled Q2 diluted-share proxy. It verifies the frozen
+packet and writes a new derived snapshot outside it. It does not create forecasts,
+normalize unusual gains, certify retained regulatory capital, or turn customer
+assets into corporate cash. Other release layouts fail rather than silently reuse
+column positions.
+
+`model_sensitivity.recompute_sensitivity` accepts explicit rate/growth axes for
+either typed DCF model. Every cell is recomputed and hashed to its exact inputs and
+result, with the same current-share denominator. It is a standalone mechanical
+stress utility, not yet a reader-integrated economic scenario engine or a forecast
+calibration method.
+
+### Opt-in bounded finalization
+
+Set `quality_revision: "evidence-led-bounded"` for the new finalization path.
+The existing `foundation` and `evidence-led` request modes remain available; do not
+change an interrupted request's revision in place or overwrite historical artifacts.
+This revision is offline-tested, not yet live-validated or a production default.
+
+The editor retains every unresolved limitation while the audit retains full ledger
+provenance. A separate global factual review and lossless coverage batches (at most
+12 issues / 12,000 serialized UTF-8 bytes each) verify the exact same reader hash.
+Oversized individual issues fail admission instead of being truncated. A repaired
+reader requires fresh review of every batch. Explicit factual contradictions block
+export, including in older modes. Literal coverage excerpts do not establish
+semantic entailment: global factual review remains mandatory.
+
+Planning reserves estimated headroom for remaining analysis and finalization before
+admitting optional investigation. It is not a hard token guarantee. Bulk closure
+verification is skipped in this revision because no current producer supplies
+explicit evidence-linked closure candidates; all unresolved issues remain open.
+Selective closure and semantic rerun routing are still future work. Failed review
+retains an unverified reader candidate and partial batches for diagnosis, not a
+publishable report. Unknown usage stops subsequent admissions and automatic retry.
+
+### Separate one-call valuation diagnostic
+
+After explicit live authorization, `scripts.research_model_probe` accepts a normal
+research request with a frozen `evidence_path`, a fresh output directory and an
+existing isolated Codex home:
+
+```sh
+.venv/bin/python -m scripts.research_model_probe \
+  --config /path/to/request.json --output /path/to/new_probe \
+  --codex-home /path/to/isolated-runtime --allow-live
+```
+
+It makes at most one valuation inference after preflight, capped at a 300-second
+call deadline / 360-second parent deadline. Output-token allowances are advisory;
+admission uses a documented byte heuristic, excludes provider overhead, and cannot
+guarantee actual spend. Overshoot and incomplete usage remain visible. Historical
+anchors must bind eligible reported or source-derived facts; forecast choices need
+explicit defensible assumptions, not invented reported data. `model=null` remains
+valid when the economic basis is unsupported.
+
+Success requires all five exact hash-bound artifacts: `probe.json`, `proposal.json`,
+`calculation_result.json`, `usage.json`, and `provenance.json`. A successful null
+proposal validates the diagnostic path, not a populated valuation. This tool is not
+engine recovery: it imports no earlier stages, acquires no sources, retries nothing,
+settles no prior unknown usage, and produces no final report or accepted target.
+The failed source run must remain unchanged.
+
+### Runtime boundaries
+
 `run_research(request, ResearchServices(...))` accepts evidence, model and optional
 storage implementations. The safe public SEC/IR fetcher and baseline collector are
 available as separate, explicitly instantiated services. SEC acquisition requires

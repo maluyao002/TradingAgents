@@ -9,8 +9,10 @@ or pull request is implicit.
 
 The approved sequence now uses Robinhood as the early contrast and English-only
 new outputs. Existing Chinese compatibility and its comparison TODO are preserved.
-The new behavior is opt-in `quality_revision: "evidence-led"`; historical
-`foundation` request identities and recovery payloads remain compatible.
+The campaign used opt-in `quality_revision: "evidence-led"`. A subsequent,
+offline-tested `evidence-led-bounded` revision adds bounded finalization; it has
+not yet been exercised live. Historical `foundation` request identities and
+recovery payloads remain compatible.
 
 | Approved step | Current evidence | Remaining acceptance work |
 | --- | --- | --- |
@@ -18,7 +20,7 @@ The new behavior is opt-in `quality_revision: "evidence-led"`; historical
 | 2: Reader and repair | Separate lossless audit, footnotes, typed per-limitation dispositions, exact rendered-text/hash verification, one budgeted repair, warning/critical withholding after repair | Real-report readability and semantic verification evaluation; literal excerpts do not prove entailment |
 | 3: Targeted investigation | Bounded question-specific full-text passages; valuation blockers included; cycle/provenance ledger; explicit evidence-linked closure; tests for revised analysis and still-open gaps | Autonomous external discovery/follow-up provider, semantic classification of unstructured gaps and selective dependent-role reruns |
 | 4: NVDA numerical slice | 52 original facts preserved plus 29 strict source-bound anchors; common-period TTM/WC/net-debt/share reconciliation; typed model/result references through exact verified synthetic reader | Live source-calibrated report, company economic review, scenarios/sensitivities and horizon bridges in the reader; no accepted target |
-| 5: HOOD contrast | Independently tested common-equity cash-flow DCF, source binding, attribution/scale/timing checks, matching strict wire codec, no customer-debt/FCFF mixing | Downloaded primary-source packet and normalized broker schedules; direct IR and SEC source checks returned HTTP 403 |
+| 5: HOOD contrast | Independently tested common-equity cash-flow DCF, source binding, attribution/scale/timing checks, matching strict wire codec, no customer-debt/FCFF mixing; six primary issuer PDFs frozen and 32 source-bound facts normalized | Bounded live contrast and economic review; automatic discovery, capital-retention calibration and regulatory-event model remain incomplete |
 | 6: Broader evaluation/release | Existing evaluation contracts retained; engineering regressions expanded | Matched workflow versus acquisition experiments, broader companies/windows, human/blind review, longitudinal and release gates |
 
 The source-bound NVDA enrichment is a narrow development adapter, not eight-quarter/
@@ -66,12 +68,116 @@ reserve. A first launch was denied by automatic privacy review. Read-only proven
 checks established that the payload consists only of public NVIDIA IR documents,
 derived facts and the public-company research mandate—not reference HTMLs, user
 holdings, credentials or chat history. The same launch was then approved; no
-restriction was bypassed. Completion and measured usage are pending.
+restriction was bypassed. The run subsequently stopped at `verify_investigations`
+with `ModelCallTimeout`: one 300-second call attempted to review a 234-entry ledger,
+all entries still classified `unclassified`. It completed 13 earlier stage calls,
+including the bounded local follow-up, but never reached editor/final verification.
+Elapsed time was 2,195.76 seconds. Known usage is 472,031 input plus 95,426 output
+= **567,457 tokens**, with 36,419 reasoning tokens included within output. The failed
+call returned no counters; total usage remains incomplete, not zero or reset.
+`reader_report.md` is explicitly a diagnostic stub, **not a final research report**.
+The failed run and its unsettled dispatch are preserved. A separate one-call
+valuation diagnostic was requested asynchronously from the user; it must not run
+without approval acknowledging the unknown spend. Offline diagnostic implementation
+and unrelated HOOD work can continue.
 
-Robinhood needs saved Q2 2026 10-Q / FY2025 10-K / earnings-release files or another
-authorized primary-source delivery path. An asynchronous request was sent to the
-user while unaffected work continued. The September 18 comparison report remains
-an editorial comparator, never substitute primary evidence for the September 17 case.
+Robinhood's original direct-download blocker was resolved through ordinary browser
+access to public issuer links. The Q2 2026 10-Q, FY2025 10-K, two earnings releases,
+Q2 call transcript and August operating update were downloaded. No CAPTCHA,
+security interstitial, login or paid service was bypassed. The earlier asynchronous
+request for user-supplied files is no longer needed. The September 18 comparison
+report remains an editorial comparator, never substitute primary evidence.
+
+The independently reviewed standalone sensitivity utility (`18c37f2`) recomputes
+every FCFF/equity-DCF rate/growth cell and binds it to exact model/result hashes.
+It passed 11 focused tests and the combined 56-test valuation subset. This is a
+mechanical sensitivity, not economic scenarios or yet an integrated reader table.
+
+The first live NVDA valuation pass accepted the historical anchor availability but
+returned no model. Its unsupported-input list mixes genuine evidence gaps with
+analyst modeling choices (including forecast dates and labels). The bounded
+investigation subsequently timed out as recorded above; this is evidence of a remaining
+forecast-assumption workflow gap, not successful completion of the numerical slice.
+
+The Robinhood packet's current-cutoff import and normalization passed independent
+review. It retains six exact raw PDFs and extracted text at cutoff
+`2026-09-18T05:32:58Z`; the undated transcript is archived but excluded from model
+reasoning. The two issuer releases supply 27 reported facts and five TTM derived
+facts. Revenue is 4,932 USD million and common net income is 2,072 USD million;
+the Q2 share proxy is 912 million over 91 days. The common-income bridge preserves
+the distinction from consolidated income and does not invent an after-tax RVI gain
+adjustment. Key table pages were visually checked as well as parsed.
+
+Reviewed local commits `6eed589` and `5c5dc35` cover immutable offline import and
+HOOD normalization respectively. The latest full non-live suite with bundled PDF
+fixtures passed **1,847 tests, 2 existing skips, 18 existing warnings and 65 subtests**.
+All four importer review findings (PDF extraction gaps, future timestamps,
+concurrent destination overwrite and optional PDF runtime) are resolved and tested.
+
+The bounded English-only HOOD run is under
+`reports/RESEARCH_EN_20260917/hood_run_1`, using the explicit equity-cash-flow method
+and share proxy. It has the same per-run budget limits as NVDA and no new Chinese
+output. It stopped after planner, challenger, business and accounting at a
+`CodexTransientError` before the next analysis completed. Elapsed time was 653.83
+seconds. Known usage is 87,211 input plus 29,391 output = **116,602 tokens**, including
+3,712 cached input tokens and 8,107 reasoning output tokens within those totals.
+The failed call's usage is unknown; no automatic retry was attempted. The recorded
+exception category does not establish the underlying provider/network cause.
+No authored/verified final report was produced. The case differs in company,
+method, source cutoff and a clarified analyst-
+assumption mandate; it is a development contrast, **not** a matched causal experiment
+isolating company, prompt, acquisition or language effects. The two runs together
+have a known lower bound of **684,059 tokens**, excluding both unknown failed calls,
+the coordinator and subagent work. A completed-report preference comparison is not
+possible from diagnostic placeholders.
+
+### Offline finalization repair and next decision
+
+Commits `0797018` and `77aab41` preserve transitive financial-source citations and
+introduce opt-in bounded finalization. Derived TTM references now include every
+eligible source in their input ancestry, not just the carrier source. Reader
+verification separates global factual review from lossless batches of at most 12
+limitations / 12,000 serialized UTF-8 bytes. Every batch checks the same frozen
+rendered-reader hash. Missing, duplicate, foreign or unresolved dispositions block
+export; explicit factual contradictions are blocking even without separate warnings.
+Unverified candidates and partial review records survive failures, never as finals.
+
+Finalization planning subtracts optional investigation costs before admitting them
+and accounts for remaining reconciliation, claim review, all requested languages
+and one repair pass. This is an admission estimate, not a guaranteed spend cap.
+The bounded revision skips the bulk investigation-closure call while no producer
+supplies explicit closure candidates: all issues stay open and all enter coverage,
+including those beyond the retrieval cap. Selective evidence-linked closure and
+semantic dependency routing remain unfinished; this repair does not silently
+declare 234 issues immaterial or resolved. Synthetic tests cover their retention,
+20 coverage batches and timeout/unknown-usage stops without automatic retry.
+
+A separate one-call valuation probe (`89a8278`) is implemented for the analyst-assumption
+workflow. It distinguishes reported/source-derived historical anchors from explicit
+forecast assumptions, records exact request/source/model/result provenance, and
+requires all five hash-bound artifacts before CLI success. Known usage survives
+output-validation or cleanup failures; unknown usage remains unknown. It performs
+no acquisition, stage replay, automatic retry or report export. The maximum call
+deadline is 300 seconds and parent supervision 360 seconds; output limits remain
+advisory. No live probe has run. User approval acknowledging the failed calls'
+unknown usage is pending before one separate NVDA probe; no HOOD retry is authorized
+by that proposed diagnostic.
+
+Independent Sol/high and Astra/high reviews drove citation, artifact-integrity,
+complete-coverage, contradiction-gate and reserve-accounting fixes. These changes
+are engineering progress, not accepted source-calibrated reports or completed plan
+milestones. Next: authorize the small valuation probe, assess its economic validity,
+then separately decide how to validate bounded full-report finalization. Reader
+scenario/sensitivity integration, calibrated company forecasts, independent evidence,
+matched English comparator review and broader release gates remain outstanding.
+
+Final combined offline validation after all repairs: **1,894 passed, 2 existing
+skips, 18 existing warnings and 65 subtests passed** in 26.77 seconds, including
+bundled-PDF fixtures and local process/socket tests. The external integration test
+file was excluded; no live provider calls were made by this suite. Changed-file
+Ruff and `git diff --check` passed. Independent final review found no remaining
+P1/P2 findings in the bounded-finalization or one-call probe changes. All commits
+remain local on `codex/deep-research-v2`; no push, publication or schedule change.
 
 ## Baseline (2026-09-17)
 
