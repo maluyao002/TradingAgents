@@ -11,6 +11,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import re
+import stat
 import sys
 import time
 from dataclasses import dataclass
@@ -19,7 +21,8 @@ from typing import Any
 
 from pydantic import TypeAdapter, ValidationError
 
-from cli.research import load_request
+from cli.research import _resolve_paths, load_request
+from tradingagents.research.assumptions import AssumptionPackage
 from tradingagents.research.contracts import (
     Assessment,
     EvidenceSnapshot,
@@ -31,6 +34,11 @@ from tradingagents.research.engine import _calculate, _prompt_evidence
 from tradingagents.research.equity_valuation import EquityDCFModelInput
 from tradingagents.research.evidence import validate_snapshot
 from tradingagents.research.models import CodexModelService
+from tradingagents.research.scenario_compiler import (
+    ConditionalScenario,
+    apply_conditional_review,
+    compile_scenarios,
+)
 from tradingagents.research.stages import ValuationProposal, instruction
 from tradingagents.research.storage import (
     atomic_write,
@@ -118,7 +126,7 @@ def _model_schema(request: ResearchRequest) -> dict[str, Any]:
 
 
 def build_payload(
-    request: ResearchRequest, snapshot: EvidenceSnapshot
+    request: ResearchRequest, snapshot: EvidenceSnapshot, authored_context: dict[str, Any] | None = None
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Build the exact one-call payload and a non-guaranteed admission estimate."""
 
@@ -150,6 +158,18 @@ def build_payload(
         "timeout_seconds": call_timeout,
         "max_output_tokens": MAX_OUTPUT_TOKENS,
     }
+    if authored_context is not None:
+        payload["authored_conditional_model"] = authored_context
+        payload["authored_model_review_scope"] = (
+            "The supplied model is an analyst-authored conditional case, not reported fact or "
+            "a previously verified forecast. Independently assess its economic support and "
+            "limitations. You may adopt the exact proposal only if defensible as illustrative, "
+            "or return model=null with specific material objections. Do not mistake explicit "
+            "forecast judgments for missing issuer-reported data, and do not hide real gaps. "
+            "No claim of human approval, accepted valuation, or investment target is authorized."
+            " The review record is integrity-bound automated-review provenance, not human approval "
+            "or proof that a forecast is true."
+        )
     codec = codec_for(
         ROLE,
         payload["response_schema"],
@@ -236,6 +256,9 @@ def _validate_worker_inputs(request: ResearchRequest, home: Path, output: Path) 
 @dataclass(frozen=True, slots=True)
 class ModelProbeWorker:
     codex_home: Path
+    authored_context_path: Path | None = None
+    approved_review_sha256: str | None = None
+    reviewed_packet: Path | None = None
 
     def __call__(self, request: ResearchRequest) -> ResearchResult:
         supplied_output = Path(request.output_dir).expanduser().absolute()
@@ -295,6 +318,7 @@ class ModelProbeWorker:
         }
         preflight: dict[str, Any] | None = None
         evidence_before: bytes | None = None
+        context_before: bytes | None = None
         failure_code: str | None = None
         stop_reason = "model_probe_failed"
 
@@ -315,7 +339,16 @@ class ModelProbeWorker:
             if not isinstance(payload_value, dict):
                 raise ModelProbeError("frozen evidence must be a JSON object")
             snapshot = validate_snapshot(EvidenceSnapshot.model_validate(payload_value), request)
-            payload, preflight = build_payload(request, snapshot)
+            authored_context = None
+            if self.authored_context_path is not None:
+                context_before = _read_authored_context(self.authored_context_path)
+                authored_context = parse_json(context_before)
+                _validate_authored_context(authored_context, request, snapshot, evidence_before,
+                                           self.approved_review_sha256, self.reviewed_packet)
+                provenance["authored_context_sha256"] = hashlib.sha256(context_before).hexdigest()
+                provenance["approved_review_sha256"] = self.approved_review_sha256
+                provenance["reviewed_packet_manifest_sha256"] = digest(authored_context["packet_manifest"])
+            payload, preflight = build_payload(request, snapshot, authored_context)
             provenance["payload_sha256"] = hashlib.sha256(canonical_json(payload)).hexdigest()
             provenance["financial_model_schema_sha256"] = digest(
                 payload["financial_model_schema"]
@@ -387,6 +420,17 @@ class ModelProbeWorker:
             }
             stop_reason = "model_probe_call_failed" if probe["call_count"] else "model_probe_failed"
         finally:
+            if context_before is not None:
+                try:
+                    context_after = _read_authored_context(self.authored_context_path)
+                except (OSError, ValueError):
+                    context_after = None
+                provenance["authored_context_sha256_after"] = (
+                    hashlib.sha256(context_after).hexdigest() if context_after is not None else None)
+                if context_before != context_after:
+                    failure_code = "authored_context_changed"
+                    probe["status"] = "failed"
+                    stop_reason = "model_probe_context_changed"
             if evidence_before is not None:
                 try:
                     evidence_after = read_bytes(evidence_path)
@@ -450,6 +494,60 @@ class ModelProbeWorker:
         )
 
 
+def _read_authored_context(path: Path) -> bytes:
+    """Open the final path component without following a substituted symlink."""
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(descriptor, "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise ModelProbeError("authored context must be a regular file")
+        content = stream.read(2 * 1024 * 1024 + 1)
+        if len(content) > 2 * 1024 * 1024:
+            raise ModelProbeError("authored context exceeds its bounded size")
+        return content
+
+
+def _validate_authored_context(context, request, snapshot, evidence_bytes,
+                               approved_review_sha256, reviewed_packet):
+    required = {"ticker", "cutoff", "evidence_sha256", "proposal", "review_sha256", "scope",
+                "review", "packet_manifest", "source_assumptions", "source_scenarios"}
+    if not isinstance(context, dict) or set(context) != required:
+        raise ModelProbeError("authored context fields do not match its bounded schema")
+    if (context["ticker"] != request.ticker or context["cutoff"] != request.cutoff.isoformat()
+            or context["evidence_sha256"] != hashlib.sha256(evidence_bytes).hexdigest()
+            or not isinstance(context["scope"], str) or not context["scope"].strip()
+            or not isinstance(context["review_sha256"], str)
+            or re.fullmatch(r"[a-f0-9]{64}", context["review_sha256"]) is None):
+        raise ModelProbeError("authored context identity or evidence binding differs")
+    proposal = ValuationProposal.model_validate(context["proposal"])
+    if _calculate(proposal, request, snapshot).get("status") != "illustrative":
+        raise ModelProbeError("authored proposal did not pass deterministic financial validation")
+    if digest(context["review"]) != context["review_sha256"]:
+        raise ModelProbeError("authored review record hash mismatch")
+    if (approved_review_sha256 is None or context["review_sha256"] != approved_review_sha256
+            or reviewed_packet is None):
+        raise ModelProbeError("separately approved review digest and reviewed packet are required")
+    manifest = parse_json(_read_authored_context(reviewed_packet / "manifest.json"))
+    if manifest != context["packet_manifest"]:
+        raise ModelProbeError("authored inventory differs from the actual reviewed packet")
+    original = AssumptionPackage.model_validate(context["source_assumptions"])
+    cases = TypeAdapter(tuple[ConditionalScenario, ...]).validate_python(context["source_scenarios"])
+    reviewed = apply_conditional_review(original, cases, context["review"], context["packet_manifest"])
+    # apply_conditional_review validates the exact fixed inventory before paths are opened.
+    packet_blobs = {}
+    for name, expected in manifest["artifact_hashes"].items():
+        packet_blobs[name] = _read_authored_context(reviewed_packet / name)
+        if hashlib.sha256(packet_blobs[name]).hexdigest() != expected:
+            raise ModelProbeError("reviewed packet file changed")
+    packet_request = ResearchRequest.model_validate(
+        _resolve_paths(parse_json(packet_blobs["request.json"]), reviewed_packet.resolve()))
+    if packet_request.model_copy(update={"output_dir": request.output_dir}) != request:
+        raise ModelProbeError("diagnostic request differs from the reviewed request")
+    compiled = compile_scenarios(reviewed, snapshot, request, evidence_bytes, cases)
+    base = [case for case in compiled["cases"] if case["id"] == "base"]
+    if len(base) != 1 or digest(base[0]["proposal"]) != digest(context["proposal"]):
+        raise ModelProbeError("authored proposal differs from the exact reviewed conditional case")
+
+
 def _fresh_output(value: Path) -> Path:
     supplied = Path(value).expanduser().absolute()
     if os.path.lexists(supplied):
@@ -500,6 +598,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--codex-home", required=True, type=Path)
     parser.add_argument("--allow-live", action="store_true")
+    parser.add_argument("--authored-context", type=Path,
+                        help="Optional conditional model candidate with bound automated-review record")
+    parser.add_argument("--approved-review-sha256",
+                        help="Separately selected approved review digest; required with authored context")
+    parser.add_argument("--reviewed-packet", type=Path,
+                        help="Actual immutable reviewed packet; required with authored context")
     return parser
 
 
@@ -524,7 +628,9 @@ def main(argv: list[str] | None = None) -> int:
             request.budget.call_timeout_seconds + 60,
             request.budget.wall_seconds,
         )
-        outcome = run_supervised(ModelProbeWorker(codex_home), request, timeout_seconds=timeout)
+        outcome = run_supervised(ModelProbeWorker(codex_home, args.authored_context,
+                                                 args.approved_review_sha256, args.reviewed_packet), request,
+                                 timeout_seconds=timeout)
     except (OSError, ValueError, ValidationError):
         print(
             "model probe could not start; check authorization, paths, frozen evidence, and budget",
