@@ -97,7 +97,7 @@ class ResearchRequest(Contract):
     return_months: Annotated[StrictInt, Field(gt=0)] = 36
     internal_language: ReportLanguage = "English"
     report_language: ReportLanguage = "Chinese"
-    quality_revision: Literal["foundation", "evidence-led"] = "foundation"
+    quality_revision: Literal["foundation", "evidence-led", "evidence-led-bounded"] = "foundation"
     valuation_method: Literal["fcff", "equity_fcfe"] = "fcff"
     share_count_basis: Literal["point_in_time_diluted", "latest_quarter_diluted_proxy"] = "point_in_time_diluted"
     additional_report_languages: tuple[ReportLanguage, ...] = ()
@@ -120,9 +120,9 @@ class ResearchRequest(Contract):
 
     @model_validator(mode="after")
     def required_roles(self):
-        if self.valuation_method != "fcff" and self.quality_revision != "evidence-led":
+        if self.valuation_method != "fcff" and self.quality_revision == "foundation":
             raise ValueError("equity FCFE requires the evidence-led workflow")
-        if self.share_count_basis != "point_in_time_diluted" and self.quality_revision != "evidence-led":
+        if self.share_count_basis != "point_in_time_diluted" and self.quality_revision == "foundation":
             raise ValueError("a share-count proxy requires the evidence-led workflow")
         if set(self.models) != set(default_roles()):
             raise ValueError("explicit assignments required for every research role")

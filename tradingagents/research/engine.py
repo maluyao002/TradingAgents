@@ -35,6 +35,13 @@ from .investigation_review import InvestigationReview
 from .reader import ReaderIssue, render_reader
 from .rendering import render_references
 from .report_review import ReaderVerification, check_dispositions, limitation_packet
+from .review_batches import (
+    CoverageBatchResult,
+    block_reader_contradictions,
+    combine_coverage,
+    coverage_batches,
+    finalization_allowance,
+)
 from .services import ModelReply, ResearchServices
 from .stages import AnalysisOutput, ReportDraft, ValuationProposal, VerificationOutput, instruction
 from .storage import (
@@ -83,7 +90,7 @@ def _required_artifacts(request: ResearchRequest):
             request.report_language, *request.additional_report_languages))
     if request.dossier_dir:
         required.add("dossier.json")
-    if request.quality_revision == "evidence-led":
+    if request.quality_revision != "foundation":
         required.update({"reader_limitations.json", "reader_verification.json", "calculated_values.json",
                          "investigation.json"})
     return required
@@ -230,7 +237,7 @@ def _calculate(proposal: ValuationProposal, request: ResearchRequest, snapshot):
     return {"status": "illustrative", "result": asdict(result),
             **({"opening_input_bindings": opening_bindings,
                 "valuation_method": request.valuation_method}
-               if request.quality_revision == "evidence-led" else {}),
+               if request.quality_revision != "foundation" else {}),
             **({"share_count_basis": request.share_count_basis} if share_proxy else {}),
             "limitations": [*result.limitations, *proposal.scope_limitations,
                             *(["Per-share values use the latest-quarter weighted-average diluted-share "
@@ -336,7 +343,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
         gaps = ["V2 source coverage and company-specific model acceptance remain pending."]
         snapshot = EvidenceSnapshot(ticker=request.ticker, cutoff=request.cutoff)
         draft, drafts, valuation = None, {}, {"status": "unavailable"}
-        evidence_led = request.quality_revision == "evidence-led"
+        evidence_led = request.quality_revision != "foundation"
+        bounded_review = request.quality_revision == "evidence-led-bounded"
         verified_readers = {}
         reader_verifications = {}
         calculated_values = ()
@@ -370,21 +378,32 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 )
             store.save_stage("resources", {}, resource_data)
 
-        def call(stage, role, data, schema, finalization=False, language=None):
+        def call(stage, role, data, schema, finalization=False, language=None,
+                 coverage_only=False):
             nonlocal dispatch_unsettled
             role_index = role_indices[role]
             role_indices[role] += 1
             queries = tuple(dict.fromkeys((*investigation_queries, *_research_queries(
                 role, data, outputs)))) if evidence_led else ()
-            payload = {**instruction(role, schema), "evidence": _prompt_evidence(snapshot, queries),
+            if coverage_only and (not bounded_review or role != "verifier"):
+                raise ValueError("coverage-only calls require the bounded reader verifier")
+            payload = {**instruction(role, schema), "evidence": (
+                {"scope": "Reader limitation coverage only; factual verification is a separate mandatory stage."}
+                if coverage_only else _prompt_evidence(snapshot, queries)),
                        "research": data, "cutoff": request.cutoff.isoformat(),
                        "mandate": request.mandate, "stage": stage, "role_call_index": role_index,
                        "valuation_months": request.valuation_months,
                        "return_months": request.return_months,
                        "language": language or request.internal_language}
+            if coverage_only:
+                payload["system"] += (
+                    " This is a limitation-coverage-only call, not source verification. "
+                    "Assess every supplied issue against the exact reader text. Leave factual "
+                    "claim-ID decisions empty; a separate mandatory full-context call checks facts. "
+                    "Keep each disposition rationale concise without omitting its reasoning.")
             if evidence_led:
                 payload["quality_requirements"] = {
-                    "revision": "evidence-led-1",
+                    "revision": "evidence-led-bounded-1" if bounded_review else "evidence-led-1",
                     "retrieval": "Lexical matches are leads, not proof or closure of a question.",
                     "reader": "Write a thesis-led report with a causal financial bridge and "
                               "explicit disconfirming evidence. Consolidate genuinely related "
@@ -423,7 +442,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             if cached is not None:
                 return schema.model_validate(cached)
             # UTF-8 bytes are a conservative input bound, plus an output envelope.
-            envelope = len(canonical_json(payload)) + 16_000
+            output_envelope = 6_000 if coverage_only else 16_000
+            envelope = len(canonical_json(payload)) + output_envelope
             origin = "current_live"
             origin_resolver = getattr(services.models, "call_origin", None)
             if recovery is not None and origin_resolver is None:
@@ -453,7 +473,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 timeout_seconds = tracker.admit(finalization=finalization)
             try:
                 reply = services.models.complete(role, {**payload,
-                    "timeout_seconds": timeout_seconds, "max_output_tokens": 16_000}, request)
+                    "timeout_seconds": timeout_seconds, "max_output_tokens": output_envelope}, request)
                 reply = ModelReply.model_validate(reply)
                 if origin == "current_live":
                     tracker.complete(permit, reply.usage)
@@ -545,11 +565,19 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             ))
             return make_ledger(ordered, snapshot)
 
+        def required_limitations():
+            # Retrieval's followup cap is NOT a cap on mandatory reader coverage.
+            ledger_texts = (
+                [entry.text for entry in investigation_ledger.entries if entry.status != "resolved"]
+                if bounded_review and investigation_ledger is not None else []
+            )
+            return list(dict.fromkeys((*gaps, *ledger_texts)))
+
         def verify_reader(candidate, language, stage, extra=None):
             rendered = render_reader(request, candidate, snapshot, reader_inputs(), language)
             rendered_hash = hashlib.sha256(rendered.reader_text.encode("utf-8")).hexdigest()
-            limitations = limitation_packet(gaps)
-            verification = call(stage, "verifier", {
+            limitations = limitation_packet(required_limitations())
+            review_data = {
                 "draft": candidate.model_dump(mode="json"), "analyses": outputs,
                 "valuation": valuation, "rendered_reader": rendered.reader_text,
                 "valuation_inputs": proposal.model_dump(mode="json"),
@@ -562,9 +590,57 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     "only for genuinely operational or immaterial details, with a specific "
                     "rationale. Never classify a financially material unknown as immaterial "
                     "to improve readability. Return unresolved when it is missing.",
-            }, ReaderVerification, True, language=language)
-            verification = check_dispositions(verification, limitations, rendered.reader_text)
+            }
+            if bounded_review:
+                # Save the authored bytes before review; this is NOT a verified export.
+                store.save_stage(f"{stage}-reader-candidate", {"reader_sha256": rendered_hash}, {
+                    "reader_sha256": rendered_hash, "verification_status": "unverified",
+                    "reader_text": rendered.reader_text,
+                })
+                reader_verifications[language] = {
+                    "reader_sha256": rendered_hash, "stage": stage,
+                    "review": ReaderVerification().model_dump(mode="json"),
+                    "exported": False, "coverage_batches": [],
+                }
+                batches = coverage_batches(limitations)
+                factual_data = {key: value for key, value in review_data.items()
+                                if key not in {"limitation_review", "limitation_policy"}}
+                factual_data["review_scope"] = (
+                    "Verify the exact full report's factual, numerical and causal claims. "
+                    "Do not return limitation dispositions here; complete per-issue material "
+                    "caveat coverage is checked in separate mandatory batches against these same bytes.")
+                main_review = call(stage, "verifier", factual_data, VerificationOutput,
+                                   True, language=language)
+                batch_results = []
+                for index, items in enumerate(batches):
+                    batch_stage = f"{stage}-coverage-{index}"
+                    batch_review = call(batch_stage, "verifier", {
+                        "rendered_reader": rendered.reader_text,
+                        "rendered_reader_sha256": rendered_hash,
+                        "limitation_review": list(items),
+                        "limitation_policy": review_data["limitation_policy"],
+                        "review_scope": "Only assess each supplied issue's materiality and "
+                            "coverage in the exact rendered text. Do not adjudicate factual "
+                            "claim IDs or imply source verification. Set reviewed_report only "
+                            "if you performed this coverage review. Each distinct issue needs "
+                            "its own justified disposition; shared prose does not automatically "
+                            "cover every issue. Unknown materiality must remain unresolved.",
+                    }, ReaderVerification, True, language=language, coverage_only=True)
+                    batch_results.append(CoverageBatchResult(rendered_hash, items, batch_review))
+                    reader_verifications[language]["coverage_batches"].append({
+                        "stage": batch_stage, "reader_sha256": rendered_hash,
+                        "issue_ids": [item["issue_id"] for item in items],
+                        "review": batch_review.model_dump(mode="json"),
+                    })
+                verification = combine_coverage(main_review, batch_results, limitations,
+                                                rendered.reader_text, rendered_hash)
+            else:
+                verification = call(stage, "verifier", review_data, ReaderVerification,
+                                    True, language=language)
+                verification = block_reader_contradictions(
+                    check_dispositions(verification, limitations, rendered.reader_text))
             reader_verifications[language] = {
+                **reader_verifications.get(language, {}),
                 "reader_sha256": rendered_hash, "stage": stage,
                 "review": verification.model_dump(mode="json"),
                 "exported": False,
@@ -617,6 +693,38 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             for cycle in range(request.budget.followup_cycles):
                 if not unresolved or (followup is None and not evidence_led):
                     break
+                if bounded_review:
+                    inventory = limitation_packet(required_limitations())
+                    context_bytes = (len(canonical_json(_prompt_evidence(snapshot)))
+                                     + 2 * len(canonical_json(outputs)) + len(canonical_json(proposal)))
+                    allowance = finalization_allowance(
+                        inventory, context_bytes=context_bytes,
+                        call_timeout_seconds=request.budget.call_timeout_seconds,
+                        language_count=1 + len(request.additional_report_languages),
+                    )
+                    next_cycle_call_seconds = 6 * request.budget.call_timeout_seconds
+                    next_cycle_token_envelope = 6 * (context_bytes + 16_000)
+                    remaining_seconds = request.budget.wall_seconds - tracker.elapsed_seconds
+                    remaining_tokens = request.budget.total_tokens - tracker.usage.total_tokens
+                    skip = (
+                        remaining_seconds - next_cycle_call_seconds
+                        < max(request.budget.reserve_seconds, allowance["planned_call_seconds"])
+                        or remaining_tokens - next_cycle_token_envelope
+                        < max(request.budget.reserve_tokens, allowance["estimated_tokens"])
+                    )
+                    store.save_stage(f"finalization-plan-{cycle}", {
+                        "issue_ids": [item["issue_id"] for item in inventory],
+                    }, {**allowance, "optional_cycle_skipped": skip,
+                        "optional_cycle_token_envelope": next_cycle_token_envelope,
+                        "optional_cycle_call_seconds": next_cycle_call_seconds,
+                        "reason": "Preserve mandatory drafting, factual review, per-issue coverage and one repair capacity."})
+                    if skip:
+                        investigation_cycles.append({
+                            "cycle": cycle, "mode": "not_dispatched_finalization_headroom",
+                            "external_acquisition_performed": False,
+                            "all_unreviewed_tasks_remain_open": True,
+                        })
+                        break
                 tracker.admit()
                 local_only = followup is None
                 followup_input = {"evidence_hash": digest(snapshot),
@@ -676,7 +784,16 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     # Disappearance from a revised answer is not a closure judgment.
                     investigation_ledger = record_investigations(f"followup-{cycle}")
                     unresolved = [item.question for item in investigation_ledger.followup_questions]
-            if evidence_led and investigation_cycles:
+            if bounded_review and investigation_cycles:
+                # No producer currently supplies explicit, evidence-linked closure
+                # candidates. Do not ask a model to exhaustively adjudicate every
+                # raw gap or turn changed wording into proof of resolution.
+                investigation_cycles[-1]["closure_review"] = {
+                    "status": "not_dispatched_no_explicit_resolution_candidates",
+                    "all_unreviewed_tasks_remain_open": True,
+                    "mandatory_reader_coverage_is_separate": True,
+                }
+            if evidence_led and investigation_cycles and not bounded_review:
                 closure_review = call("verify_investigations", "verifier", {
                     "investigations": investigation_ledger.model_dump(mode="json"),
                     "analyses": outputs, "valuation": valuation,
@@ -699,6 +816,10 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                  if evidence_led else {})}, AnalysisOutput)
             outputs["reconciled_challenge"] = challenge.model_dump(mode="json")
             gaps.extend(challenge.unresolved_gaps)
+            if bounded_review:
+                investigation_ledger = record_investigations("final_challenge")
+                existing_gap_texts = set(gaps)
+                gaps.extend(text for text in required_limitations() if text not in existing_gap_texts)
             review = call("verify_claims", "verifier", outputs, VerificationOutput, True)
             reviews.extend(review.findings)
             claim_ids = {claim["id"] for output in outputs.values()
@@ -718,7 +839,12 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 editor_data["claim_verification"] = review.model_dump(mode="json")
                 editor_data["valuation_inputs"] = proposal.model_dump(mode="json")
                 editor_data["calculated_values"] = [value.model_dump(mode="json") for value in calculated_values]
-                editor_data["investigations"] = investigation_ledger.model_dump(mode="json")
+                editor_data["investigations"] = ({
+                    "open_task_count": sum(entry.status == "still_open" for entry in investigation_ledger.entries),
+                    "full_provenance_audit": "investigation.json",
+                    "coverage_policy": "Every unresolved task text is supplied in limitations; "
+                        "none is implicitly resolved, immaterial or audit-only.",
+                } if bounded_review else investigation_ledger.model_dump(mode="json"))
             source_draft = call("editor", "editor", editor_data, ReportDraft, True,
                                 language=request.report_language)
             draft = prepare_draft(source_draft, request.report_language)
@@ -743,6 +869,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 final_review = call("verify_report", "verifier",
                                     {"draft": draft.model_dump(mode="json"), "analyses": outputs,
                                      "valuation": valuation}, VerificationOutput, True)
+                final_review = block_reader_contradictions(final_review)
             reviews.extend(final_review.findings)
             if not final_review.reviewed_report or any(
                 item.severity in ({"warning", "critical"} if evidence_led else {"critical"})
@@ -793,6 +920,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                          "translation_requirements": translation_requirements,
                          "analyses": outputs, "valuation": valuation},
                             VerificationOutput, True)
+                    translated_review = block_reader_contradictions(translated_review)
                     reviews.extend(translated_review.findings)
                     if not translated_review.reviewed_report or any(
                             item.severity in ({"warning", "critical"} if evidence_led else {"critical"})
