@@ -341,6 +341,64 @@ engine recovery: it imports no earlier stages, acquires no sources, retries noth
 settles no prior unknown usage, and produces no final report or accepted target.
 The failed source run must remain unchanged.
 
+### Offline forecast-assumption preparation
+
+`scripts.research_assumption_package` prepares the specific frozen NVDA FCFF case
+without fetching data or calling a model. It requires the explicit quarterly share
+proxy and the four exact opening-anchor fact IDs from the NVDA enrichment adapter.
+It rejects other companies/methods rather than applying industrial assumptions to
+Robinhood. This is a preparation/validation workflow, not an engine input adapter.
+
+```sh
+.venv/bin/python -m scripts.research_assumption_package \
+  --config /path/to/nvda_request.json --output /path/to/new_package
+.venv/bin/python -m scripts.research_assumption_package \
+  --config /path/to/nvda_request.json --validate /path/to/new_package/assumptions.json
+```
+
+The bundle contains `assumptions.json`, `calibration.json`, the exact captured
+`evidence.json`, a human-readable `workbook.md`, and `manifest.json` (written last
+as the completion marker). Existing
+destinations and outputs inside frozen evidence inputs are rejected. A publication
+failure can leave an inspectable incomplete directory without a manifest; use a
+new directory instead of overwriting it. The raw evidence hash binds the package,
+and source bytes are checked before and during publication. The manifest binds
+the captured evidence bytes, not continued immutability of the original path:
+another process can change that path after a check. The bundle's captured copy
+remains independently hash-checkable. Neither original source snapshots nor old
+run artifacts are edited.
+
+Entries distinguish historical anchors, external inputs, analyst assumptions and
+model conventions, each with explicit `missing`, `draft` or `reviewed` status.
+Historical numeric ranges must equal the exact normalized base-currency/share
+fact value (including source-derived amounts). Generated amount/share scales are
+1, consistent with those base-unit values; a future million-unit model needs an
+explicit conversion, never an additional million-fold multiplication. Forward
+ranges are ordered low/base/high fractions, not
+percent strings or scenario probabilities. They require evidence context and a
+rationale, and reviewed entries require reviewer identity and timestamps. Structural
+validation checks provenance and numeric boundaries, not economic entailment or
+whether a claimed human review actually occurred. Do not auto-fill review metadata.
+
+The builder fills four historical anchors and proposed conventions as drafts;
+forecast values, funding needs and cost-of-capital inputs stay explicitly missing.
+Historical GAAP operating-margin, capex/revenue and SBC/revenue observations are
+recomputed separately from compatible duration facts. Capex cash outflows are
+negated explicitly. Quarter/half-year overlap is disclosed; these are not independent
+samples or automatically justified forecast ranges. Source passages retain exact
+offsets and hashes, including the filing's existing consolidated D&A table: lack
+of a normalized D&A fact is not absence of D&A source text.
+
+Read-only validation returns `ready_for_model_review`, not readiness to execute
+the valuation engine. Missing/draft required entries remain blockers. A reviewed
+package still needs explicit dated forecast schedules, conversion to typed model
+inputs, semantic/economic review and engine integration. No ready package is
+automatically generated, adopted, or sent to a model. Creation time is recorded
+separately from evidence cutoff; a newly created historical-case package must not
+be presented as a forecast that existed at the earlier cutoff. New external data
+needs a separately validated snapshot/vintage under existing acquisition policy;
+do not append later mutable data to the frozen old case.
+
 ### Runtime boundaries
 
 `run_research(request, ResearchServices(...))` accepts evidence, model and optional

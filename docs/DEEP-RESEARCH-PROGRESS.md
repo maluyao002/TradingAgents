@@ -218,6 +218,53 @@ forecasts; do not force a target by relabeling unsupported inputs. Neither a fur
 probe nor a full-report retry was launched. Bounded full-report finalization and
 completed-report comparator evaluation remain unvalidated live.
 
+### Forecast-assumption package preparation
+
+The user approved the next offline preparation step after the 600-second probe.
+New FCFF-only contracts distinguish historical anchors, external market inputs,
+analyst forecasts and model conventions; missing/draft/reviewed states are explicit.
+Raw evidence hashes, point-in-time eligibility, derived ancestry, accounting basis,
+unit/period alignment, range bounds and review metadata are checked. A structurally
+reviewed package is not an executable model or an accepted forecast. No model engine
+or prior request identity was changed.
+
+The standalone preparation CLI emits a source-bound NVDA workbook, assumption JSON,
+historical calibration, exact captured evidence and a last-written hash manifest.
+Four opening anchors use normalized base USD/share units and scale-1 conventions;
+no future consumer should multiply them by a million again. Six historical
+operating-margin, capex/revenue and SBC/revenue ratios are recomputed from compatible
+Q2/H1 facts. Quarter/half-year overlap and cash-outflow sign conversion are explicit.
+No historical ratio was promoted into a forecast range. Exact-offset passages bring
+the existing consolidated D&A filing table and guidance into the preparation packet:
+un-normalized local evidence is not the same as unavailable source evidence.
+
+The resulting package has 20 entries: four historical anchors and six conventions
+in draft, plus ten explicitly missing forecast/funding/discount inputs. It is not
+ready for model review or another valuation call. The original missing economic
+calibration remains work to do, not a fabricated numerical target. Next substantive
+work is normalized D&A/tax/reinvestment schedules, dated external cost-of-capital
+inputs and explicitly justified company forecast ranges, followed by semantic
+review and typed-engine integration. No external acquisition, paid service, live
+report/probe call, scheduling or trading action occurred in this preparation step.
+
+Luna/medium mapped the frozen fact inventory; Sol/high implemented the contracts;
+Terra/medium independently reviewed the builder. Review drove the scale-1 default
+and captured-evidence publication boundary. Source checks detect observed drift but
+do not lock the original path against later changes; the manifest binds captured
+bytes. Incomplete publication has no completion manifest and is never overwritten.
+
+Local checkpoints: `ff5265e` (contracts and validation) and `c750961` (offline NVDA
+builder and publication tests). The reviewed preparation bundle is
+`reports/RESEARCH_EN_20260917/nvda_assumptions_2`; `_1` is an earlier draft retained
+for audit, not the handoff package. All four final artifact hashes, three source
+passage offsets and exact captured/original evidence equality were checked. Its
+read-only validation passes while correctly returning `ready_for_model_review=false`.
+Final full offline suite: **1,933 passed, 2 existing skips, 18 existing warnings,
+65 subtests passed**; 33 focused package/builder cases passed. Changed-file Ruff
+and `git diff --check` passed. Independent review has no remaining P1/P2 findings.
+No research-runtime tokens were consumed by this step; coordinator/subagent usage
+is separate and unavailable in the report ledger. All changes remain local.
+
 ## Baseline (2026-09-17)
 
 - Luna/medium read-only scout: 1,325 existing tests passed, two failed, one skipped,
