@@ -44,8 +44,8 @@ from tradingagents.research.valuation import FCFFModelInput
 from tradingagents.research.wire import WIRE_SCHEMA_VERSION, codec_for, system_instruction_suffix
 
 ROLE = "valuation"
-MAX_SUPERVISOR_SECONDS = 360
-MAX_CALL_SECONDS = 300
+MAX_SUPERVISOR_SECONDS = 600
+MAX_CALL_SECONDS = 600
 MAX_OUTPUT_TOKENS = 16_000
 PROBE_ARTIFACT_NAMES = (
     "probe.json",
@@ -517,7 +517,13 @@ def main(argv: list[str] | None = None) -> int:
             raise ModelProbeError("probe requires Codex backend and explicit frozen evidence")
         request = request.model_copy(update={"output_dir": output})
         _validate_worker_inputs(request, codex_home, output)
-        timeout = min(MAX_SUPERVISOR_SECONDS, request.budget.wall_seconds)
+        # Keep the existing 60-second cleanup allowance for shorter calls, but
+        # never extend the authorized whole-worker deadline beyond 600 seconds.
+        timeout = min(
+            MAX_SUPERVISOR_SECONDS,
+            request.budget.call_timeout_seconds + 60,
+            request.budget.wall_seconds,
+        )
         outcome = run_supervised(ModelProbeWorker(codex_home), request, timeout_seconds=timeout)
     except (OSError, ValueError, ValidationError):
         print(

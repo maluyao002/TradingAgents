@@ -141,6 +141,14 @@ def _install_service(
     return calls
 
 
+@pytest.mark.parametrize("requested,expected", [(120, 120), (300, 300), (600, 600), (900, 600)])
+def test_payload_call_deadline_is_explicit_and_capped(tmp_path: Path, requested: int, expected: int):
+    evidence_path, snapshot = _write_snapshot(tmp_path)
+    request = _request(tmp_path, evidence_path, budget=Budget(call_timeout_seconds=requested))
+    payload, _ = probe.build_payload(request, snapshot)
+    assert payload["timeout_seconds"] == expected
+
+
 def test_one_fcff_call_has_targeted_context_authoring_policy_and_exact_bindings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -566,11 +574,13 @@ def _cli_probe_result(
     )
 
 
-def test_cli_requires_live_opt_in_and_caps_supervision_at_360_seconds(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+@pytest.mark.parametrize("call_seconds,supervisor_seconds", [(300, 360), (600, 600), (900, 600)])
+def test_cli_requires_live_opt_in_and_caps_supervision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys,
+    call_seconds: int, supervisor_seconds: int,
 ) -> None:
     evidence_path, _ = _write_snapshot(tmp_path)
-    request = _request(tmp_path, evidence_path)
+    request = _request(tmp_path, evidence_path, budget=Budget(call_timeout_seconds=call_seconds))
     home = _home(tmp_path)
     config = tmp_path / "request.json"
     config.write_bytes(canonical_json(request))
@@ -604,7 +614,7 @@ def test_cli_requires_live_opt_in_and_caps_supervision_at_360_seconds(
             "--allow-live",
         ]
     ) == 0
-    assert captured["timeout_seconds"] == 360
+    assert captured["timeout_seconds"] == supervisor_seconds
     assert captured["request"].output_dir == output.resolve()
     assert isinstance(captured["worker"], probe.ModelProbeWorker)
     assert output.is_dir()

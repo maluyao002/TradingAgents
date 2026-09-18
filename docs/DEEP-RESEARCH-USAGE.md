@@ -323,8 +323,11 @@ existing isolated Codex home:
   --codex-home /path/to/isolated-runtime --allow-live
 ```
 
-It makes at most one valuation inference after preflight, capped at a 300-second
-call deadline / 360-second parent deadline. Output-token allowances are advisory;
+It makes at most one valuation inference after preflight. Explicit request budgets
+can allow up to a 600-second call and parent deadline; the default 300-second call
+retains a 360-second parent deadline. At the 600-second limit, the parent may stop
+the worker before a full call allowance plus startup/cleanup fits. Process cleanup
+can add bounded overhead after that deadline. Output-token allowances are advisory;
 admission uses a documented byte heuristic, excludes provider overhead, and cannot
 guarantee actual spend. Overshoot and incomplete usage remain visible. Historical
 anchors must bind eligible reported or source-derived facts; forecast choices need
