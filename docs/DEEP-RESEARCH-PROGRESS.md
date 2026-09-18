@@ -5,6 +5,74 @@ checkout). Live schedules, provider settings, historical reports, and user tasks
 are unchanged. Local commits are used as reviewable checkpoints; no remote push
 or pull request is implicit.
 
+## English NVDA / Robinhood campaign — September 17, 2026
+
+The approved sequence now uses Robinhood as the early contrast and English-only
+new outputs. Existing Chinese compatibility and its comparison TODO are preserved.
+The new behavior is opt-in `quality_revision: "evidence-led"`; historical
+`foundation` request identities and recovery payloads remain compatible.
+
+| Approved step | Current evidence | Remaining acceptance work |
+| --- | --- | --- |
+| 1: Freeze evaluation cases | Both supplied English HTMLs registered by basename/hash; decisive questions, required areas and defect-case inventory saved | Human-reviewed primary-source labels, held-out windows and matched model runs; comparator files are not gold |
+| 2: Reader and repair | Separate lossless audit, footnotes, typed per-limitation dispositions, exact rendered-text/hash verification, one budgeted repair, warning/critical withholding after repair | Real-report readability and semantic verification evaluation; literal excerpts do not prove entailment |
+| 3: Targeted investigation | Bounded question-specific full-text passages; valuation blockers included; cycle/provenance ledger; explicit evidence-linked closure; tests for revised analysis and still-open gaps | Autonomous external discovery/follow-up provider, semantic classification of unstructured gaps and selective dependent-role reruns |
+| 4: NVDA numerical slice | 52 original facts preserved plus 29 strict source-bound anchors; common-period TTM/WC/net-debt/share reconciliation; typed model/result references through exact verified synthetic reader | Live source-calibrated report, company economic review, scenarios/sensitivities and horizon bridges in the reader; no accepted target |
+| 5: HOOD contrast | Independently tested common-equity cash-flow DCF, source binding, attribution/scale/timing checks, matching strict wire codec, no customer-debt/FCFF mixing | Downloaded primary-source packet and normalized broker schedules; direct IR and SEC source checks returned HTTP 403 |
+| 6: Broader evaluation/release | Existing evaluation contracts retained; engineering regressions expanded | Matched workflow versus acquisition experiments, broader companies/windows, human/blind review, longitudinal and release gates |
+
+The source-bound NVDA enrichment is a narrow development adapter, not eight-quarter/
+five-year coverage. It produces 81 total facts with unchanged source bytes and
+retained original fact objects. Working capital is an explicitly qualified
+aggregate-row proxy; cash-only net debt excludes securities/leases and does not
+certify cash availability. An optional quarterly weighted-average diluted-share
+proxy remains a duration fact, must be the latest eligible quarter and is visibly
+labeled in per-share outputs. Default point-in-time binding is not relaxed.
+
+Independent review caught and fixed material-caveat disappearance, missing terminal
+review dispositions, audit/verification ID disagreement, segmented common-income
+binding, and a stale-quarter share proxy. The numeric catalogue now includes method,
+denominator basis, input/result hashes, opening inputs, rates, and discount timing,
+separate from reported facts. Materiality and forecasts still need independent
+financial review. A successful illustrative calculation is not production acceptance.
+
+Latest coordinator full non-live suite: **1,806 passed, 2 skipped, 18 existing
+warnings, 65 subtests passed**. Separate final attribution/materiality/recovery tests
+passed 18 cases. Changed-file Ruff and `git diff --check` passed. A broader research
+test-file Ruff invocation also surfaced two pre-existing import-order warnings in
+untouched diagnostic/stage-instruction tests; they were not silently rewritten.
+The actual original recovery source and diagnostic still validate with source
+identity `8a9c4e24312e85ef44242f5df98605f307a939b7043baaefe6e033846a5ad40a`.
+
+Commits in this campaign:
+
+- `698aa1b`: English-first NVDA/Robinhood design and sequence.
+- `ef91aa0`: immutable comparator reference registration.
+- `70fc87e`: bounded broker equity-cash-flow calculator and independent math tests.
+- `1586128`: local targeted passages, pure reader/audit rendering, investigation ledger.
+- `519c6f5`: frozen NVDA anchor normalization without rewriting source evidence.
+- `34ad11b`: opt-in engine integration, strict provider schemas and exact-report gates.
+
+Sol/high workers owned reader, retrieval, investigation and financial components;
+Terra/medium owned reference registration. Independent Sol/high review led to the
+fixes above. Worker token totals are unavailable and are not included in report
+runtime usage. No scheduling, trading, publishing, default application change,
+remote push or new Chinese run occurred.
+
+The bounded English-only live NVDA run is under
+`reports/RESEARCH_EN_20260917/nvda_run_1`, using the new 81-fact snapshot and a
+1.5-million-token/90-minute ceiling, one investigation cycle and a finalization
+reserve. A first launch was denied by automatic privacy review. Read-only provenance
+checks established that the payload consists only of public NVIDIA IR documents,
+derived facts and the public-company research mandate—not reference HTMLs, user
+holdings, credentials or chat history. The same launch was then approved; no
+restriction was bypassed. Completion and measured usage are pending.
+
+Robinhood needs saved Q2 2026 10-Q / FY2025 10-K / earnings-release files or another
+authorized primary-source delivery path. An asynchronous request was sent to the
+user while unaffected work continued. The September 18 comparison report remains
+an editorial comparator, never substitute primary evidence for the September 17 case.
+
 ## Baseline (2026-09-17)
 
 - Luna/medium read-only scout: 1,325 existing tests passed, two failed, one skipped,
@@ -20,7 +88,7 @@ or pull request is implicit.
   --ignore=tests/test_weekly_process_cleanup.py -m 'not integration'
 ```
 
-## Current implementation: tested offline preview
+## Historical foundation checkpoint: tested offline preview
 
 | Area | Implemented and exercised offline | Still required for milestone acceptance |
 | --- | --- | --- |

@@ -29,6 +29,69 @@ Minimal request shape:
 }
 ```
 
+### Evidence-led English development revision
+
+For the current NVDA/Robinhood campaign, explicitly add:
+
+```json
+{
+  "quality_revision": "evidence-led",
+  "report_language": "English",
+  "additional_report_languages": [],
+  "valuation_method": "fcff",
+  "share_count_basis": "point_in_time_diluted"
+}
+```
+
+Use `valuation_method: "equity_fcfe"` for an eligible broker-equity case, not
+industrial FCFF. This method requires common-net-income anchors, explicit retained
+capital assumptions and cost of equity. It does not subtract customer liabilities
+as corporate debt or add back SBC. It is not a regulatory-capital certification.
+
+Only if a current diluted capitalization is unavailable, a caller may explicitly
+select `share_count_basis: "latest_quarter_diluted_proxy"`. This binds the denominator
+to a recent **quarterly duration** `weighted_average_diluted_shares` fact at the
+common opening period end. It does not relabel it as an instant. The resulting
+per-share output is an illustrative proxy and carries a mandatory reader caveat;
+it is not a supported current fully diluted capitalization or an accepted target.
+
+The revision adds question-specific local passages, valuation-blocker follow-ups,
+an explicit investigation ledger, typed `{{calc:ID}}` numerical insertions,
+source footnotes and a complete linked limitations audit. A verifier checks the
+**exact rendered text** and supplies a disposition for every input limitation.
+Reader-covered caveats require traceable literal excerpts; operational/immaterial
+audit-only decisions require explicit rationale. One bounded repair is allowed;
+unresolved critical findings withhold the reader. Materiality/entailment remain
+model judgments requiring independent review, not guarantees from substring tests.
+
+Additional artifacts are `reader_limitations.json`, `reader_verification.json`,
+`calculated_values.json` and `investigation.json`. Numerical calculations are
+assumptions-based, distinct from reported facts, and rounded to two decimals for
+display while exact values and input/result hashes remain in the audit. The reader
+bytes are not rewritten after verification; later failures remain in the audit.
+
+Local follow-up searches the frozen full text and may revise analyses; it does not
+acquire missing external sources. Repeated packets and budget limits stop retries.
+Keyword matches never automatically resolve investigations. External acquisition
+still requires an injected follow-up provider; missing consensus or independent
+evidence stays missing. This is not a completed autonomous discovery capability.
+
+`foundation` remains the compatibility default for historical checkpoints and
+explicit recovery. New revision requests have separate identities and must use new
+output directories. Existing weekly/AMD settings and saved reports are unchanged.
+The offline reference registry can verify the supplied English comparator files:
+
+```sh
+.venv/bin/python scripts/research_reference_cases.py validate \
+  --manifest benchmarks/research-v2/reference_cases.json \
+  --analysis-cutoff 2026-09-17 \
+  --reference /absolute/path/HOOD_Equity_Research_2026-09-18.html \
+  --reference /absolute/path/NVDA_Equity_Research_R2a_2026-09-17.html
+```
+
+Registration proves byte identity only. It does not certify facts, select a held-out
+window, replace human review or establish a measured quality improvement.
+
 Request paths are relative to the config file. The `--responses` path is relative
 to the shell's working directory. Dry run validates configuration only: it neither
 reads response files nor creates output directories or calls providers.

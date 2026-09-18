@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "scope": "Development failure modes, not factual labels or measured report scores",
+  "human_reference_review": "pending",
+  "cases": [
+    {
+      "id": "share-and-currency-scale-confusion",
+      "expectation": "Amount scale and share scale must remain distinct; preserve existing billion/yi compatibility checks without adding a Chinese campaign.",
+      "offline_regression": "tests/test_research_valuation.py::test_raw_statement_and_share_scales_are_explicit_in_per_share_value"
+    },
+    {
+      "id": "quarter-capitalized-as-annual",
+      "expectation": "A quarterly terminal cash flow cannot be capitalized as an annual perpetuity.",
+      "offline_regression": "tests/test_research_valuation.py::test_quarterly_terminal_flow_is_not_capitalized_as_annual"
+    },
+    {
+      "id": "future-shares-divide-present-equity",
+      "expectation": "Do not divide present total equity value by a future buyback-reduced share count.",
+      "offline_regression": "tests/test_research_equity_valuation.py::test_present_per_share_value_uses_current_diluted_shares_only"
+    },
+    {
+      "id": "broker-income-attribution-mismatch",
+      "expectation": "Consolidated income including noncontrolling interests cannot substitute for common-shareholder income.",
+      "offline_regression": "tests/test_research_equity_binding.py::test_consolidated_net_income_is_not_common_net_income"
+    },
+    {
+      "id": "material-caveat-hidden-in-audit",
+      "expectation": "A blanket reviewed boolean cannot authorize omission of a material caveat.",
+      "offline_regression": "tests/test_research_report_review.py::test_boolean_verification_alone_cannot_hide_material_limitations"
+    },
+    {
+      "id": "late-filing-passage-undelivered",
+      "expectation": "A targeted question must be able to retrieve relevant text beyond the introductory source excerpt.",
+      "offline_regression": "tests/test_research_targeted_context.py::test_late_material_commitment_after_100k_noise_is_selected"
+    },
+    {
+      "id": "stale-sensitivity-after-base-change",
+      "expectation": "Changing base assumptions must invalidate and recompute dependent sensitivity/scenario outputs.",
+      "end_to_end_status": "pending_company_scenario_integration"
+    },
+    {
+      "id": "guidance-presented-as-consensus",
+      "expectation": "Issuer guidance and analyst estimates are distinct; missing consensus remains unknown.",
+      "end_to_end_status": "pending_source_backed_claim_review"
+    },
+    {
+      "id": "citation-presence-mistaken-for-support",
+      "expectation": "A valid citation ID or lexical match does not establish entailment or resolve a question.",
+      "end_to_end_status": "pending_human_reviewed_claim_labels"
+    }
+  ]
+}

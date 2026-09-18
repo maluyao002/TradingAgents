@@ -161,7 +161,8 @@ Depends on M2 and M3.
 - Implement separate claim verification: source entailment, dates, definitions,
   units, numerical interpretation, and unsupported causal language. Preserve review
   coverage and unresolved findings, not an unjustified blanket verified label.
-- Add the Chinese editor/synthesizer, structured-value rendering, readable source
+- Add the editor/synthesizer (English-first in the current campaign, preserving
+  existing Chinese compatibility), structured-value rendering, readable source
   footnotes, local audit report, and model/source appendices.
 - Implement data/numerical/research/editorial assessment and report-level admission
   rules. Critical unresolved issues produce Needs review / Unrated with dependent
