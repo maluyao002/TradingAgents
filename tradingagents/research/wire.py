@@ -16,6 +16,8 @@ from pydantic import BaseModel, ConfigDict, Field, WithJsonSchema, field_validat
 from pydantic_core import SchemaError, SchemaValidator, core_schema
 
 from .contracts import Identifier
+from .investigation_review import InvestigationReview
+from .report_review import ReaderVerification
 from .stages import AnalysisOutput, ReportDraft, ValuationProposal, VerificationOutput
 
 WIRE_SCHEMA_VERSION = "research-wire-v2"
@@ -149,6 +151,42 @@ class WireValuationProposal(_WireContract):
         return value
 
 
+class WireEquityForecastPeriod(_WireModel):
+    label: str
+    period_start: date
+    period_end: date
+    discount_years: WireDecimal
+    net_income_common: WireDecimal
+    required_capital_retention: WireDecimal
+
+
+class WireEquityDCFModelInput(_WireModel):
+    as_of_date: date
+    current_net_income: WireDecimal
+    periods: tuple[WireEquityForecastPeriod, ...] = Field(min_length=1, max_length=50)
+    cost_of_equity: WireDecimal
+    terminal_growth: WireDecimal
+    current_diluted_shares: WireDecimal
+    units: WireValuationUnits
+
+
+class WireEquityValuationProposal(WireValuationProposal):
+    model: WireEquityDCFModelInput | None
+
+
+class WireClosureDecision(_WireContract):
+    task_id: str
+    status: Literal["still_open", "resolved", "disposed"]
+    evidence_ids: tuple[str, ...]
+    verifier_judgment: Literal["resolved", "not_resolved"] | None
+    verifier_provenance_id: str | None
+    disposition: str
+
+
+class WireInvestigationReview(_WireContract):
+    decisions: tuple[WireClosureDecision, ...]
+
+
 class WireReviewFinding(_WireContract):
     code: str
     severity: Literal["info", "warning", "critical"]
@@ -162,6 +200,17 @@ class WireVerificationOutput(_WireContract):
     contradicted_claim_ids: tuple[str, ...]
     findings: tuple[WireReviewFinding, ...]
     reviewed_report: bool
+
+
+class WireLimitationDisposition(_WireContract):
+    issue_id: str
+    decision: Literal["reader_covered", "audit_only_operational", "audit_only_immaterial", "unresolved"]
+    rationale: str
+    reader_excerpt: str
+
+
+class WireReaderVerification(WireVerificationOutput):
+    limitation_dispositions: tuple[WireLimitationDisposition, ...]
 
 
 class WireReportSection(_WireContract):
@@ -239,12 +288,21 @@ class WireCodec:
         return self.domain_model.model_validate(decoded).model_dump(mode="json")
 
 
-def codec_for(role: str, response_schema: dict[str, Any]) -> WireCodec:
+def codec_for(role: str, response_schema: dict[str, Any], *, valuation_method="fcff") -> WireCodec:
     """Resolve a known domain contract to its closed strict wire representation."""
     models = _ROLE_MODELS.get(role)
     if models is None:
         raise ValueError("research role has no strict wire schema")
     domain_model, wire_model = models
+    if role == "valuation":
+        if valuation_method not in {"fcff", "equity_fcfe"}:
+            raise ValueError("unknown valuation method")
+        if valuation_method == "equity_fcfe":
+            wire_model = WireEquityValuationProposal
+    if role == "verifier" and response_schema == InvestigationReview.model_json_schema():
+        domain_model, wire_model = InvestigationReview, WireInvestigationReview
+    if role == "verifier" and response_schema == ReaderVerification.model_json_schema():
+        domain_model, wire_model = ReaderVerification, WireReaderVerification
     if response_schema != domain_model.model_json_schema():
         raise ValueError("unknown research response schema")
     output_schema = wire_model.model_json_schema()

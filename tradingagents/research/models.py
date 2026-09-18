@@ -106,7 +106,7 @@ class CodexModelService:
         output_limit = payload["max_output_tokens"]
         if type(output_limit) is not int or output_limit <= 0:
             raise ValueError("output allowance must be a positive integer")
-        codec = codec_for(role, payload.get("response_schema"))
+        codec = codec_for(role, payload.get("response_schema"), valuation_method=request.valuation_method)
         setting = request.models[role]
         choices = tuple(sorted({(item.model, item.effort) for item in request.models.values()}))
         with _call_deadline(timeout):
@@ -126,6 +126,8 @@ class CodexModelService:
             instructions = payload["system"] + system_instruction_suffix(role) + (
                 f" Keep the final JSON within the requested {output_limit}-token output allowance."
             )
+            if request.valuation_method == "equity_fcfe" and role == "valuation":
+                instructions = instructions.replace("typed FCFF model", "typed equity-cash-flow model")
             prompt = canonical_json({key: value for key, value in payload.items()
                                      if key not in {"system", "response_schema", "timeout_seconds"}}).decode()
             completion = self._adapter.complete_with_usage(

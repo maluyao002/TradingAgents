@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 from pydantic import TypeAdapter
 
 from .budget import BudgetExhausted, BudgetTracker
+from .calculated_values import calculation_catalog, render_calculations
 from .context import pack_evidence
 from .contracts import (
     Assessment,
@@ -27,8 +28,13 @@ from .contracts import (
     Usage,
 )
 from .dossiers import DossierStore
+from .equity_valuation import EquityDCFModelInput, EquityForecastPeriod, equity_dcf_valuation
 from .evidence import validate_snapshot
+from .investigation import collect_tasks, make_ledger
+from .investigation_review import InvestigationReview
+from .reader import ReaderIssue, render_reader
 from .rendering import render_references
+from .report_review import ReaderVerification, check_dispositions, limitation_packet
 from .services import ModelReply, ResearchServices
 from .stages import AnalysisOutput, ReportDraft, ValuationProposal, VerificationOutput, instruction
 from .storage import (
@@ -47,6 +53,25 @@ from .updates import describe_update, eligible_prior
 from .valuation import FCFFModelInput, ForecastPeriod, ValuationUnits, dcf_valuation
 
 _REPORT_FILENAMES = {"English": "reader_report_en.md", "Chinese": "reader_report_zh.md"}
+_ROLE_QUERIES = {
+    "planner": "revenue customers segments competitive risks financial condition outlook",
+    "business": "customer concentration competition demand capacity pricing segment revenue",
+    "accounting": "income cash flows balance sheets working capital shares stock compensation unusual gains",
+    "expectations": "guidance outlook revenue margins forecasts expectations",
+    "management": "capital allocation repurchases incentives acquisitions governance",
+    "valuation": "annual revenue net income diluted shares cash debt capital expenditures working capital",
+    "challenger": "risks competition customer concentration regulatory uncertainty",
+}
+
+
+def _research_queries(role, data, outputs):
+    questions = data.get("questions", outputs.get("planner", {}).get("questions", []))
+    return tuple(dict.fromkeys([
+        _ROLE_QUERIES.get(role, "financial results risks assumptions limitations"),
+        *(question["question"] for question in questions),
+        *(question for output in outputs.values()
+          for question in output.get("followup_questions", [])),
+    ]))
 
 
 def _required_artifacts(request: ResearchRequest):
@@ -58,6 +83,9 @@ def _required_artifacts(request: ResearchRequest):
             request.report_language, *request.additional_report_languages))
     if request.dossier_dir:
         required.add("dossier.json")
+    if request.quality_revision == "evidence-led":
+        required.update({"reader_limitations.json", "reader_verification.json", "calculated_values.json",
+                         "investigation.json"})
     return required
 
 
@@ -78,7 +106,7 @@ def _known_ids(snapshot):
                            if not set(item.source_ids) - eligible}
 
 
-def _prompt_evidence(snapshot):
+def _prompt_evidence(snapshot, queries=()):
     """Keep undated/current API payloads in the audit, never in historical reasoning."""
     known = _known_ids(snapshot)
     payload = snapshot.model_dump(mode="json")
@@ -87,7 +115,21 @@ def _prompt_evidence(snapshot):
         payload[key] = [item for item in payload[key] if item["id"] in known]
         if len(payload[key]) != original_count:
             payload["gaps"].append(f"{original_count - len(payload[key])} {key} omitted from model context: ineligible evidence or dependencies.")
-    return pack_evidence(EvidenceSnapshot.model_validate(payload))
+    bounded_queries = []
+    remaining = 4096
+    for query in queries:
+        if len(bounded_queries) >= 16 or remaining <= 0:
+            break
+        excerpt = query[:min(512, remaining)]
+        if excerpt.strip():
+            bounded_queries.append(excerpt)
+            remaining -= len(excerpt)
+    result = pack_evidence(EvidenceSnapshot.model_validate(payload), queries=tuple(bounded_queries))
+    if tuple(bounded_queries) != tuple(queries):
+        result["context_gaps"].append(
+            "Question delivery was bounded to 16 queries, 512 characters each and 4096 total; "
+            "omitted/truncated questions remain open, not evidence of absence.")
+    return result
 
 
 def _validate_analysis(output: AnalysisOutput, snapshot: EvidenceSnapshot):
@@ -106,16 +148,20 @@ def _calculate(proposal: ValuationProposal, request: ResearchRequest, snapshot):
     if set(proposal.evidence_ids) - _known_ids(snapshot):
         raise ValueError("valuation invented evidence identifiers")
     raw = proposal.model
-    for data, schema in [(raw, FCFFModelInput), (raw.get("units", {}), ValuationUnits),
-                         *((period, ForecastPeriod) for period in raw.get("periods", []))]:
+    equity = request.valuation_method == "equity_fcfe"
+    model_schema = EquityDCFModelInput if equity else FCFFModelInput
+    period_schema = EquityForecastPeriod if equity else ForecastPeriod
+    for data, schema in [(raw, model_schema), (raw.get("units", {}), ValuationUnits),
+                         *((period, period_schema) for period in raw.get("periods", []))]:
         if not isinstance(data, dict) or set(data) - {field.name for field in fields(schema)}:
             raise ValueError("unsupported valuation input fields")
-    model = TypeAdapter(FCFFModelInput).validate_python(raw)
+    model = TypeAdapter(model_schema).validate_python(raw)
     if model.as_of_date != request.cutoff.astimezone(ZoneInfo(request.timezone)).date():
         raise ValueError("valuation date differs from research cutoff")
-    required = {"current_revenue", "current_working_capital", "net_debt",
-                "current_diluted_shares", "discount_rate", "terminal_growth",
+    required = {"current_diluted_shares", "terminal_growth",
                 "units.currency", "units.amount_scale", "units.share_scale"}
+    required.update({"current_net_income", "cost_of_equity"} if equity else {
+        "current_revenue", "current_working_capital", "net_debt", "discount_rate"})
     for index, period in enumerate(model.periods):
         required.update(f"periods.{index}.{field.name}" for field in fields(period)
                         if field.name not in {"label", "discount_years"})
@@ -132,29 +178,64 @@ def _calculate(proposal: ValuationProposal, request: ResearchRequest, snapshot):
     if snapshot.instrument and model.units.currency != snapshot.instrument.reporting_currency:
         return {"status": "unavailable", "limitations": ["Model currency differs from reporting currency."]}
     opening_dates = set()
-    opening_metrics = {"current_revenue": "revenue", "current_working_capital": "working_capital",
-                       "net_debt": "net_debt", "current_diluted_shares": "diluted_shares"}
+    opening_bindings = {}
+    opening_metrics = ({"current_net_income": "net_income_common",
+                        "current_diluted_shares": "diluted_shares"} if equity else {
+                        "current_revenue": "revenue", "current_working_capital": "working_capital",
+                        "net_debt": "net_debt", "current_diluted_shares": "diluted_shares"})
+    share_proxy = request.share_count_basis == "latest_quarter_diluted_proxy"
+    if share_proxy:
+        opening_metrics["current_diluted_shares"] = "weighted_average_diluted_shares"
     for name, metric in opening_metrics.items():
         support = proposal.assumptions[name]
         scale = model.units.share_scale if name == "current_diluted_shares" else model.units.amount_scale
         compatible = [facts[sid] for sid in support.evidence_ids if sid in facts
                       and facts[sid].metric == metric
                       and facts[sid].basis == proposal.accounting_basis
+                      and facts[sid].segment is None
                       and 0 <= (model.as_of_date - facts[sid].period_end).days <= 120
-                      and (facts[sid].period_type == "duration" and facts[sid].period_start is not None
+                      and ((facts[sid].period_type == "duration" and facts[sid].period_start is not None
                            and 360 <= (facts[sid].period_end - facts[sid].period_start).days + 1 <= 371
-                           if name == "current_revenue" else facts[sid].period_type == "instant")
+                           if name in {"current_revenue", "current_net_income"}
+                           else facts[sid].period_type == "instant")
+                           if not (name == "current_diluted_shares" and share_proxy) else (
+                               facts[sid].period_type == "duration" and facts[sid].period_start is not None
+                               and 75 <= (facts[sid].period_end - facts[sid].period_start).days + 1 <= 105))
                       and (facts[sid].unit == "shares" if name == "current_diluted_shares"
                            else facts[sid].currency == facts[sid].unit == model.units.currency)
                       and facts[sid].normalized_value == getattr(model, name) * scale]
         if support.kind != "reported" or len(compatible) != 1:
             return {"status": "unavailable", "limitations": [f"Opening input not bound to a matching fact: {name}"]}
+        if name == "current_diluted_shares" and share_proxy:
+            newer = [fact for fact in facts.values()
+                     if fact.metric == "weighted_average_diluted_shares"
+                     and fact.segment is None and fact.basis == proposal.accounting_basis
+                     and fact.period_type == "duration" and fact.period_start is not None
+                     and 75 <= (fact.period_end - fact.period_start).days + 1 <= 105
+                     and fact.unit == "shares" and compatible[0].period_end < fact.period_end <= model.as_of_date]
+            if newer:
+                return {"status": "unavailable", "limitations": [
+                    "Share-count proxy is not the latest eligible quarter; opening anchors require reconciliation."]}
         opening_dates.add(compatible[0].period_end)
+        fact = compatible[0]
+        opening_bindings[name] = {
+            "fact_id": fact.id, "classification": "derived" if fact.inputs else "reported",
+            "inputs": fact.inputs, "formula": fact.formula, "location": fact.location,
+            "period_start": fact.period_start, "period_end": fact.period_end,
+            "period_type": fact.period_type,
+        }
     if len(opening_dates) != 1:
         return {"status": "unavailable", "limitations": ["Opening facts require a reconciled common period end."]}
-    result = dcf_valuation(model)
+    result = equity_dcf_valuation(model) if equity else dcf_valuation(model)
     return {"status": "illustrative", "result": asdict(result),
+            **({"opening_input_bindings": opening_bindings,
+                "valuation_method": request.valuation_method}
+               if request.quality_revision == "evidence-led" else {}),
+            **({"share_count_basis": request.share_count_basis} if share_proxy else {}),
             "limitations": [*result.limitations, *proposal.scope_limitations,
+                            *(["Per-share values use the latest-quarter weighted-average diluted-share "
+                               "proxy, not point-in-time diluted capitalization; future issuance, "
+                               "buybacks and option dilution require separate schedules."] if share_proxy else []),
                             "Sector schedules and source-linked assumptions need independent review."]}
 
 
@@ -255,6 +336,14 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
         gaps = ["V2 source coverage and company-specific model acceptance remain pending."]
         snapshot = EvidenceSnapshot(ticker=request.ticker, cutoff=request.cutoff)
         draft, drafts, valuation = None, {}, {"status": "unavailable"}
+        evidence_led = request.quality_revision == "evidence-led"
+        verified_readers = {}
+        reader_verifications = {}
+        calculated_values = ()
+        investigation_queries = ()
+        investigation_tasks = {}
+        investigation_cycles = []
+        investigation_ledger = None
         proposal = ValuationProposal(unsupported_inputs=("valuation has not completed",))
         stop_reason = "completed_needs_review"
         failure_type = None
@@ -285,14 +374,51 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             nonlocal dispatch_unsettled
             role_index = role_indices[role]
             role_indices[role] += 1
-            payload = {**instruction(role, schema), "evidence": _prompt_evidence(snapshot),
+            queries = tuple(dict.fromkeys((*investigation_queries, *_research_queries(
+                role, data, outputs)))) if evidence_led else ()
+            payload = {**instruction(role, schema), "evidence": _prompt_evidence(snapshot, queries),
                        "research": data, "cutoff": request.cutoff.isoformat(),
                        "mandate": request.mandate, "stage": stage, "role_call_index": role_index,
                        "valuation_months": request.valuation_months,
                        "return_months": request.return_months,
                        "language": language or request.internal_language}
+            if evidence_led:
+                payload["quality_requirements"] = {
+                    "revision": "evidence-led-1",
+                    "retrieval": "Lexical matches are leads, not proof or closure of a question.",
+                    "reader": "Write a thesis-led report with a causal financial bridge and "
+                              "explicit disconfirming evidence. Consolidate genuinely related "
+                              "material limitations into concise authored prose; retain all "
+                              "financially consequential uncertainty. Operational logs belong "
+                              "in the audit, not the reader. Do not hide missing valuation. "
+                              "Use {{calc:ID}} for supplied code-calculated values, never "
+                              "retype or recompute them. They are illustrative assumptions-based "
+                              "calculations, not reported facts; display is rounded to two decimals.",
+                    "verification": "When rendered_reader is supplied, review that exact "
+                                    "export, not only the intermediate draft. Repair only with "
+                                    "supplied evidence; no new facts or unsupported calculations.",
+                }
             if role == "valuation":
-                payload["financial_model_schema"] = TypeAdapter(FCFFModelInput).json_schema()
+                schema_type = EquityDCFModelInput if request.valuation_method == "equity_fcfe" else FCFFModelInput
+                payload["financial_model_schema"] = TypeAdapter(schema_type).json_schema()
+                if evidence_led:
+                    payload["share_count_basis"] = request.share_count_basis
+                    payload["share_count_requirement"] = (
+                        "Opening current_diluted_shares must bind to an eligible fact. "
+                        "Only when latest_quarter_diluted_proxy is explicitly selected may it use "
+                        "a weighted_average_diluted_shares quarterly duration fact at the common "
+                        "opening period end. This is a disclosed proxy, never an instant fact.")
+                if request.valuation_method == "equity_fcfe":
+                    payload["system"] = payload["system"].replace(
+                        "company-specific FCFF input", "company-specific equity-cash-flow input")
+                    payload["valuation_method"] = "equity_fcfe"
+                    payload["equity_model_requirements"] = (
+                        "Use net income attributable to common, not consolidated income including "
+                        "noncontrolling interests. Reconcile unusual gains and retained regulatory "
+                        "capital explicitly. Do not treat customer cash or receivables as corporate "
+                        "net debt, add back SBC, or divide present equity value by future shares. "
+                        "Current net income is an annual opening anchor. Forward assumptions need "
+                        "source-linked rationale; no automatic fixed capital-retention percentage.")
             cached = store.load_stage(stage, payload)
             if cached is not None:
                 return schema.model_validate(cached)
@@ -374,8 +500,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             eligible_facts = tuple(fact for fact in snapshot.facts
                                    if fact.id in _known_ids(snapshot))
             return candidate.model_copy(update={"sections": tuple(
-                section.model_copy(update={"text": render_references(
-                    section.text, eligible_facts, language)})
+                section.model_copy(update={"text": render_calculations(render_references(
+                    section.text, eligible_facts, language), calculated_values, language)
+                    if evidence_led else render_references(section.text, eligible_facts, language)})
                 for section in candidate.sections)})
 
         def validate_translation(source, translated):
@@ -386,6 +513,63 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                            for source_section, translated_section
                            in zip(source.sections, translated.sections, strict=True))):
                 raise ValueError("translated draft changed report structure or evidence links")
+
+        def reader_inputs():
+            # Mandatory model caveats do not depend on the editor remembering them.
+            material = [ReaderIssue(
+                message=message, provenance_id=f"valuation.limitations[{index}]",
+                severity="critical", category="financial", code="valuation_scope",
+            ) for index, message in enumerate(valuation.get("limitations", []))]
+            if valuation.get("status") == "unavailable" and not material:
+                material.append(ReaderIssue(
+                    message="Valuation unavailable; this report supplies no supported price target.",
+                    provenance_id="valuation.status", severity="critical", category="financial",
+                ))
+            return [*gaps, *material]
+
+        def record_investigations(cycle):
+            for task in collect_tasks(outputs, proposal, valuation):
+                origins = tuple(origin.model_copy(update={
+                    "occurrence_id": f"{cycle}:{origin.occurrence_id}",
+                    "origin_path": f"{cycle}.{origin.origin_path}",
+                    "provenance_id": f"{cycle}:{origin.provenance_id}",
+                }) for origin in task.origins)
+                previous_task = investigation_tasks.get(task.id)
+                if previous_task:
+                    origins = (*previous_task.origins, *origins)
+                investigation_tasks[task.id] = task.model_copy(update={"origins": origins})
+            # Valuation blockers must not be crowded out by long analyst gap lists.
+            ordered = sorted(investigation_tasks.values(), key=lambda task: (
+                0 if any(origin.source_kind == "valuation_proposal" for origin in task.origins) else 1,
+                task.id,
+            ))
+            return make_ledger(ordered, snapshot)
+
+        def verify_reader(candidate, language, stage, extra=None):
+            rendered = render_reader(request, candidate, snapshot, reader_inputs(), language)
+            rendered_hash = hashlib.sha256(rendered.reader_text.encode("utf-8")).hexdigest()
+            limitations = limitation_packet(gaps)
+            verification = call(stage, "verifier", {
+                "draft": candidate.model_dump(mode="json"), "analyses": outputs,
+                "valuation": valuation, "rendered_reader": rendered.reader_text,
+                "valuation_inputs": proposal.model_dump(mode="json"),
+                "calculated_values": [value.model_dump(mode="json") for value in calculated_values],
+                "rendered_reader_sha256": rendered_hash, **(extra or {}),
+                "limitation_review": limitations,
+                "limitation_policy": "For EVERY limitation issue ID return one disposition. "
+                    "Material financial/research caveats must be reader_covered with an exact "
+                    "excerpt showing the caveat in the rendered reader. Audit-only is allowed "
+                    "only for genuinely operational or immaterial details, with a specific "
+                    "rationale. Never classify a financially material unknown as immaterial "
+                    "to improve readability. Return unresolved when it is missing.",
+            }, ReaderVerification, True, language=language)
+            verification = check_dispositions(verification, limitations, rendered.reader_text)
+            reader_verifications[language] = {
+                "reader_sha256": rendered_hash, "stage": stage,
+                "review": verification.model_dump(mode="json"),
+                "exported": False,
+            }
+            return verification, rendered
 
         try:
             cached_evidence = store.load_stage("evidence", {})
@@ -425,18 +609,34 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             valuation = _calculate(proposal, request, snapshot)
             unresolved = [item for output in outputs.values()
                           for item in output.get("followup_questions", [])]
+            if evidence_led:
+                investigation_ledger = record_investigations("initial")
+                unresolved = [item.question for item in investigation_ledger.followup_questions]
             followup = getattr(services.evidence, "followup", None)
+            delivered_packets = set()
             for cycle in range(request.budget.followup_cycles):
-                if not unresolved or followup is None:
+                if not unresolved or (followup is None and not evidence_led):
                     break
                 tracker.admit()
+                local_only = followup is None
                 followup_input = {"evidence_hash": digest(snapshot),
                                   "questions": list(dict.fromkeys(unresolved))}
+                if local_only:
+                    packet = _prompt_evidence(snapshot, tuple(unresolved))
+                    packet_hash = digest(packet.get("sources", []))
+                    matched = any(query.get("match_label") == "keyword_match"
+                                  for query in packet.get("retrieval_metadata", {}).get("queries", []))
+                    if not matched or packet_hash in delivered_packets:
+                        break
+                    delivered_packets.add(packet_hash)
+                    followup_input["local_context_sha256"] = packet_hash
+                    store.save_stage(f"retrieval-{cycle}", followup_input, packet)
                 saved_followup = store.load_stage(f"followup-{cycle}", followup_input)
                 if saved_followup is not None:
                     updated = EvidenceSnapshot.model_validate(saved_followup)
                 else:
-                    updated = followup(request, snapshot, tuple(dict.fromkeys(unresolved)))
+                    updated = snapshot if local_only else followup(
+                        request, snapshot, tuple(dict.fromkeys(unresolved)))
                 updated = validate_snapshot(updated, request)
                 if updated.instrument != snapshot.instrument:
                     raise ValueError("follow-up changed instrument identity")
@@ -446,9 +646,16 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                         raise ValueError("follow-up must preserve immutable prior evidence")
                 store.save_stage(f"followup-{cycle}", followup_input,
                                  updated.model_dump(mode="json"))
-                if digest(updated) == digest(snapshot):
+                if digest(updated) == digest(snapshot) and not local_only:
                     break
                 snapshot = EvidenceSnapshot.model_validate_json(updated.model_dump_json())
+                if evidence_led:
+                    investigation_queries = tuple(dict.fromkeys(unresolved))
+                    investigation_cycles.append({
+                        "cycle": cycle, "mode": "local_full_text_retrieval" if local_only else "provider_followup",
+                        "questions": investigation_queries, "evidence_hash": digest(snapshot),
+                        "external_acquisition_performed": not local_only,
+                    })
                 revision = call(f"revision-{cycle}", "planner", outputs, AnalysisOutput)
                 outputs[f"revision-{cycle}"] = revision.model_dump(mode="json")
                 if revision.questions:
@@ -465,11 +672,31 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     *revision.followup_questions,
                     *(question for role in ("business", "accounting", "expectations", "management")
                       for question in outputs[role].get("followup_questions", []))]))
+                if evidence_led:
+                    # Disappearance from a revised answer is not a closure judgment.
+                    investigation_ledger = record_investigations(f"followup-{cycle}")
+                    unresolved = [item.question for item in investigation_ledger.followup_questions]
+            if evidence_led and investigation_cycles:
+                closure_review = call("verify_investigations", "verifier", {
+                    "investigations": investigation_ledger.model_dump(mode="json"),
+                    "analyses": outputs, "valuation": valuation,
+                    "closure_policy": "Explicitly judge resolution versus still_open or disposed. "
+                                      "A keyword hit or revised omission cannot close a task. "
+                                      "Resolved tasks need eligible evidence IDs and a reasoned "
+                                      "disposition. Forecast judgments are never reported facts.",
+                }, InvestigationReview, True)
+                decisions = tuple(decision.model_copy(update={
+                    "verifier_provenance_id": ("stages/verify_investigations.json"
+                                               if decision.verifier_judgment else None),
+                }) for decision in closure_review.decisions)
+                investigation_ledger = make_ledger(investigation_tasks.values(), snapshot, decisions)
             gaps.extend(unresolved)
             gaps.extend(valuation.get("limitations", []))
             gaps.extend(_prompt_evidence(snapshot).get("context_gaps", []))
             challenge = call("reconcile_challenge", "challenger",
-                             {"analyses": outputs, "valuation": valuation}, AnalysisOutput)
+                             {"analyses": outputs, "valuation": valuation,
+                              **({"valuation_inputs": proposal.model_dump(mode="json")}
+                                 if evidence_led else {})}, AnalysisOutput)
             outputs["reconciled_challenge"] = challenge.model_dump(mode="json")
             gaps.extend(challenge.unresolved_gaps)
             review = call("verify_claims", "verifier", outputs, VerificationOutput, True)
@@ -482,22 +709,53 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 raise ValueError("verifier supplied conflicting claim decisions")
             missing = claim_ids - set(review.supported_claim_ids)
             gaps.extend(f"Unverified claim: {identifier}" for identifier in sorted(missing))
+            if evidence_led:
+                gaps.extend(item.message for item in review.findings
+                            if item.severity in {"warning", "critical"})
             editor_data = {"analyses": outputs, "limitations": gaps, "valuation": valuation}
+            if evidence_led:
+                calculated_values = calculation_catalog(proposal, valuation)
+                editor_data["claim_verification"] = review.model_dump(mode="json")
+                editor_data["valuation_inputs"] = proposal.model_dump(mode="json")
+                editor_data["calculated_values"] = [value.model_dump(mode="json") for value in calculated_values]
+                editor_data["investigations"] = investigation_ledger.model_dump(mode="json")
             source_draft = call("editor", "editor", editor_data, ReportDraft, True,
                                 language=request.report_language)
             draft = prepare_draft(source_draft, request.report_language)
-            final_review = call("verify_report", "verifier",
-                                {"draft": draft.model_dump(mode="json"), "analyses": outputs,
-                                 "valuation": valuation}, VerificationOutput, True)
+            if evidence_led:
+                final_review, rendered = verify_reader(draft, request.report_language, "verify_report")
+                if (not final_review.reviewed_report or any(
+                        item.severity in {"warning", "critical"} for item in final_review.findings)):
+                    reviews.extend(final_review.findings)
+                    gaps.extend(item.message for item in final_review.findings
+                                if item.severity in {"warning", "critical"})
+                    # One repair only, admitted from the existing finalization reserve.
+                    source_draft = call("repair_report", "editor", {
+                        **editor_data, "draft_to_repair": source_draft.model_dump(mode="json"),
+                        "repair_findings": final_review.model_dump(mode="json"),
+                        "repair_policy": "Resolve or explicitly qualify findings using existing "
+                                         "evidence only. Do not remove material limitations.",
+                    }, ReportDraft, True, language=request.report_language)
+                    draft = prepare_draft(source_draft, request.report_language)
+                    final_review, rendered = verify_reader(
+                        draft, request.report_language, "verify_repaired_report")
+            else:
+                final_review = call("verify_report", "verifier",
+                                    {"draft": draft.model_dump(mode="json"), "analyses": outputs,
+                                     "valuation": valuation}, VerificationOutput, True)
             reviews.extend(final_review.findings)
             if not final_review.reviewed_report or any(
-                item.severity == "critical" for item in final_review.findings
+                item.severity in ({"warning", "critical"} if evidence_led else {"critical"})
+                for item in final_review.findings
             ):
                 draft = None
                 stop_reason = "verification_failed"
                 gaps.append("Reader draft withheld because final verification did not pass.")
             else:
                 drafts[request.report_language] = draft
+                if evidence_led:
+                    verified_readers[request.report_language] = rendered
+                    reader_verifications[request.report_language]["exported"] = True
                 translation_requirements = {
                     "mode": "faithful_translation",
                     "preserve": ["claims", "numbers", "limitations", "investment_view",
@@ -517,23 +775,36 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                       ReportDraft, True, language=language)
                     validate_translation(draft, translated)
                     translated = prepare_draft(translated, language)
-                    translated_review = call(
+                    translation_review_data = {
+                        "source_verified_draft": draft.model_dump(mode="json"),
+                        "source_draft_with_placeholders": source_draft.model_dump(mode="json"),
+                        "translation_requirements": translation_requirements,
+                    }
+                    if evidence_led:
+                        translated_review, translated_render = verify_reader(
+                            translated, language, f"verify-report-{language.lower()}",
+                            translation_review_data)
+                    else:
+                        translated_review = call(
                         f"verify-report-{language.lower()}", "verifier",
                         {"draft": translated.model_dump(mode="json"),
                          "source_verified_draft": draft.model_dump(mode="json"),
                          "source_draft_with_placeholders": source_draft.model_dump(mode="json"),
                          "translation_requirements": translation_requirements,
                          "analyses": outputs, "valuation": valuation},
-                        VerificationOutput, True)
+                            VerificationOutput, True)
                     reviews.extend(translated_review.findings)
                     if not translated_review.reviewed_report or any(
-                            item.severity == "critical"
+                            item.severity in ({"warning", "critical"} if evidence_led else {"critical"})
                             for item in translated_review.findings):
                         stop_reason = "verification_failed"
                         gaps.append(f"{language} reader draft withheld because final verification "
                                     "did not pass.")
                         break
                     drafts[language] = translated
+                    if evidence_led:
+                        verified_readers[language] = translated_render
+                        reader_verifications[language]["exported"] = True
         except Exception as exc:
             # Do not emit provider errors or arbitrary validation inputs into reports.
             stop_reason = str(exc) if isinstance(exc, BudgetExhausted) else "stage_failed"
@@ -547,6 +818,11 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
         assessment = Assessment(status="needs_review", findings=tuple(reviews))
         primary_draft = drafts.get(request.report_language)
         reader = _report(request, primary_draft, snapshot, gaps, request.report_language)
+        rendered = None
+        if evidence_led:
+            rendered = verified_readers.get(request.report_language) or render_reader(
+                request, None, snapshot, [*reader_inputs(), *reviews], request.report_language)
+            reader = rendered.reader_text
         artifacts = {
             "reader_report.md": reader.encode("utf-8"),
             "audit_report.md": ("# Research audit\n\n```json\n"
@@ -574,6 +850,38 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 "failure_type": failure_type,
                 "elapsed_seconds": tracker.elapsed_seconds, "production_accepted": False}),
         }
+        if evidence_led:
+            # The reader bytes remain frozen at verification. The companion audit
+            # must still include later warnings/failures (e.g. an optional translation).
+            final_audit = render_reader(request, primary_draft, snapshot,
+                                        reader_inputs(), request.report_language).limitations_audit
+            verification = reader_verifications.get(request.report_language, {})
+            dispositions = {item["issue_id"]: item for item in verification.get("review", {}).get(
+                "limitation_dispositions", [])} if verification.get("exported") else {}
+            for item in final_audit["unresolved_issues"]["consolidated_exact_text"]:
+                disposition_id = "limitation-" + digest(item["original_text"])
+                item["disposition_id"] = disposition_id
+                disposition = dispositions.get(disposition_id)
+                if disposition:
+                    item["verified_disposition"] = disposition
+                    if disposition["decision"] == "reader_covered":
+                        item["displayed_in_reader"] = True
+                        item["reader_display"] = "verified_editorial_representation"
+            final_audit["unresolved_issues"]["unrepresented_issue_ids"] = [
+                item["issue_id"] for item in final_audit["unresolved_issues"]["consolidated_exact_text"]
+                if not item["displayed_in_reader"]]
+            artifacts["reader_limitations.json"] = canonical_json({
+                **final_audit,
+                "exported_reader_sha256": hashlib.sha256(reader.encode("utf-8")).hexdigest(),
+                "audit_includes_post_verification_issues": True,
+                "review_history": [item.model_dump(mode="json") for item in reviews],
+            })
+            artifacts["reader_verification.json"] = canonical_json(reader_verifications)
+            artifacts["calculated_values.json"] = canonical_json(calculated_values)
+            artifacts["investigation.json"] = canonical_json({
+                "ledger": investigation_ledger, "cycles": investigation_cycles,
+                "source_acquisition": "injected_provider_only; local retrieval does not acquire new sources",
+            })
         if recovery is not None:
             recovery_provenance = {
                 **services.models.recovery_context,
@@ -586,10 +894,12 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             artifacts["recovery_provenance.json"] = canonical_json(recovery_provenance)
         if request.additional_report_languages:
             for language, completed_draft in drafts.items():
-                artifacts[_REPORT_FILENAMES[language]] = _report(
-                    request, completed_draft, snapshot, gaps, language).encode("utf-8")
+                text = (verified_readers[language].reader_text if evidence_led else _report(
+                    request, completed_draft, snapshot, gaps, language))
+                artifacts[_REPORT_FILENAMES[language]] = text.encode("utf-8")
         artifacts["run_metadata.json"] = canonical_json({
             **parse_json(artifacts["run_metadata.json"]),
+            "quality_revision": request.quality_revision,
             **({"additional_report_languages": request.additional_report_languages}
                if request.additional_report_languages else {}),
             **({"known_token_lower_bound": aggregate_usage().total_tokens,

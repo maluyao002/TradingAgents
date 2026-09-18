@@ -77,6 +77,14 @@ def load_request_inputs(request: ResearchRequest) -> dict[str, bytes]:
 def request_identity(request: ResearchRequest, inputs: dict[str, bytes] | None = None) -> str:
     inputs = load_request_inputs(request) if inputs is None else inputs
     settings = request.model_dump(mode="json", exclude={"output_dir", "dossier_dir"})
+    # Frozen preview-3 requests predate this opt-in. Preserve their exact identity
+    # for explicit recovery; the evidence-led workflow has a distinct identity.
+    if settings.get("quality_revision") == "foundation":
+        settings.pop("quality_revision")
+    if settings.get("valuation_method") == "fcff":
+        settings.pop("valuation_method")
+    if settings.get("share_count_basis") == "point_in_time_diluted":
+        settings.pop("share_count_basis")
     for name in ("evidence_path", "prior_dossier_path"):
         path = getattr(request, name)
         settings[name] = hashlib.sha256(inputs[name]).hexdigest() if path else None

@@ -5,7 +5,9 @@ from decimal import Decimal
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+from tests.test_research_equity_valuation import _model as equity_model
 from tests.test_research_valuation import _model
+from tradingagents.research.investigation_review import InvestigationReview
 from tradingagents.research.stages import (
     AnalysisOutput,
     ReportDraft,
@@ -30,6 +32,27 @@ def _walk(value):
     elif isinstance(value, list):
         for item in value:
             yield from _walk(item)
+
+
+def test_equity_wire_is_closed_and_round_trips_without_fcff_fields():
+    codec = codec_for("valuation", ValuationProposal.model_json_schema(), valuation_method="equity_fcfe")
+    validate_strict_schema(codec.output_schema)
+    payload = _valuation_wire_payload()
+    payload["model"] = asdict(equity_model())
+    decoded = codec.decode(payload)
+    assert "cost_of_equity" in decoded["model"]
+    assert "net_debt" not in decoded["model"]
+    assert "discount_rate" not in decoded["model"]
+    with pytest.raises(ValueError):
+        codec_for("valuation", ValuationProposal.model_json_schema()).decode(payload)
+
+
+def test_investigation_wire_is_closed_and_does_not_replace_legacy_verification():
+    codec = codec_for("verifier", InvestigationReview.model_json_schema())
+    validate_strict_schema(codec.output_schema)
+    assert codec.decode({"schema_version": 1, "decisions": []}) == {"schema_version": 1, "decisions": []}
+    legacy = codec_for("verifier", VerificationOutput.model_json_schema())
+    assert legacy.domain_model is VerificationOutput
 
 
 @pytest.mark.parametrize(("role", "domain"), [
