@@ -26,7 +26,8 @@ assessment may agree with consensus; disagreement is never manufactured.
 - Business, accounting, expectations, management, and industry analysis.
 - Financial forecasts, reproducible valuation, scenarios, and sensitivity analysis.
 - Independent challenge, claim verification, and research-quality assessment.
-- A Chinese reader report, a complete audit record, and versioned company dossiers.
+- An English reader report for the current campaign, a complete audit record, and
+  versioned company dossiers; existing Chinese output remains optional.
 - Stage recovery, bounded resource use, and research telemetry.
 
 ### Outside the core engine
@@ -52,12 +53,13 @@ histories or fabricated trade decisions to satisfy legacy validation.
 
 ## 2. Agreed defaults and changes from the earlier proposal
 
-- Initial coverage: AMD, INTC, NVDA, AVGO, and TSM. Reusable interfaces do not imply
-  validated support for all sectors or asset classes.
+- Current development/evaluation pair: NVDA and Robinhood (HOOD), as explicitly
+  selected by the user. Original expansion coverage includes AMD, INTC, AVGO and
+  TSM. Reusable interfaces do not imply validated support for all sectors.
 - Mandate: long-term company research; distinguish current intrinsic value,
   12-month valuation, and three-year shareholder-return scenarios.
-- Internal research: English. Reader report: Chinese, authored from structured
-  research results rather than translating every intermediate agent response.
+- Internal research and current reader reports: English. Defer Chinese generation
+  and language experiments while preserving compatibility with existing requests.
 - Public sources first, retaining existing configured providers as secondary
   sources. No new paid service or desktop connector is a core dependency.
 - Per-company allowance: 90 minutes and 1.5 million total tokens, with early exit.
@@ -211,6 +213,12 @@ shares. Do not force unsupported granular forecasts; unavailable decisive schedu
 limit the model's conclusions.
 
 Support the following pilot business templates:
+
+- Brokerage/financial platforms (HOOD contrast): transaction volumes and take
+  rates, customer balances versus corporate assets, net-interest economics,
+  subscription income, regulatory capital and funding. Select an appropriate
+  equity-cash-flow/earnings valuation basis; do not treat customer custody assets
+  as corporate cash or mechanically reuse industrial FCFF/net-debt conventions.
 
 - Fabless/product businesses: segment/product mix, volume/pricing where available,
   customer demand, supply constraints, and R&D/reinvestment.

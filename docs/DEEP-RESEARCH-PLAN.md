@@ -30,6 +30,49 @@ decision, not an undocumented implementation shortcut.
 
 ## 2. Milestones and dependencies
 
+### Approved execution sequence — English NVDA / Robinhood contrast
+
+The user approved the following priority order after independent Astra/high review.
+Use **NVDA and Robinhood (HOOD)** for the initial development/evaluation pair.
+Robinhood replaces the proposed early TSM contrast; the broader company coverage
+and release obligations below remain uncompleted. Current reader output is English.
+Preserve existing Chinese compatibility and its token-comparison TODO, but defer
+new Chinese generation, localization and language experiments for this campaign.
+
+1. Freeze reference identities, evaluation questions and defect cases before tuning.
+   The supplied English `NVDA_Equity_Research_R2a_2026-09-17.html` and
+   `HOOD_Equity_Research_2026-09-18.html` are comparator artifacts, not factual gold.
+   Separate report date, evidence cutoff and acquisition time; do not admit a
+   future-dated report as primary evidence. Select a held-out window before using
+   it, and do not claim human-reviewed labels until actual review occurs.
+2. In parallel, bound reader cleanup: concise authored limitations in the reader,
+   complete linked audit records, and final-artifact checks. No material caveat
+   may disappear merely to satisfy a length target. Implement bounded review
+   repairs with explicit dispositions and dependent-stage invalidation.
+3. Build question-specific evidence delivery and investigation together. Distinguish
+   locally undelivered, retrievable, conflicting, unavailable and judgment inputs.
+   Valuation blockers must be able to request evidence. Test resolution of a
+   missing passage/input, a changed conclusion and a genuinely unresolved gap.
+4. Complete a narrow multi-period NVDA model through numerical reader tables and
+   independently reproducible scenarios/sensitivities. Reported/derived anchors,
+   forecast assumptions and model conventions remain distinct. Connect typed
+   calculation references; a calculator alone is not a numerical report.
+5. Challenge the same interfaces with source-backed HOOD: transaction activity and
+   monetization, customer versus corporate balances, net interest, subscriptions,
+   regulatory capital/funding and regulatory-event scenarios. Determine applicable
+   equity-cash-flow/earnings methods rather than mechanically applying industrial
+   FCFF or subtracting customer liabilities as corporate debt. These methods need
+   explicit eligibility and independently checked reference calculations.
+6. Expand coverage and run matched workflow and acquisition comparisons separately,
+   then complete longitudinal updates and release gates. Answerable reference
+   cases must produce substantive model-backed output; truthful diagnostics alone
+   cannot demonstrate product competence. Live trials remain bounded and explicit;
+   no paid subscriptions, publication or scheduling changes are included.
+
+This sequence changes execution priorities, not the distinction between implemented
+utilities, integrated capabilities and accepted milestones. Do not declare M0-M6
+complete from the NVDA engineering pilot or reference-file registration alone.
+
 ### M0 — Core boundary, contracts, and baseline
 
 - Add `tradingagents.research` request/result types and injected service interfaces.
