@@ -420,6 +420,16 @@ The dated NVDA development workflow now has three separate layers:
    the reviewed paths to typed model inputs and calls the existing deterministic
    engine. Output is a conditional valuation memo, **not a final deep research report**.
 
+The standalone market-evidence merge publishes a synced metadata sidecar before
+the evidence file, using no-replace links. Existing files or symlinks are rejected;
+caught publication errors roll back only files still owned by that invocation.
+Ownership is rechecked before success; paths are not locked against later changes.
+This is not a crash-atomic two-file transaction: a hard interruption can leave an
+orphan sidecar. Treat evidence without its matching sidecar/hash as incomplete,
+retain the partial output for inspection and use a fresh destination when retrying.
+Forecast-fact reuse validates exact source locations as well as values and periods;
+prefixed/adjusted metric labels are not accepted as the requested GAAP row.
+
 ```sh
 .venv/bin/python -m scripts.research_nvda_forecast_facts \
   /path/to/frozen_evidence.json /path/to/new_forecast_evidence.json

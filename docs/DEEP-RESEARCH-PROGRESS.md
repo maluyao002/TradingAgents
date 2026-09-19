@@ -10,6 +10,47 @@ checkout). Live schedules, provider settings, historical reports, and user tasks
 are unchanged. Local commits are used as reviewable checkpoints; no remote push
 or pull request is implicit.
 
+## Frozen baseline and separate review branch — September 18, 2026
+
+At the user's request, `codex/deep-research-v2` is preserved at
+`4cbbb0799887c0cd2fb0fd7f634db2ea77dc59cc`, with local annotated tag
+`research-v2-baseline-20260918`. Review fixes are isolated on
+`codex/research-baseline-review`; the baseline branch and tag have not moved.
+The intended PR base is the frozen feature branch, not `main`. Stage 1 work has
+not begun and no merge is implicit.
+
+Focused Sol/high and Terra/medium review covered the latest source/forecast/model
+and probe/CI changes, not an exhaustive re-audit of every historical commit.
+All identified findings were resolved and independently rechecked:
+
+- CI's offline test step now excludes `integration`, rather than relying on missing
+  credentials to prevent a live DeepSeek test. Collection with a sentinel key
+  proves that the live class is deselected without dispatching a request.
+- Authored-probe tests declare their POSIX-only file-guard requirement.
+- Three repository-wide Ruff import-order failures are fixed.
+- Market snapshot/metadata publication uses synced staging and exclusive links;
+  collisions never overwrite an existing output. Caught errors roll back owned
+  outputs only, and final ownership checks detect observed sidecar replacement.
+  Crash-atomic pairing and post-return filesystem immutability are not claimed.
+- Forecast rows require exact label/cell boundaries. Reused generated facts must
+  retain exact source locations. The original valid filing spans are preserved,
+  and the existing 89-fact snapshot still validates idempotently, unchanged.
+
+Local review-fix commits: `8ceff80` (CI/portability/lint) and `238046f`
+(publication/provenance). Final validation: **1,996 passed, 1 skipped, 1 deselected,
+18 existing warnings, 65 subtests passed** using `pytest -q -m 'not integration'`
+with the configured PDF runtime. Focused source/model tests passed 41 cases;
+repository-wide Ruff and `git diff --check` pass. No research-model calls occurred.
+
+Public publication is blocked pending explicit confirmation: origin
+`maluyao002/TradingAgents` is public, and the approval check rejected publication
+of the 51 unpublished baseline commits without that confirmation. No workaround,
+remote push, tag publication or PR creation was attempted after the rejection.
+The Git checkpoint excludes ignored reports, credentials and local run artifacts;
+it is not a remote backup of those files. Once confirmed, publish the baseline/tag
+and review branch, create the focused PR, check hosted CI/comments and address
+actionable feedback. No automatic merge or Stage 1/live-research execution follows.
+
 ## Roadmap reconciliation and workspace organization — September 18, 2026
 
 The original M0–M6 plan, follow-up commits, actual artifacts and current code were

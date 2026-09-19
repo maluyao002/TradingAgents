@@ -47,10 +47,12 @@ substitute for independent reference review or the user's final product acceptan
 | Financial-model follow-ups | Source-bound assumption packages; 89 NVDA facts; dated market inputs; three ten-year conditional scenarios; deterministic cash-flow/terminal checks and 27 sensitivity cells | Complete equity/funding bridge or company forecast acceptance; standalone scenario workflow is not fully integrated with the engine |
 | Latest bounded diagnostic | One call completed in 63.29 seconds with 91,162 measured tokens; exact payload and artifact integrity verified | A populated model: it returned `model=null`; no subsequent full report was generated |
 
-Latest recorded full non-live verification: **1,982 passed, 2 skips, 18 existing
-warnings, 65 subtests**. This is evidence of tested behavior, not report-quality
-certification. This documentation reconciliation did not rerun those tests or
-consume research-model calls.
+At roadmap reconciliation, full non-live verification was **1,982 passed**. The
+subsequent separate baseline-review branch passes **1,996 tests, 1 skip,
+1 integration test deselected, 18 existing warnings and 65 subtests**. This is
+evidence of tested behavior, not report-quality certification. The review changes
+and publication status are recorded in the [progress log](DEEP-RESEARCH-PROGRESS.md);
+no research-model calls were used for that code review.
 
 ### Original milestone reconciliation
 
@@ -259,6 +261,29 @@ an unlimited retry allowance. Existing 90-minute/1.5-million per-company setting
 are ceilings, not automatic permission to consume them.
 
 ## 6. Workspace organization and artifact register
+
+### Frozen baseline and change workflow
+
+The pre-Stage-1 baseline is commit `4cbbb07` on `codex/deep-research-v2`, identified
+by annotated tag `research-v2-baseline-20260918`. It is a preserved development
+checkpoint, not a production release or a claim that the reviewed code has no bugs.
+
+- Do not make further direct commits on the frozen feature branch or move the tag.
+- Put baseline review fixes on `codex/research-baseline-review`, with a PR targeting
+  `codex/deep-research-v2`. Keep Stage 1 feature work out of that review-fix PR.
+- Put subsequent stages on separate `codex/` branches with focused PRs, test
+  evidence and independent review. Resolve actionable review findings with tests;
+  do not mark comments resolved merely because they are inconvenient.
+- Do not merge automatically. A PR merge may intentionally advance an integration
+  branch after approval; the baseline tag and commit remain unchanged. For Stage 1,
+  choose the approved reviewed base explicitly before starting the new branch.
+- A branch/tag convention is not server-enforced protection. Repository rules,
+  production acceptance and default activation are separate decisions.
+- Ignored reports, caches, credentials and local run artifacts are outside this
+  Git checkpoint. Preserve them locally; pushing code is not a backup of those files.
+
+Public publication requires confirmation because the configured origin repository
+is public; no privacy assurance is inferred merely from passing a secret-pattern scan.
 
 Document ownership:
 
