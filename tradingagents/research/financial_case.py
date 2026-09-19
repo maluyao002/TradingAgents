@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Context, Decimal, localcontext
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import AwareDatetime, Field, field_validator, model_validator
 
@@ -301,6 +302,7 @@ class ConclusionAssessment(Contract):
 class FinancialCase(Contract):
     ticker: str = Field(min_length=1)
     cutoff: AwareDatetime
+    timezone: str = "UTC"
     snapshot_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     opening_date: date
     maximum_age_days: int = Field(default=0, ge=0)
@@ -310,9 +312,18 @@ class FinancialCase(Contract):
     gaps: tuple[EvidenceGap, ...] = ()
     assessments: tuple[ConclusionAssessment, ...]
 
+    @field_validator("timezone")
+    @classmethod
+    def known_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError("unknown financial-case timezone") from exc
+        return value
+
     @model_validator(mode="after")
     def complete_case_shape(self):
-        if self.opening_date > self.cutoff.date():
+        if self.opening_date > self.cutoff.astimezone(ZoneInfo(self.timezone)).date():
             raise ValueError("opening date cannot be after the evidence cutoff")
         schedule_kinds = [schedule.kind for schedule in self.schedules]
         if set(schedule_kinds) != _SCHEDULE_KINDS or len(schedule_kinds) != len(
@@ -403,6 +414,7 @@ class ReconciledCommitments(Contract):
 class FinancialReconciliation(Contract):
     ticker: str
     cutoff: AwareDatetime
+    timezone: str = "UTC"
     opening_date: date
     snapshot_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     case_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
@@ -813,7 +825,12 @@ def reconcile_financial_case(
         for expectation in checked_snapshot.expectations
         if set(expectation.source_ids) <= eligible_sources
     }
-    eligible_evidence = eligible_sources | eligible_facts | eligible_expectations
+    eligible_events = {
+        event.id
+        for event in checked_snapshot.events
+        if event.source_id in eligible_sources
+    }
+    eligible_evidence = eligible_sources | eligible_facts | eligible_expectations | eligible_events
     for record in (*checked_case.gaps, *checked_case.assessments):
         if set(record.evidence_ids) - eligible_evidence:
             raise ValueError("gap or assessment references ineligible evidence")
@@ -831,6 +848,7 @@ def reconcile_financial_case(
     return FinancialReconciliation(
         ticker=checked_case.ticker,
         cutoff=checked_case.cutoff,
+        timezone=checked_case.timezone,
         opening_date=checked_case.opening_date,
         snapshot_sha256=snapshot_hash,
         case_sha256=digest(checked_case.model_dump(mode="json")),

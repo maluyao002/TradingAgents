@@ -161,6 +161,42 @@ def test_partial_case_recomputes_classifications_without_equity_or_funding_clear
         "fy27-h2", "fy28", "fy29", "fy30", "fy31", "fy32-plus"}
 
 
+def test_all_commitment_rows_use_explicit_key_group_kinds_and_remain_unassessed():
+    snapshot, materials, request, _ = synthetic_case_inputs()
+    case = build_nvda_case(snapshot, materials, request)
+    expected_kinds = {
+        "supply": "purchase",
+        "capex": "purchase",
+        "cloud": "cloud",
+        "ai_cloud": "cloud",
+        "uncommenced_leases": "lease",
+        "third_party_leases": "lease",
+        "investments": "other",
+    }
+    assert len(case.commitments.items) == 42
+    for key, expected_kind in expected_kinds.items():
+        items = [item for item in case.commitments.items if item.id.startswith(f"commitment-{key}-")]
+        assert len(items) == 6
+        assert {item.kind for item in items} == {expected_kind}
+        assert {(item.timing, item.overlap, item.treatment) for item in items} == {
+            ("unknown", "unknown", "not_assessed")}
+
+
+@pytest.mark.parametrize("cutoff,zone,opening", [
+    ("2026-09-18T23:30:00Z", "Asia/Tokyo", "2026-09-19"),
+    ("2026-09-18T01:30:00Z", "America/Los_Angeles", "2026-09-17"),
+])
+def test_builder_preserves_timezone_at_local_day_boundaries(cutoff, zone, opening):
+    from tradingagents.research.financial_case import reconcile_financial_case
+    snapshot, materials, request, _ = synthetic_case_inputs()
+    snapshot = EvidenceSnapshot.model_validate({**snapshot.model_dump(), "cutoff": cutoff})
+    request = type(request).model_validate({**request.model_dump(), "cutoff": cutoff, "timezone": zone})
+    case = build_nvda_case(snapshot, materials, request)
+    assert case.opening_date.isoformat() == opening
+    assert case.timezone == zone
+    assert reconcile_financial_case(case, snapshot).timezone == zone
+
+
 def test_mechanical_reference_has_three_cases_27_cells_and_no_equity_results():
     snapshot, _, _, cases = synthetic_case_inputs()
     audit = inherited_proxy_audit(snapshot, cases)

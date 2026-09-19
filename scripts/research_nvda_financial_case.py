@@ -49,6 +49,15 @@ ADDITIONAL = (
     ("third_party_leases", "Data center leases not commenced for third party"),
     ("additional_commitments", "Total"),
 )
+COMMITMENT_KINDS = {
+    "supply": "purchase",
+    "capex": "purchase",
+    "cloud": "cloud",
+    "ai_cloud": "cloud",
+    "uncommenced_leases": "lease",
+    "third_party_leases": "lease",
+    "investments": "other",
+}
 
 
 def _section(source, start, end, identifier, unit="USD", observed="2026-07-26"):
@@ -348,6 +357,7 @@ def build_nvda_case(snapshot, materials, request):
                 description="Reported fiscal bucket is retained in the item ID; exact payment dates and overlap with forecast costs/capex/WC are unassessed. No incremental deduction."))
             commitments.append(CommitmentItem(id=identifier, fact_id=fact.id,
                 normalized_value=fact.normalized_value, unit="USD", currency="USD", period_end=fact.period_end,
+                kind=COMMITMENT_KINDS[key],
                 timing="unknown", disclosed_timing=bucket, overlap="unknown",
                 treatment="not_assessed", convention_ids=(cid,)))
     equity_funding = ("equity_per_share_value", "funding_assessment")
@@ -373,6 +383,7 @@ def build_nvda_case(snapshot, materials, request):
             ("debt_and_leases", debt, None, "Carrying debt and lease classification; current-date market-value bridge incomplete."),
             ("shares", shares, "latest_quarter_diluted_proxy", "Two incompatible share observations, neither is current diluted capitalization.")))
     return FinancialReconciliationInput(ticker="NVDA", cutoff=snapshot.cutoff,
+        timezone=request.timezone,
         snapshot_sha256=evidence_snapshot_sha256(snapshot), opening_date=request.cutoff.astimezone(
             ZoneInfo(request.timezone)).date(), schedules=schedules,
         commitments=CommitmentSchedule(id="commitments", status="partial", items=tuple(commitments),

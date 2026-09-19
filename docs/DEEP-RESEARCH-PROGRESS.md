@@ -14,6 +14,20 @@ or pull request is implicit.
 
 ### Stage 2 first development tranche — September 19, 2026
 
+PR #12 review follow-up: the user authorized resolving the review, merging into
+`codex/deep-research-v2`, and removing the merged sub-branch. All three hosted
+findings were addressed: the financial case now preserves the request timezone
+and validates opening dates in that local calendar; eligible event IDs may support
+gaps/assessments without changing conclusion gates; and NVDA commitments retain
+their typed purchase/cloud/lease/other categories. Targeted regressions cover
+positive/negative timezone boundaries, genuinely future dates, ineligible event
+sources and future publication, and all seven commitment groups. These changes
+do not close the outstanding financial/economic work described below or modify
+the earlier generated case draft. Merge execution and CI are recorded on the PR.
+Local verification for this follow-up: **56 targeted tests passed** across the
+financial-case contracts and NVDA adapter, plus changed-file Ruff and whitespace
+checks. No local full suite or live research call was run.
+
 The user merged PR #11. Its merge commit `864a330` was verified on origin and
 fast-forwarded locally into `codex/deep-research-v2`. The fully merged local
 `codex/research-stage-1` branch was deleted with ancestry protection; only its

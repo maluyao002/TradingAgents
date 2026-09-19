@@ -1,12 +1,18 @@
 """Focused offline regressions for Stage 2 financial reconciliation."""
 
+from datetime import date
 from decimal import Decimal, Inexact, Overflow, localcontext
 from hashlib import sha256
 
 import pytest
 from pydantic import ValidationError
 
-from tradingagents.research.contracts import EvidenceSnapshot, FinancialFact, SourceDocument
+from tradingagents.research.contracts import (
+    EvidenceSnapshot,
+    FinancialFact,
+    ResearchEvent,
+    SourceDocument,
+)
 from tradingagents.research.financial_case import (
     CommitmentItem,
     CommitmentSchedule,
@@ -501,3 +507,74 @@ def test_decimal_reconciliation_is_isolated_from_callers_context():
     assert _schedule(result, "operating_working_capital").included_subtotal == Decimal(
         "1234567890123456789000"
     )
+
+
+@pytest.mark.parametrize("cutoff,zone,opening", [
+    ("2026-09-18T23:30:00Z", "Asia/Tokyo", "2026-09-19"),
+    ("2026-09-18T01:00:00Z", "America/Los_Angeles", "2026-09-17"),
+    ("2026-09-18T12:00:00Z", "UTC", "2026-09-18"),
+])
+def test_opening_date_uses_configured_timezone_and_persists_it(cutoff, zone, opening):
+    snapshot = EvidenceSnapshot.model_validate({**_snapshot().model_dump(), "cutoff": cutoff})
+    case = FinancialCase.model_validate({**_case(snapshot).model_dump(), "cutoff": cutoff,
+        "timezone": zone, "opening_date": opening})
+    result = reconcile_financial_case(case, snapshot)
+    assert result.opening_date == date.fromisoformat(opening)
+    assert result.timezone == zone
+    assert result.model_dump(mode="json")["timezone"] == zone
+
+
+@pytest.mark.parametrize("zone,opening", [
+    ("Asia/Tokyo", "2026-09-20"),
+    ("America/Los_Angeles", "2026-09-19"),
+])
+def test_genuinely_future_local_opening_dates_are_rejected(zone, opening):
+    with pytest.raises(ValidationError, match="opening date"):
+        FinancialCase.model_validate({**_case(_snapshot()).model_dump(),
+            "cutoff": "2026-09-18T23:30:00Z", "timezone": zone, "opening_date": opening})
+
+
+def test_unknown_timezone_is_rejected():
+    with pytest.raises(ValidationError, match="unknown financial-case timezone"):
+        FinancialCase.model_validate({**_case(_snapshot()).model_dump(), "timezone": "invalid/zone"})
+
+
+def _event_case(*, source_update=None, event_update=None):
+    event_source = SourceDocument.model_validate({**_source("event-source").model_dump(), **(source_update or {})})
+    event = ResearchEvent(id="financing-event", title="Synthetic financing announcement",
+        source_id=event_source.id, entities=("NVDA",), published_at="2026-09-17T11:00:00Z",
+        origin_id="synthetic-financing", classification="announcement")
+    snapshot = EvidenceSnapshot.model_validate({**_snapshot().model_dump(),
+        "sources": (*_snapshot().sources, event_source),
+        "events": ({**event.model_dump(), **(event_update or {})},)})
+    gap = EvidenceGap(id="event-gap", area="commitments", description="Announced financing needs assessment.",
+        blocks=("funding_assessment",), evidence_ids=(event.id,))
+    case = _case(snapshot, gaps=(gap,), assessments="assessed")
+    case = FinancialCase.model_validate({**case.model_dump(), "assessments": tuple(
+        item.model_copy(update={"evidence_ids": (event.id,)}) for item in case.assessments)})
+    return case, snapshot
+
+
+@pytest.mark.parametrize("published", [None, "2026-09-17T11:00:00Z"])
+def test_event_backed_gaps_and_assessments_admit_eligible_source(published):
+    case, snapshot = _event_case(event_update={"published_at": published})
+    result = reconcile_financial_case(case, snapshot)
+    assert result.evidence_gaps[0].evidence_ids == ("financing-event",)
+    assert result.output_eligibility.funding_assessment.evidence_ids == ("financing-event",)
+    assert result.output_eligibility.funding_assessment.status == "blocked"
+    assert result.output_eligibility.equity_per_share_value.status == "blocked"
+
+
+@pytest.mark.parametrize("updates", [
+    {"availability": "snippet"}, {"availability": "unavailable"},
+    {"retrieved_at": "2026-09-19T12:00:00Z"}, {"published_at": None},
+])
+def test_ineligible_event_sources_remain_rejected(updates):
+    case, snapshot = _event_case(source_update=updates)
+    with pytest.raises(ValueError, match="ineligible evidence"):
+        reconcile_financial_case(case, snapshot)
+
+
+def test_future_event_publication_is_rejected():
+    with pytest.raises(ValidationError, match="event publication"):
+        _event_case(event_update={"published_at": "2026-09-19T12:00:00Z"})
