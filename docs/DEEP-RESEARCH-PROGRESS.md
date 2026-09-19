@@ -43,9 +43,12 @@ All identified findings were resolved and independently rechecked:
 - Authored-probe tests declare their POSIX-only file-guard requirement.
 - Three repository-wide Ruff import-order failures are fixed.
 - Market snapshot/metadata publication uses synced staging and exclusive links;
-  collisions never overwrite an existing output. Caught errors roll back owned
-  outputs only, and final ownership checks detect observed sidecar replacement.
-  Crash-atomic pairing and post-return filesystem immutability are not claimed.
+  collisions never overwrite an existing output. Hosted review subsequently found
+  a race in ownership-checked rollback, so failures now preserve all published paths
+  and clean up only private staging names. Final ownership checks detect observed
+  replacement. Directory-entry durability/order and crash-atomic pairing are not
+  claimed: consumers must validate both artifacts and the snapshot hash, not rely
+  on evidence-file presence as a completion marker.
 - Forecast rows require exact label/cell boundaries. Reused generated facts must
   retain exact source locations. The original valid filing spans are preserved,
   and the existing 89-fact snapshot still validates idempotently, unchanged.

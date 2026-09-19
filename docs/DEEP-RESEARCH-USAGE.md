@@ -420,13 +420,15 @@ The dated NVDA development workflow now has three separate layers:
    the reviewed paths to typed model inputs and calls the existing deterministic
    engine. Output is a conditional valuation memo, **not a final deep research report**.
 
-The standalone market-evidence merge publishes a synced metadata sidecar before
-the evidence file, using no-replace links. Existing files or symlinks are rejected;
-caught publication errors roll back only files still owned by that invocation.
-Ownership is rechecked before success; paths are not locked against later changes.
-This is not a crash-atomic two-file transaction: a hard interruption can leave an
-orphan sidecar. Treat evidence without its matching sidecar/hash as incomplete,
-retain the partial output for inspection and use a fresh destination when retrying.
+The standalone market-evidence merge syncs file contents and uses no-replace links.
+Existing files or symlinks are rejected. On errors, published paths are preserved:
+automatic rollback could race another writer and delete its replacement. Only
+private temporary staging names are cleaned up. Ownership is rechecked before
+success, but paths are not locked against later changes. Directory-entry persistence
+and ordering are not guaranteed across a crash: either file or any subset may
+remain, and neither evidence nor metadata alone is a completion marker. Validate
+both files and the metadata's snapshot hash before reuse. Retain incomplete output
+for inspection and use a fresh destination when retrying.
 Forecast-fact reuse validates exact source locations as well as values and periods;
 prefixed/adjusted metric labels are not accepted as the requested GAAP row.
 

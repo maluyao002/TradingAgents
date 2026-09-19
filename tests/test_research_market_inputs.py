@@ -119,7 +119,7 @@ def test_exclusive_publish_preserves_a_concurrent_winner(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("replace_owned", [False, True])
-def test_pair_failure_rolls_back_only_owned_links(tmp_path, monkeypatch, replace_owned):
+def test_pair_failure_preserves_owned_and_replacement_outputs(tmp_path, monkeypatch, replace_owned):
     sidecar, evidence = tmp_path / "metadata.json", tmp_path / "evidence.json"
     original = os.link
 
@@ -138,7 +138,7 @@ def test_pair_failure_rolls_back_only_owned_links(tmp_path, monkeypatch, replace
     if replace_owned:
         assert sidecar.read_bytes() == b"another publisher"
     else:
-        assert not sidecar.exists()
+        assert sidecar.read_bytes() == b"metadata"
     assert not list(tmp_path.glob(".*"))
 
 
@@ -165,8 +165,33 @@ def test_success_path_sidecar_replacement_blocks_completion(tmp_path, monkeypatc
     with pytest.raises(MarketInputParseError, match="replaced before completion"):
         market._publish_new_files({sidecar: b"metadata", evidence: b"evidence"})
     assert sidecar.read_bytes() == b"foreign replacement"
-    assert not evidence.exists()
+    assert evidence.read_bytes() == b"evidence"
     assert not list(tmp_path.glob(".*"))
+
+
+def test_failure_cleanup_never_unlinks_a_published_path(tmp_path, monkeypatch):
+    sidecar, evidence = tmp_path / "metadata.json", tmp_path / "evidence.json"
+    original_link, original_unlink = os.link, Path.unlink
+    published_unlinks = []
+
+    def fail_second(source, target, **kwargs):
+        if target == evidence:
+            raise OSError("second link failed")
+        return original_link(source, target, **kwargs)
+
+    def guard_unlink(path, *args, **kwargs):
+        if path in {sidecar, evidence}:
+            published_unlinks.append(path)
+            raise AssertionError("cleanup must not unlink published paths")
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(market.os, "link", fail_second)
+    monkeypatch.setattr(Path, "unlink", guard_unlink)
+    with pytest.raises(OSError, match="second link failed"):
+        market._publish_new_files({sidecar: b"metadata", evidence: b"evidence"})
+    assert not published_unlinks
+    assert sidecar.read_bytes() == b"metadata"
+    assert not evidence.exists()
 
 
 @pytest.mark.skipif(os.name != "posix", reason="symlink creation may require Windows privileges")

@@ -204,16 +204,18 @@ def parse_market_inputs(cache: FileSourceCache) -> tuple[tuple[SourceDocument, .
 
 
 def _publish_new_files(blobs: dict[Path, bytes]) -> None:
-    """Publish synced files without replacement; roll back only our own links.
+    """Publish synced contents without replacement; preserve partial outputs.
 
-    This is not a crash-atomic multi-file transaction. Callers publish the evidence
-    last as the completion marker; a hard interruption may leave a sidecar only.
+    File contents are synced, but directory entries are not crash-atomic or ordered
+    durably. Either file may survive a failure; no single path is a completion
+    marker. Consumers must validate both files and their hash binding. Never unlink
+    published paths on failure: an ownership check then unlink would race a writer
+    replacing that path. Only private temporary staging names are cleaned up.
     """
     for destination in blobs:
         if os.path.lexists(destination):
             raise MarketInputParseError(f"destination already exists: {destination}")
     staged: dict[Path, Path] = {}
-    published: list[Path] = []
     try:
         for destination, payload in blobs.items():
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -228,20 +230,10 @@ def _publish_new_files(blobs: dict[Path, bytes]) -> None:
                 os.link(temporary, destination, follow_symlinks=False)
             except FileExistsError as exc:
                 raise MarketInputParseError(f"destination already exists: {destination}") from exc
-            published.append(destination)
         for destination, temporary in staged.items():
             current, owned = destination.lstat(), temporary.stat()
             if (current.st_dev, current.st_ino) != (owned.st_dev, owned.st_ino):
                 raise MarketInputParseError("published artifact replaced before completion")
-    except BaseException:
-        for destination in reversed(published):
-            try:
-                current, owned = destination.lstat(), staged[destination].stat()
-                if (current.st_dev, current.st_ino) == (owned.st_dev, owned.st_ino):
-                    destination.unlink()
-            except FileNotFoundError:
-                pass
-        raise
     finally:
         for temporary in staged.values():
             temporary.unlink(missing_ok=True)
