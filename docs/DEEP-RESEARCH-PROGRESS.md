@@ -12,6 +12,57 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+Follow-up: the user explicitly approved merge and Stage 1 implementation. A late
+third hosted finding identified extra newline-delimited release cells; `4149ab5`
+checks the exact next-row boundary without changing historical spans. Twelve new
+regressions cover numeric, parenthesized and text cells. All three review threads
+were resolved, all six hosted checks passed, and the local offline suite passed
+2,015 tests (1 skip, 1 integration deselected, 65 subtests). PR #10 was merged into
+`codex/deep-research-v2` as `90ea63b`; only its fully merged review branch was deleted.
+The original `research-v2-baseline-20260918` tag and `main` remain unchanged.
+
+### Stage 1 — material delivery and separate result scope
+
+Work is isolated on `codex/research-stage-1`. Luna/medium mapped the existing seams;
+Terra/medium implemented result scopes; Sol/high implemented terminal derivations.
+The coordinator implemented reusable material inputs, frozen-market adapters,
+compiler/probe integration and payload-bound regressions. Independent cross-review
+findings were fixed with regressions: after-SBC terminal basis, scenario revalidation,
+malformed falsey packet rejection, typed conditional audit fields (no probabilities
+or acceptance-like extras), the original 1 MiB request bound, and explicit offline
+versus pre-dispatch coverage labeling. Focused tests pass 76 cases, including the
+two optional frozen-packet checks. Final local validation: **2,091 passed, 1 skipped,
+1 integration deselected, 18 existing warnings, 65 subtests passed** with the
+configured PDF runtime. Repository-wide Ruff and whitespace checks pass.
+
+Commit boundaries: `2cc0a18` adds typed terminal derivations and independent result
+scopes; `6ae8b62` adds verified material delivery, compiler/probe integration and
+coverage regressions. Documentation is a separate handoff checkpoint.
+
+- `ReviewedModelInputs` delivers exact market table/statement spans, source hashes,
+  units/dates, normalized historical facts with ancestry, assumptions, scenario
+  paths, economic derivations and typed terminal ROIC/reinvestment calculations.
+- The frozen-market adapter rechecks delivered Treasury/ERP/beta/SEP values against
+  their exact rows and dated headers. The actual serialized prompt is checked
+  against the independently rebuilt expected envelope; hash-only inventories,
+  omitted sections and changed values fail before dispatch.
+- Terminal capex and g/ROIC reinvestment are recomputed with isolated Decimal
+  precision. They remain explicitly analyst derivations, not issuer facts or
+  economic acceptance.
+- Separate operating/equity/funding/opening-date states survive in result artifacts.
+  Unsupported equity/per-share values are withheld while supported conditional
+  operating output remains. Positive FCFF is not company-wide funding clearance.
+- New compilation artifacts include `reviewed_inputs.json`, `material_coverage.json`
+  and `scoped_results.json`; the new memo uses scoped conclusions. `compiled.json`
+  and sensitivities remain explicitly raw mechanical audit records, not targets.
+- An optional local offline regression replays the immutable September NVDA packet
+  through the new delivery and compilation paths into a temporary directory,
+  preserving every original input byte. Portable synthetic regressions run in CI.
+
+No new model call, external financial-data acquisition, Stage 2 reconciliation,
+Stage 3 integrated reader, schedule change or production activation is included.
+The entries below preserve the prior freeze/publication chronology.
+
 Publication follow-through: the user confirmed keeping the work on the feature
 branch, not `main`. The frozen branch/tag and separate review branch were then
 published to origin, and [PR #10](https://github.com/maluyao002/TradingAgents/pull/10)

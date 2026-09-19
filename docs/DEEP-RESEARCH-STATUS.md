@@ -1,6 +1,6 @@
 # Deep Research V2 — current status and delivery roadmap
 
-Reconciled September 18, 2026, against implementation through `2036fe8`.
+Reconciled September 18, 2026; updated for the reviewed baseline merge and Stage 1.
 This is the current work index and recommended execution order, not new release
 acceptance or authorization for additional live calls. The original M0–M6 gates
 remain in [the implementation plan](DEEP-RESEARCH-PLAN.md).
@@ -48,7 +48,7 @@ substitute for independent reference review or the user's final product acceptan
 | Latest bounded diagnostic | One call completed in 63.29 seconds with 91,162 measured tokens; exact payload and artifact integrity verified | A populated model: it returned `model=null`; no subsequent full report was generated |
 
 At roadmap reconciliation, full non-live verification was **1,982 passed**. The
-subsequent separate baseline-review branch passes **2,003 tests, 1 skip,
+approved baseline-review head passed **2,015 tests**. Stage 1 passes **2,091 tests, 1 skip,
 1 integration test deselected, 18 existing warnings and 65 subtests**. This is
 evidence of tested behavior, not report-quality certification. The review changes
 and publication status are recorded in the [progress log](DEEP-RESEARCH-PROGRESS.md);
@@ -111,6 +111,21 @@ Preserve all historical reports, checkpoints and commit identities.
 ### Stage 1 — Complete evidence delivery and model-result scope
 
 Maps to M1–M4. Engineering-owned; no new user decision is needed to specify it.
+
+Implementation is on `codex/research-stage-1`, based on the approved PR #10 merge
+`90ea63b` into `codex/deep-research-v2`. The new reusable material-input contract,
+typed terminal derivations, serialized-payload coverage audit and independent
+result-scope contracts are implemented. The existing frozen NVDA packet replays
+offline with both previously omitted input groups delivered. Newly compiled
+development memos withhold equity/per-share conclusions while retaining conditional
+operating-asset calculations. Funding and opening-date alignment remain
+`not_assessed`, not a negative or positive conclusion.
+
+This is **not** Stage 2 financial closure or Stage 3 core-engine/report admission.
+The September market selectors are intentionally source-specific adapters around
+the reusable contracts. Legacy packets with no market/economic material remain
+outside Stage 1 assurance; real prepared NVDA packets automatically rebuild the
+envelope from verified bytes. No new live call or acceptance is implied.
 
 Deliverables:
 
@@ -264,11 +279,11 @@ are ceilings, not automatic permission to consume them.
 
 ### Frozen baseline and change workflow
 
-The pre-Stage-1 baseline is commit `4cbbb07` on `codex/deep-research-v2`, identified
+The pre-Stage-1 baseline is commit `4cbbb07`, identified
 by annotated tag `research-v2-baseline-20260918`. It is a preserved development
 checkpoint, not a production release or a claim that the reviewed code has no bugs.
 
-- Do not make further direct commits on the frozen feature branch or move the tag.
+- Do not make further direct commits on the feature integration branch or move the tag.
 - Put baseline review fixes on `codex/research-baseline-review`, with a PR targeting
   `codex/deep-research-v2`. Keep Stage 1 feature work out of that review-fix PR.
 - Put subsequent stages on separate `codex/` branches with focused PRs, test
@@ -282,11 +297,14 @@ checkpoint, not a production release or a claim that the reviewed code has no bu
 - Ignored reports, caches, credentials and local run artifacts are outside this
   Git checkpoint. Preserve them locally; pushing code is not a backup of those files.
 
-The user confirmed feature-branch publication to the public origin, leaving `main`
-unchanged. The baseline branch/tag are published and review fixes are in
-[PR #10](https://github.com/maluyao002/TradingAgents/pull/10), targeting
-`codex/deep-research-v2`. This does not authorize merging or changing repository
-protection rules; no privacy assurance is inferred merely from a secret-pattern scan.
+The user approved merging [PR #10](https://github.com/maluyao002/TradingAgents/pull/10)
+into `codex/deep-research-v2`; merge commit `90ea63b` contains all review fixes.
+All three review threads were resolved, including the late extra-release-cell
+finding; the final head passed six hosted checks and 2,015 local tests. The fully
+merged `codex/research-baseline-review` branch was deleted locally/remotely; its
+commits remain in feature history. The original baseline tag remains at `4cbbb07`.
+`main` and repository protection rules are unchanged. Stage 1 uses its own branch
+and PR; approval of PR #10 does not automatically merge subsequent stage work.
 
 Document ownership:
 
