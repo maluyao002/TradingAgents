@@ -420,6 +420,18 @@ def test_metric_rows_require_exact_label_and_final_cell_boundaries(
         )
 
 
+@pytest.mark.parametrize("next_label", [
+    "Income tax expense", "Net income", "Deferred income taxes",
+    "Acquisitions, net of cash acquired",
+])
+@pytest.mark.parametrize("extra_cell", ["123", "(123\n)", "Unexpected column"])
+def test_release_rows_reject_additional_cells(next_label, extra_cell) -> None:
+    changed = RELEASE_TEXT.replace(f"\n{next_label}\n", f"\n{extra_cell}\n{next_label}\n", 1)
+    assert changed != RELEASE_TEXT
+    with pytest.raises(ForecastFactExtractionError, match="required row"):
+        extract_forecast_facts(_snapshot(release_text=changed))
+
+
 def test_release_disagreement_and_existing_operand_conflicts_fail_closed() -> None:
     changed_release = RELEASE_TEXT.replace("2,124\n1,280", "2,125\n1,280", 1)
     with pytest.raises(ForecastFactExtractionError, match="filing and release.*disagree"):
