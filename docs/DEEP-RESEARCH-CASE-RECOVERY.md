@@ -42,6 +42,11 @@ the source run. The Codex home is used to check model identity, not to read auth
 
 The capsule is an audit bundle, not a self-contained executable or an approval.
 Continuation deliberately revalidates the original source and frozen inputs.
+The preserved pilot input includes legacy “draft-only” wording despite its valid
+operating-scenario review. Future packages use a timeless review precondition;
+historical bytes are not rewritten because their reviews/checkpoints bind them.
+Inspect any resulting reader for this stale caveat against the actual scoped
+review record. The separate financial/valuation case remains unreviewed.
 
 ## 2. Obtain a new authorization
 
@@ -99,8 +104,11 @@ gaps still block the corresponding acceptance or valuation conclusions.
 Transient process-inspection errors get at most three attempts, bounded by the
 absolute deadline. Deadline-bound inspection uses timeout-enforced `/bin/ps` even
 if an optional process library is installed. Malformed process tables and worker
-identity mismatches still fail closed. Cleanup has a separate bounded allowance
-and validates process identities before signaling; unresolved cleanup is a failure.
+identity mismatches still fail closed. Cleanup has a separate bounded allowance,
+divided into stop/discovery and reserved KILL/reap phases, and validates process
+identities before signaling. An expired discovery phase cannot exhaust the kill
+phase's inspection allowance. Persistent inspection denial still fails closed;
+unresolved cleanup is a failure.
 
 `supervisor_diagnostic.json` preserves fixed, sanitized failure classifications
 without overwriting an existing diagnostic. Raw exceptions, credentials and

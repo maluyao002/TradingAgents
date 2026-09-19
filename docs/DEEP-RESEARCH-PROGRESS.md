@@ -54,6 +54,19 @@ unknown historical call, then continue from reconciliation and compare the actua
 reader. Product acceptance and merge/release remain separate decisions. See the
 [recovery procedure](DEEP-RESEARCH-CASE-RECOVERY.md).
 
+Fresh hosted review of `94a8b70` found two further P2 items. Cleanup now reserves
+separate bounded stop/discovery and KILL/reap phases, so an expired discovery
+deadline cannot consume the final identity-check/kill allowance. PID reuse still
+prevents signaling. New NVDA operating packages express independent review as a
+timeless precondition rather than retaining a contradictory “draft-only” claim
+after review attachment. Historical reviewed packets remain immutable, including
+their legacy wording; the final reader check must not conflate that wording with
+the actual hash-bound operating-review status. Valuation-case review is separate
+and remains incomplete. Follow-up verification: **53 supervisor tests and 8
+package/review-attachment tests passed**, with lint and whitespace clean. Sol/high
+independently reviewed the cleanup fix and found no remaining issue. All six
+hosted checks had passed before this narrow follow-up; CI remains enabled for it.
+
 ### Stage 3 authorized pilot 1 — September 19, 2026
 
 The user authorized the 1.5m-token / 90-minute / 600-second-per-call English NVDA

@@ -85,6 +85,9 @@ def test_generic_total_is_h1_plus_quarters_not_ttm(tmp_path):
     package = OperatingScenarioPackage.model_validate(read_json(output / "operating_scenario_package.json"))
     review = OperatingScenarioReview(reviewer_id="independent_test_reviewer", reviewed_at=datetime(2026, 9, 20, tzinfo=timezone.utc), package_sha256=operating_scenario_package_sha256(package), case_sha256=package.case_sha256, evidence_sha256=package.evidence_sha256, decision="conditional_operating_scenarios", limitations=("Mechanical review only.",))
     result = evaluate_operating_scenarios(package.model_copy(update={"review": review}), FinancialCase.model_validate(read_json(output / "financial_case.json")), EvidenceSnapshot.model_validate(read_json(output / "evidence.json")))
+    assert result.reviewed and result.model_context["reviewed"]
+    assert "Numerical outputs require an independent hash-bound review after package finalization." in result.model_context["limitations"]
+    assert not any(limitation.startswith("Draft-only package;") for limitation in result.model_context["limitations"])
     base = next(item for item in result.model_context["scenarios"] if item["id"] == "base")
     assert base["fiscal_total"]["revenue"] == 399237000000
     assert base["fiscal_total"]["revenue"] != 302970000000
