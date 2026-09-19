@@ -433,7 +433,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                     "export, not only the intermediate draft. Repair only with "
                                     "supplied evidence; no new facts or unsupported calculations.",
                 }
-            if case_context is not None and not coverage_only and stage != "independent_challenge":
+            if case_context is not None and not coverage_only and stage not in {"planner", "independent_challenge"}:
                 payload["financial_case"] = case_context.model_context()
                 payload["case_reader_requirements"] = CASE_READER_REQUIREMENTS
                 case_material_delivery[stage] = {
@@ -715,13 +715,18 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 raise ValueError("no eligible live evidence")
             prior_data = {"prior_hypotheses": prior.model_dump(mode="json"),
                           "update": describe_update(prior, snapshot)} if prior else {}
+            # Case runs blind the first challenge before even planner questions
+            # or prior-dossier hypotheses can influence its payload/retrieval.
+            challenger = (call("independent_challenge", "challenger", {}, AnalysisOutput)
+                          if case_context is not None else None)
             plan = call("planner", "planner", prior_data, AnalysisOutput)
             if not 3 <= len(plan.questions) <= 5:
                 raise ValueError("planner must supply 3-5 decisive questions")
             outputs["planner"] = plan.model_dump(mode="json")
             question_data = {"questions": [q.model_dump(mode="json") for q in plan.questions]}
             # The independent challenge never sees the lead thesis or model first.
-            challenger = call("independent_challenge", "challenger", question_data, AnalysisOutput)
+            if challenger is None:
+                challenger = call("independent_challenge", "challenger", question_data, AnalysisOutput)
             outputs["challenger"] = challenger.model_dump(mode="json")
             for role in ("business", "accounting", "expectations", "management"):
                 analysis = call(role, role, question_data, AnalysisOutput)
@@ -1094,7 +1099,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             artifacts["case_input.json"] = frozen["financial_case_path"]
             artifacts["case_material_delivery.json"] = canonical_json({
                 "stages": case_material_delivery,
-                "exclusions": ["independent_challenge: blinded to lead case",
+                "exclusions": ["planner and independent_challenge: evidence-only, blinded to lead case",
                                "coverage-only verifier: exact reader and issue coverage, not factual review"],
                 "measurement": "serialized orchestration payload; not provider token telemetry",
             })

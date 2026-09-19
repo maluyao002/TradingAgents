@@ -100,7 +100,7 @@ def test_case_replay_delivers_material_without_unbound_valuation(tmp_path):
     case_context = read_json(request.output_dir / "case_context.json")
     delivered = read_json(request.output_dir / "case_material_delivery.json")["stages"]
     for _role, payload in services.models.calls:
-        if payload["stage"] == "independent_challenge" or "-coverage-" in payload["stage"]:
+        if payload["stage"] in {"planner", "independent_challenge"} or "-coverage-" in payload["stage"]:
             assert "financial_case" not in payload
         else:
             assert payload["financial_case"] == case_context
@@ -302,3 +302,15 @@ def test_provider_review_boolean_must_be_strict_before_admission(tmp_path):
     assert result.stop_reason == "stage_failed"
     assert result.assessment.status == "incomplete"
     assert result.usage.complete  # The response was measured, but its schema was invalid.
+
+
+def test_blinded_challenge_has_no_case_derived_question_channel(tmp_path):
+    request, services = case_setup(tmp_path)
+    result = run_research(request, services)
+    assert result.stop_reason == "completed_needs_review"
+    planner = next(payload for _, payload in services.models.calls if payload["stage"] == "planner")
+    challenge = next(payload for _, payload in services.models.calls if payload["stage"] == "independent_challenge")
+    assert "financial_case" not in planner and "financial_case" not in challenge
+    assert planner["research"] == {}
+    assert challenge["research"] == {}
+    assert services.models.calls[0][1]["stage"] == "independent_challenge"

@@ -34,7 +34,9 @@ Neither a reviewer nor user approval can clear deterministic financial blockers.
   that changes evidence stops before further analysis with the old case.
 - Deliver actual schedules, selected facts, conventions, exact source passages,
   review, limitations and result scope to analysts, synthesis, reconciliation and
-  factual verification. The first challenger remains blinded to the lead case;
+  factual verification. The first challenger runs before the planner, without
+  planner questions or prior hypotheses; the initial planner is also case-blind.
+  This closes PR #13's indirect case-to-planner-to-challenger leakage finding;
   coverage-only checks receive the exact reader and required issue inventory.
 - Preserve source passage spans and hashes. Authored passages are checked against
   frozen source text; source-level associations are not an entailment judgment.

@@ -90,7 +90,7 @@ def request_identity(request: ResearchRequest, inputs: dict[str, bytes] | None =
         settings.pop("financial_case_path")
     else:
         settings["financial_case_path"] = hashlib.sha256(inputs["financial_case_path"]).hexdigest()
-        settings["case_workflow_revision"] = "case-reader-1"
+        settings["case_workflow_revision"] = "case-reader-2"
     for name in ("evidence_path", "prior_dossier_path"):
         path = getattr(request, name)
         settings[name] = hashlib.sha256(inputs[name]).hexdigest() if path else None
