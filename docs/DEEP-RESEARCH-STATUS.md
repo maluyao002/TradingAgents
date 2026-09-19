@@ -282,8 +282,11 @@ checkpoint, not a production release or a claim that the reviewed code has no bu
 - Ignored reports, caches, credentials and local run artifacts are outside this
   Git checkpoint. Preserve them locally; pushing code is not a backup of those files.
 
-Public publication requires confirmation because the configured origin repository
-is public; no privacy assurance is inferred merely from passing a secret-pattern scan.
+The user confirmed feature-branch publication to the public origin, leaving `main`
+unchanged. The baseline branch/tag are published and review fixes are in
+[PR #10](https://github.com/maluyao002/TradingAgents/pull/10), targeting
+`codex/deep-research-v2`. This does not authorize merging or changing repository
+protection rules; no privacy assurance is inferred merely from a secret-pattern scan.
 
 Document ownership:
 

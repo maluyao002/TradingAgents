@@ -12,6 +12,14 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+Publication follow-through: the user confirmed keeping the work on the feature
+branch, not `main`. The frozen branch/tag and separate review branch were then
+published to origin, and [PR #10](https://github.com/maluyao002/TradingAgents/pull/10)
+was opened with base `codex/deep-research-v2` and head
+`codex/research-baseline-review`. The publication blocker described below is historical
+and resolved. Hosted CI and automatic PR review are checked separately from the
+local validation record; no merge or change to `main` is authorized by this action.
+
 At the user's request, `codex/deep-research-v2` is preserved at
 `4cbbb0799887c0cd2fb0fd7f634db2ea77dc59cc`, with local annotated tag
 `research-v2-baseline-20260918`. Review fixes are isolated on
