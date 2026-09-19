@@ -9,6 +9,45 @@ acceptance, see the [current status and roadmap](DEEP-RESEARCH-STATUS.md).
 
 ## Configuration and replay
 
+### Stage 2 financial-case preparation (offline by default)
+
+```sh
+.venv/bin/python -m scripts.research_nvda_financial_case \
+  reports/RESEARCH_MODEL_20260918/scenario_packet_1 \
+  reports/RESEARCH_STAGE2_20260919/case_1
+```
+
+The output must be new and outside the source packet. The command validates the
+old manifest, extracts exact Q2 FY27 filing-note rows, reconciles classifications,
+and produces a **draft** financial case, evidence-gap register (inside
+`reconciliation.json`), source passages, guidance/forecast comparison,
+three-scenario mechanical audit with 27 sensitivity cells, and a new
+`scenario_packet/`. Historical packets and review records are not modified or
+reused as approval. No provider is called. Equity/funding conclusions stay blocked.
+
+Optional independent customer evidence uses a frozen cache:
+
+```sh
+.venv/bin/python -m scripts.research_nvda_financial_case \
+  reports/RESEARCH_MODEL_20260918/scenario_packet_1 \
+  reports/RESEARCH_STAGE2_20260919/case_with_customer_evidence \
+  --demand-cache reports/RESEARCH_STAGE2_20260918/demand_cache
+```
+
+To acquire the single public Microsoft FY26 Q4 transcript explicitly, use
+`scripts.research_nvda_demand_evidence --fetch --destination-cache NEW_PATH` via
+the same Python module invocation. Fetching is opt-in, bounded and separate from
+offline case construction. The actual retrieval time advances the new case cutoff;
+no source is backdated to the old packet. Treasury/ERP/beta vintages remain explicit
+older observations. The independent source is one commercial participant, not
+broad customer coverage or a mapping from customer capex to NVIDIA revenue.
+
+The parser is intentionally dated/source-specific. Changed row structure, units,
+headers, missing counterevidence or changed source bytes fail closed. This workpaper
+does not close the fiscal-period bridge, economic underwriting, distributable cash,
+point-in-time diluted capitalization, opening-date roll-forward or company-wide
+funding schedule. It is not yet the Stage 3 core-engine reader path.
+
 ### Stage 1 reviewed-input delivery (offline)
 
 The reviewed NVDA scenario compiler now publishes `reviewed_inputs.json`,

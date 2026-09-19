@@ -12,6 +12,81 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+### Stage 2 first development tranche — September 19, 2026
+
+PR #12 review follow-up: the user authorized resolving the review, merging into
+`codex/deep-research-v2`, and removing the merged sub-branch. All three hosted
+findings were addressed: the financial case now preserves the request timezone
+and validates opening dates in that local calendar; eligible event IDs may support
+gaps/assessments without changing conclusion gates; and NVDA commitments retain
+their typed purchase/cloud/lease/other categories. Targeted regressions cover
+positive/negative timezone boundaries, genuinely future dates, ineligible event
+sources and future publication, and all seven commitment groups. These changes
+do not close the outstanding financial/economic work described below or modify
+the earlier generated case draft. Merge execution and CI are recorded on the PR.
+Local verification for this follow-up: **56 targeted tests passed** across the
+financial-case contracts and NVDA adapter, plus changed-file Ruff and whitespace
+checks. No local full suite or live research call was run.
+
+The user merged PR #11. Its merge commit `864a330` was verified on origin and
+fast-forwarded locally into `codex/deep-research-v2`. The fully merged local
+`codex/research-stage-1` branch was deleted with ancestry protection; only its
+branch reference was removed and all commits remain recoverable in feature
+history. Work continues on `codex/research-stage-2`. `main`, the baseline tag,
+historical reports, schedules and live model settings remain unchanged.
+
+Delivered in this tranche:
+
+- Evidence-bound schedule contracts for operating WC, cash/securities, debt/leases,
+  shares, opening dates and commitments; explicit analyst conventions, normalized
+  units, eligible source ancestry, duplicate-fact rejection and gap-to-output maps.
+- Exact dated NVDA filing-note selectors add 93 financial facts to the existing 89,
+  with reconciliation of accrual components, commitment rows/columns, and the lease
+  present-value bridge. Unknown mixed rows are not zero-filled.
+- An offline draft builder emits a new source packet, classification workpaper,
+  source passages, guidance/forecast comparison, terminal derivations, three
+  inherited conditional cases and 27 mechanical audit sensitivity cells. Changed
+  inputs do not inherit the old economic-review clearance.
+- A bounded, opt-in public-source adapter for Microsoft's FY26 Q4 transcript
+  includes demand support, multi-vendor/procurement counterevidence and the capex
+  accounting-basis caveat. One public fetch completed into a new isolated cache;
+  its actual retrieval time advances only the new case cutoff. No paid data or
+  research-model call was used.
+
+Local artifact: `reports/RESEARCH_STAGE2_20260919/case_1/README.md`, with
+`financial_case.json`, `reconciliation.json`, `case_analysis.json`,
+`source_material.json`, `inherited_proxy_audit.json`, `terminal_derivations.json`,
+and the newly hash-bound `scenario_packet/`. It is a **review draft, not a final
+report or financial closure**. There are 182 facts and 42 commitment bucket rows.
+All reconciled valuation/funding conclusions remain blocked; the inherited proxy
+calculations are separate raw audit references, not a replacement for missing
+model support. No old evidence, failed run, usage record or review was rewritten.
+
+Delegation: Luna/medium mapped existing filing evidence; Sol/high implemented
+reusable schedules with focused tests; Terra/medium implemented customer evidence
+and independently reviewed the NVDA adapter. Coordinator implemented extraction,
+case preparation, numeric bridges and integration. Review fixes include duplicate
+commitment facts, money/share unit semantics, Decimal-context isolation, exact
+guidance-period and China-exclusion checks, and a typed/date-bound TTM denominator.
+The actual cached Microsoft transcript exposed an overly narrow sentence boundary;
+the selector and regression were corrected, preserving all counterevidence.
+
+Verification: **90 targeted tests passed** across the three new modules and the
+adjacent terminal-derivation/result-scope boundaries. A subsequent parent-directory
+creation fix passed its one affected preparation regression and the real offline
+draft command. Changed-file Ruff and whitespace checks pass. No local full suite
+was run; required hosted CI remains unchanged.
+
+Next engineering deliverable is Stage 2 financial/economic closure, not Stage 3:
+fiscal guidance-to-model alignment, refreshed company forecasts, an opening-date
+roll-forward, distributable/realizable asset and capitalization schedules, and
+model-bound commitment/guarantee cash coverage, followed by fresh independent
+economic review. Mixed-row disclosure gaps may remain explicitly conditional.
+No user financial sign-off is needed for that implementation. A new live model
+run, product acceptance or a merge remains a separate authorization.
+
+The entries below retain their original checkpoint chronology.
+
 Follow-up: the user explicitly approved merge and Stage 1 implementation. A late
 third hosted finding identified extra newline-delimited release cells; `4149ab5`
 checks the exact next-row boundary without changing historical spans. Twelve new
