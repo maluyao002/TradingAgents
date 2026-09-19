@@ -55,6 +55,22 @@ def test_completed_verified_report_is_needs_review_not_an_activation_or_recommen
     assert admission.recommendation_status == admission.target_status == "withheld"
 
 
+@pytest.mark.parametrize("value", ["true", 1, None])
+def test_operating_review_attestation_requires_a_real_boolean(value):
+    with pytest.raises(TypeError, match="booleans"):
+        _evaluate(operating_scenarios_reviewed=value)
+
+
+def test_operating_scenario_review_is_separate_from_valuation_and_report_completion():
+    result = _evaluate(operating_scenarios_reviewed=True,
+                       scope=_scope(operating="blocked", equity="blocked", funding="blocked"))
+    assert result.operating_scenarios.status == "conditional"
+    assert result.model_conclusions.operating_asset_value.status == "blocked"
+    assert result.acceptance_eligibility.status == "blocked"
+    failed = _evaluate(operating_scenarios_reviewed=True, reader_exported=False)
+    assert failed.operating_scenarios.status == "blocked"
+
+
 @pytest.mark.parametrize("verification", [
     _verification(exported=False),
     _verification(hash_value="0" * 64),

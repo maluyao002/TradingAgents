@@ -28,12 +28,17 @@ from .financial_case import (
     evidence_snapshot_sha256,
     reconcile_financial_case,
 )
+from .operating_scenarios import (
+    OperatingScenarioPackage,
+    OperatingScenarioResult,
+    evaluate_operating_scenarios,
+)
 from .result_scope import ComponentEligibility, ModelResultScope
 from .storage import canonical_json, digest, parse_json
 
 _MODEL_LINKAGE_LIMITATION = (
     "Financial-case schedules are not bound to reviewed forecast assumptions or to the inputs "
-    "of a valuation model; all model-derived numerical outputs remain unavailable pending "
+    "of a valuation model; all valuation-derived numerical outputs remain unavailable pending "
     "reviewed model-bound linkage."
 )
 _DRAFT_LIMITATION = (
@@ -115,6 +120,7 @@ class FinancialCaseEnvelope(Contract):
     case: FinancialCase
     review: FinancialCaseReview | None = None
     source_passages: tuple[CaseSourcePassage, ...] = ()
+    operating_scenarios: OperatingScenarioPackage | None = None
 
 
 @dataclass(frozen=True)
@@ -131,6 +137,7 @@ class CaseContext:
     artifacts: dict[str, bytes]
     scope: ModelResultScope
     reviewed: bool
+    operating_scenarios: OperatingScenarioResult | None = None
 
     def model_context(self) -> dict:
         """Return JSON-native schedules, evidence, review, limitations, and scope."""
@@ -159,6 +166,8 @@ class CaseContext:
             "financial_reconciliation": self.reconciliation.model_dump(mode="json"),
             "output_scope": self.scope.model_dump(mode="json"),
             "limitations": list(self.limitations),
+            **({"operating_scenarios": self.operating_scenarios.model_context}
+               if self.operating_scenarios is not None else {}),
         }
 
 
@@ -453,6 +462,10 @@ def load_case_context(
     scope = _blocked_scope(reconciliation)
     limitations = _limitations(case, review, reconciliation, source_limitations)
     reviewed = review is not None and review.status == "reviewed"
+    operating = (evaluate_operating_scenarios(envelope.operating_scenarios, case, checked_snapshot)
+                 if envelope.operating_scenarios is not None else None)
+    if operating is not None:
+        limitations = tuple(dict.fromkeys((*limitations, *operating.limitations)))
 
     provisional = CaseContext(
         case=case,
@@ -465,6 +478,7 @@ def load_case_context(
         artifacts={},
         scope=scope,
         reviewed=reviewed,
+        operating_scenarios=operating,
     )
     artifacts = {
         "financial_case.json": canonical_json(case),
@@ -473,6 +487,8 @@ def load_case_context(
     }
     if review is not None:
         artifacts["financial_case_review.json"] = canonical_json(review)
+    if operating is not None:
+        artifacts.update(operating.artifacts)
     return CaseContext(
         case=case,
         review=review,
@@ -484,4 +500,5 @@ def load_case_context(
         artifacts=artifacts,
         scope=scope,
         reviewed=reviewed,
+        operating_scenarios=operating,
     )

@@ -46,4 +46,9 @@ CASE_READER_REQUIREMENTS = (
     "and guidance credibility without overstating small samples. Rank the most consequential "
     "gaps without omitting any material caveat. Specify at least two observable falsifiers "
     "and what evidence would change the conclusion; do not invent numerical trigger thresholds."
+    " When reviewed operating scenarios are supplied, use their {{calc:ID}} references for "
+    "scenario numbers and explain the fiscal actual-plus-assumption bridge. These are "
+    "conditional operating calculations, never cash flow, funding adequacy or equity value. "
+    "Forecast source-material IDs name appendix passages only; for response evidence_ids "
+    "and source_ids use their underlying source_id or an eligible frozen financial-fact ID."
 )

@@ -77,6 +77,7 @@ class ReportAdmission(Contract):
     production_activation: Literal[False] = False
     recommendation_status: Literal["withheld"] = "withheld"
     target_status: Literal["withheld"] = "withheld"
+    operating_scenarios: ModelConclusionAdmission | None = None
 
 
 class _VerificationAttestation(Contract):
@@ -198,7 +199,8 @@ def evaluate_admission(*, stop_reason: str, reader_exported: bool, reader_sha256
                        verification: dict, usage: Usage,
                        findings: tuple[ReviewFinding, ...],
                        scope: ModelResultScope | None,
-                       case_reviewed: bool = False) -> ReportAdmission:
+                       case_reviewed: bool = False,
+                       operating_scenarios_reviewed: bool = False) -> ReportAdmission:
     """Evaluate Stage 3 admission from engine-owned, already-frozen evidence.
 
     The ``reader_exported`` argument is an independent engine attestation.  It
@@ -208,8 +210,9 @@ def evaluate_admission(*, stop_reason: str, reader_exported: bool, reader_sha256
     """
     if not isinstance(stop_reason, str) or not stop_reason.strip():
         raise ValueError("stop_reason must be a nonblank string")
-    if type(reader_exported) is not bool or type(case_reviewed) is not bool:
-        raise TypeError("reader_exported and case_reviewed must be booleans")
+    if (type(reader_exported) is not bool or type(case_reviewed) is not bool
+            or type(operating_scenarios_reviewed) is not bool):
+        raise TypeError("reader_exported, case_reviewed and operating_scenarios_reviewed must be booleans")
     if not isinstance(reader_sha256, str):
         raise TypeError("reader_sha256 must be a string")
     if not isinstance(findings, tuple):
@@ -270,4 +273,10 @@ def evaluate_admission(*, stop_reason: str, reader_exported: bool, reader_sha256
         # A completed report stays needs_review even when eligible: this policy
         # never supplies the later release/activation decision.
         assessment_status="needs_review" if completed else "incomplete",
+        operating_scenarios=ModelConclusionAdmission(
+            status="conditional" if completed and operating_scenarios_reviewed else "blocked",
+            reasons=("Reviewed conditional operating scenarios; not cash flows, valuation or targets.",)
+            if completed and operating_scenarios_reviewed else
+            ("Operating scenarios need a source-bound independent review and a completed verified reader.",),
+        ),
     )

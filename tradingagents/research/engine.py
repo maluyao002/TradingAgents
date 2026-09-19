@@ -901,6 +901,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             editor_data = {"analyses": outputs, "limitations": gaps, "valuation": valuation}
             if evidence_led:
                 calculated_values = calculation_catalog(proposal, valuation)
+                if case_context is not None and case_context.operating_scenarios is not None:
+                    calculated_values = (*calculated_values, *case_context.operating_scenarios.calculated_values)
                 editor_data["claim_verification"] = review.model_dump(mode="json")
                 editor_data["valuation_inputs"] = proposal.model_dump(mode="json")
                 editor_data["calculated_values"] = [value.model_dump(mode="json") for value in calculated_values]
@@ -1030,6 +1032,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 usage=aggregate_usage(), findings=tuple(active_admission_findings),
                 scope=case_context.scope if case_context is not None else None,
                 case_reviewed=case_context.reviewed if case_context is not None else False,
+                operating_scenarios_reviewed=bool(case_context is not None
+                    and case_context.operating_scenarios is not None
+                    and case_context.operating_scenarios.reviewed),
             )
             assessment = Assessment(status=admission.assessment_status, findings=tuple(reviews))
             if admission.report_completion != "complete" and stop_reason == "completed_needs_review":
@@ -1108,7 +1113,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             artifacts["model_appendix.md"] = (
                 b"# Financial model appendix\n\n"
                 b"No supported operating valuation, equity target or funding conclusion is exported. "
-                b"Financial schedules are not yet bound to reviewed forecasts. No unconstrained "
+                b"Financial schedules are not yet bound to a complete reviewed cash-flow valuation. No unconstrained "
                 b"valuation-model call was dispatched in this case-backed workflow.\n\n"
                 b"See financial_case.json, financial_reconciliation.json and case_context.json "
                 b"for source-bound schedules, conventions, review status and unresolved prerequisites. "
@@ -1117,6 +1122,15 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 b"Report completion, conditional analytical eligibility and acceptance prerequisites "
                 b"are recorded separately in report_admission.json. Production activation is disabled.\n"
             )
+            if case_context is not None and case_context.operating_scenarios is not None:
+                artifacts["model_appendix.md"] += (
+                    b"\n## Fiscal operating scenarios\n\n"
+                    b"See operating_scenario_package.json and operating_scenario_context.json for "
+                    b"the historical anchors, dated fiscal assumptions, source passages and computed "
+                    b"revenue/gross-profit/operating-income bridge. Only independently reviewed "
+                    b"packages expose calculated references in the reader; draft or stale reviews "
+                    b"withhold these numbers. Operating profit is not cash flow or funding clearance.\n"
+                )
         if recovery is not None:
             recovery_provenance = {
                 **services.models.recovery_context,
