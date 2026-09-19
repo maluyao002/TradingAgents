@@ -23,7 +23,14 @@ from tradingagents.research.engine import _calculate, _prompt_evidence, _validat
 from tradingagents.research.evidence import load_snapshot
 from tradingagents.research.models import CodexModelService, _ClosingSafeAdapter
 from tradingagents.research.stages import AnalysisOutput, ValuationProposal, instruction
-from tradingagents.research.storage import atomic_write, canonical_json, digest, parse_json, read_bytes, request_identity
+from tradingagents.research.storage import (
+    atomic_write,
+    canonical_json,
+    digest,
+    parse_json,
+    read_bytes,
+    request_identity,
+)
 from tradingagents.research.supervisor import run_supervised
 from tradingagents.research.valuation import FCFFModelInput
 from tradingagents.research.wire import WIRE_SCHEMA_VERSION

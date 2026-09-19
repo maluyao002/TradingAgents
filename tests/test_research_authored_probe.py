@@ -15,6 +15,8 @@ from tradingagents.research.scenario_compiler import (
 )
 from tradingagents.research.storage import canonical_json, digest, read_json
 
+pytestmark = pytest.mark.skipif(os.name != "posix", reason="authored probe requires POSIX file guards")
+
 
 def fixture(tmp_path, relative_request=False):
     snapshot = _snapshot()

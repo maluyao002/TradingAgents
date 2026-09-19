@@ -33,7 +33,7 @@ jobs:
       - name: Install locked dependencies
         run: uv sync --locked --extra dev --python "${{ matrix.python-version }}"
       - name: Run offline tests
-        run: uv run --no-sync pytest -q
+        run: uv run --no-sync pytest -q -m "not integration"
       - name: Lint application and test code
         if: matrix.python-version == '3.12'
         run: uv run --no-sync ruff check .
