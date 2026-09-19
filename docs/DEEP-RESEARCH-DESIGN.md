@@ -1,12 +1,14 @@
 # Deep Research V2: system design
 
-Status: agreed design; opt-in offline foundations under implementation. Updated 2026-09-17.
+Status: agreed target design; implementation and acceptance remain partial. Updated 2026-09-18.
 
 This is the canonical design for the next research engine. The companion
 [implementation plan](DEEP-RESEARCH-PLAN.md) defines delivery and acceptance.
 Existing runtime behavior remains described by the current integration and
 weekly-report documentation. This document describes the target, not a completion
 claim; see the [implementation log](DEEP-RESEARCH-PROGRESS.md) for verified scope.
+Start with the [current status and roadmap](DEEP-RESEARCH-STATUS.md) for priorities,
+deliverables and engineering-versus-user responsibilities.
 
 ## 1. Objective and boundaries
 
@@ -167,7 +169,7 @@ updates must be reconciled before synthesis.
 | Financial-model/valuation agent | Justified structured assumptions and interpretation | New dedicated modeling responsibility |
 | Independent challenger | Alternative case, counterevidence, disputed assumptions | Replaces mandatory opinion-based debate rounds in V2 |
 | Claim verifier | Source support and numerical/semantic review findings | Separate verification pass with explicit coverage |
-| Editor/synthesizer | Coherent Chinese report with validated tables and references | New reader-facing synthesis responsibility |
+| Editor/synthesizer | Coherent English report for the current campaign, optional Chinese compatibility, validated tables and references | New reader-facing synthesis responsibility |
 
 Use the existing research-manager/fundamentals model assignments for planning and
 specialist work, news assignment for event classification, and portfolio-manager
@@ -290,9 +292,12 @@ Report order:
 6. Counter-thesis, risks, catalysts, and falsifying evidence.
 7. Material unknowns, methodology, sources, and model appendix.
 
-Use soft targets of 600-1,000 Chinese characters for the opening and 6,000-10,000
-for the full narrative, excluding tables/references. Material analysis takes
-precedence over length. Generate key tables and numerical references from validated
+For the current English campaign, use a concise executive opening and a cohesive
+narrative; do not apply Chinese character counts as English length limits. If
+Chinese output is explicitly requested later, the earlier soft targets are
+600-1,000 Chinese characters for the opening and 6,000-10,000 for the full narrative,
+excluding tables/references. Material analysis takes precedence over length.
+Generate key tables and numerical references from validated
 structured values. Use readable footnotes linked to precise sources; keep machine
 IDs and full mappings in the audit record. The editor cannot invent evidence,
 modify assumptions, remove material caveats, or turn an assumption into a fact.

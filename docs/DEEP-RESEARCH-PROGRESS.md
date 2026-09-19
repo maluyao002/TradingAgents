@@ -1,9 +1,31 @@
 # Deep Research V2 implementation log
 
+Start with the [current status and roadmap](DEEP-RESEARCH-STATUS.md) for the
+reconciled priorities, deliverables, user checkpoints and artifact register. This
+file preserves historical checkpoints: older “next” / “not yet” statements are
+dated history, not active instructions or current blockers.
+
 Branch: `codex/deep-research-v2`, based on `ebc3383` (the current weekly-report
 checkout). Live schedules, provider settings, historical reports, and user tasks
 are unchanged. Local commits are used as reviewable checkpoints; no remote push
 or pull request is implicit.
+
+## Roadmap reconciliation and workspace organization — September 18, 2026
+
+The original M0–M6 plan, follow-up commits, actual artifacts and current code were
+reconciled into `DEEP-RESEARCH-STATUS.md`. It separates engineering deliverables,
+live-run authorization and human/product acceptance, and indexes current versus
+historical outputs. Luna/medium inventoried the workspace; Sol/high independently
+checked the milestone/ownership mapping. Review clarified limited SEC acquisition,
+the missing reviewed-label workflow, Stage 3 report-admission implementation and
+the distinction between development pilots and M6 release pilots.
+
+Stale Chinese-first design/usage instructions were aligned with the already agreed
+English campaign. Original release gates and historical run records are preserved.
+Local Markdown links and whitespace checks passed; no runtime code or configuration
+changed, so the previous test count remains the latest executed suite, not a new run.
+No reports, branches, generated assets or credentials were deleted or relocated;
+no live calls, external operations or schedule/task changes occurred.
 
 ## Reviewed NVDA scenarios — September 18, 2026
 
@@ -555,7 +577,7 @@ Later integration/documentation commits are available in the branch log. All com
 are local; no push, merge, deletion of old branches, or change to other user work
 is included in this implementation task.
 
-## Next decisions and work
+## Historical pilot decisions and work
 
 ### September 17 bilingual NVDA pilot
 

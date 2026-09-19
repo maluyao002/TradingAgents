@@ -1,9 +1,11 @@
-# Deep Research V2: offline preview
+# Deep Research V2: preview operation and diagnostics
 
 This is an opt-in, research-only implementation. It does not change the existing
 weekly runner, trading graph, model settings, schedules, publishing or AMD task.
 No live provider is instantiated without the separate opt-in flag. Reports are
 `Needs review / Unrated`, not accepted investment assessments.
+For today's priorities and the distinction between engineering work and user
+acceptance, see the [current status and roadmap](DEEP-RESEARCH-STATUS.md).
 
 ## Configuration and replay
 
@@ -25,7 +27,7 @@ Minimal request shape:
   "evidence_path": "evidence.json",
   "output_dir": "output",
   "internal_language": "English",
-  "report_language": "Chinese"
+  "report_language": "English"
 }
 ```
 

@@ -2,6 +2,11 @@
 
 Status: implementation advanced; milestone acceptance remains gated. Updated 2026-09-18.
 
+Start with [current status and delivery stages](DEEP-RESEARCH-STATUS.md) for the
+reconciled work queue, artifact index and user decision checkpoints. This document
+retains the original milestone obligations and release gates; the current roadmap
+does not silently waive them.
+
 See [implementation progress](DEEP-RESEARCH-PROGRESS.md) and the
 [offline runner guide](DEEP-RESEARCH-USAGE.md) for what actually works today.
 The milestone exit criteria below remain requirements, not completion claims.
@@ -277,9 +282,10 @@ retain an additional unseen evaluation window for post-release regression checks
 
 ## 4. Language, cost, and provider evaluation
 
-Keep the default English analysis with direct Chinese synthesis until matched
-evidence supports a change. Compare three variants: end-to-end Chinese, English
-analysis with direct Chinese synthesis, and an English complete report followed
+The current campaign uses English analysis and English reports. Preserve existing
+Chinese compatibility, but defer new Chinese generation and language experiments.
+When language evaluation is explicitly resumed, compare three variants: end-to-end
+Chinese, English analysis with direct Chinese synthesis, and an English complete report followed
 by translation. Match cutoff, evidence, models, mandate, and output requirements.
 
 Start with three trials per variant on frozen NVDA evidence; extend to other firms
