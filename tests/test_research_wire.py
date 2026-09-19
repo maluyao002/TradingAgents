@@ -7,6 +7,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from tests.test_research_equity_valuation import _model as equity_model
 from tests.test_research_valuation import _model
+from tradingagents.research.case_report import SECTION_PURPOSES, CaseReportDraft
 from tradingagents.research.investigation_review import InvestigationReview
 from tradingagents.research.stages import (
     AnalysisOutput,
@@ -61,6 +62,7 @@ def test_investigation_wire_is_closed_and_does_not_replace_legacy_verification()
     ("valuation", ValuationProposal),
     ("verifier", VerificationOutput),
     ("editor", ReportDraft),
+    ("editor", CaseReportDraft),
 ])
 def test_known_stage_wire_schemas_are_closed_required_and_default_free(role, domain):
     schema = codec_for(role, domain.model_json_schema()).output_schema
@@ -92,6 +94,46 @@ def test_explicit_closed_schema_validates_but_is_not_an_known_stage_contract():
     validate_strict_schema(schema)
     with pytest.raises(ValueError, match="unknown research response schema"):
         codec_for("planner", schema)
+
+
+def _case_wire_payload():
+    return {
+        "schema_version": 1,
+        "investment_view": "unrated",
+        "limitations": ["Synthetic conditional operating report, not valuation."],
+        "sections": [
+            {"schema_version": 1, "title": purpose, "purpose": purpose,
+             "text": "Synthetic discussion.", "evidence_ids": []}
+            for purpose in SECTION_PURPOSES
+        ],
+    }
+
+
+def test_case_editor_wire_preserves_purposes_and_legacy_contract():
+    codec = codec_for("editor", CaseReportDraft.model_json_schema())
+    payload = _case_wire_payload()
+    assert codec.domain_model is CaseReportDraft
+    assert codec.decode(payload) == payload
+    assert codec_for("editor", ReportDraft.model_json_schema()).domain_model is ReportDraft
+    with pytest.raises(ValueError, match="unknown research response schema"):
+        codec_for("business", CaseReportDraft.model_json_schema())
+
+
+@pytest.mark.parametrize("invalid", ["missing", "duplicate", "unknown", "rated", "extra"])
+def test_case_editor_wire_rejects_invalid_structure(invalid):
+    payload = _case_wire_payload()
+    if invalid == "missing":
+        payload["sections"].pop()
+    elif invalid == "duplicate":
+        payload["sections"][-1]["purpose"] = payload["sections"][0]["purpose"]
+    elif invalid == "unknown":
+        payload["sections"][-1]["purpose"] = "unrecognized"
+    elif invalid == "rated":
+        payload["investment_view"] = "favorable"
+    else:
+        payload["sections"][0]["unrecognized"] = True
+    with pytest.raises(ValidationError):
+        codec_for("editor", CaseReportDraft.model_json_schema()).decode(payload)
 
 
 def _valuation_wire_payload():

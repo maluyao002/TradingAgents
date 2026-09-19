@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from tradingagents.research.case_report import SECTION_PURPOSES, CaseReportDraft
 from tradingagents.research.contracts import ResearchRequest
 from tradingagents.research.models import (
     CodexModelService,
@@ -107,6 +108,27 @@ def test_unknown_schema_fails_before_adapter_construction(tmp_path):
           pytest.raises(ValueError, match="unknown research response schema")):
         service.complete("business", payload, request)
     assert not Adapter.constructed
+
+
+def test_case_editor_reaches_strict_adapter_and_preserves_scoped_structure(tmp_path, monkeypatch):
+    request, payload = setup(tmp_path)
+    payload["stage"] = "editor"
+    payload["response_schema"] = CaseReportDraft.model_json_schema()
+    response = {
+        "schema_version": 1, "investment_view": "unrated", "limitations": [],
+        "sections": [{"schema_version": 1, "purpose": purpose, "title": purpose,
+                      "text": "Synthetic discussion", "evidence_ids": []}
+                     for purpose in SECTION_PURPOSES],
+    }
+    monkeypatch.setattr(Adapter, "text", json.dumps(response))
+    with CodexModelService(tmp_path / "runtime", adapter_factory=Adapter) as service:
+        reply = service.complete("editor", payload, request)
+    assert reply.data == response
+    assert reply.usage.total_tokens == 14
+    assert len(Adapter.constructed[0].calls) == 1
+    schema = Adapter.constructed[0].calls[0][1]["output_schema"]
+    validate_strict_schema(schema)
+    assert "purpose" in schema["$defs"]["WireCaseReportSection"]["required"]
 
 
 def test_model_identity_includes_wire_contract_version(tmp_path):
