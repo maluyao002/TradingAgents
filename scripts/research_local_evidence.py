@@ -137,6 +137,9 @@ def _timestamp(value: Any, label: str, *, nullable: bool = False) -> datetime | 
     try:
         # Python 3.10 does not accept the ISO-8601 UTC designator directly.
         normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+        # Older parsers tolerate a stray separator before an offset (e.g. ZZ).
+        if "Z" in normalized:
+            raise ValueError("UTC designator must appear only once, at the end")
         parsed = datetime.fromisoformat(normalized)
     except ValueError as exc:
         raise ValueError(f"{label} must be an ISO-8601 timestamp") from exc

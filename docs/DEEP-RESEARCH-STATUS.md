@@ -48,7 +48,7 @@ substitute for independent reference review or the user's final product acceptan
 | Latest bounded diagnostic | One call completed in 63.29 seconds with 91,162 measured tokens; exact payload and artifact integrity verified | A populated model: it returned `model=null`; no subsequent full report was generated |
 
 At roadmap reconciliation, full non-live verification was **1,982 passed**. The
-subsequent separate baseline-review branch passes **1,996 tests, 1 skip,
+subsequent separate baseline-review branch passes **2,003 tests, 1 skip,
 1 integration test deselected, 18 existing warnings and 65 subtests**. This is
 evidence of tested behavior, not report-quality certification. The review changes
 and publication status are recorded in the [progress log](DEEP-RESEARCH-PROGRESS.md);

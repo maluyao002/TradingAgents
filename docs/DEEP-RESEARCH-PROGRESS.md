@@ -25,6 +25,10 @@ Hosted CI subsequently exposed a Python 3.10 importer compatibility defect:
 branch normalizes only that suffix to `+00:00` before parsing, preserving offset
 validation and adding explicit UTC/offset/malformed-input regressions. This fix
 does not change the frozen feature branch or historical evidence artifacts.
+The cross-version rerun additionally found that Python 3.10 accepts a duplicated
+UTC designator after normalization; the importer now rejects stray `Z` characters
+explicitly. A weekly timeout regression now allows two seconds for healthy process
+startup (the hanging worker sleeps five), without changing production timeouts.
 
 At the user's request, `codex/deep-research-v2` is preserved at
 `4cbbb0799887c0cd2fb0fd7f634db2ea77dc59cc`, with local annotated tag
@@ -53,8 +57,8 @@ All identified findings were resolved and independently rechecked:
   retain exact source locations. The original valid filing spans are preserved,
   and the existing 89-fact snapshot still validates idempotently, unchanged.
 
-Local review-fix commits: `8ceff80` (CI/portability/lint) and `238046f`
-(publication/provenance). Final validation: **1,996 passed, 1 skipped, 1 deselected,
+Initial review-fix commits: `8ceff80` (CI/portability/lint) and `238046f`
+(publication/provenance). Latest local validation: **2,003 passed, 1 skipped, 1 deselected,
 18 existing warnings, 65 subtests passed** using `pytest -q -m 'not integration'`
 with the configured PDF runtime. Focused source/model tests passed 41 cases;
 repository-wide Ruff and `git diff --check` pass. No research-model calls occurred.
