@@ -14,7 +14,8 @@ The input is an immutable JSON envelope:
 {
   "case": {"...": "FinancialCase fields"},
   "review": null,
-  "source_passages": []
+  "source_passages": [],
+  "operating_scenarios": null
 }
 ```
 
@@ -133,20 +134,82 @@ counter-case and at least two observable falsifiers. Material gaps should be
 prioritized, and unsupported targets/probabilities/certainty must be absent.
 Headings, passing schema tests and a green replay do not establish these outcomes.
 
+## Gap-closing follow-up — reviewed fiscal operating scenarios
+
+The optional `OperatingScenarioPackage` now binds a copied historical revenue/
+GAAP operating-income anchor, explicitly dated fiscal periods, source passages,
+classified assumptions, rationales and falsifiers to the exact case and evidence.
+An independently authored review binds all three hashes. Missing, stale, self-
+authored or unresolved-warning reviews leave inputs audit-only. Review identities
+are recorded provenance, not authenticated credentials.
+
+The deterministic boundary supplies revenue, gross profit, GAAP operating income
+and historical-plus-forecast fiscal totals; it does **not** supply tax, FCFF, DCF,
+enterprise value, equity/per-share value or funding adequacy. Decimal arithmetic
+is independent of ambient precision. Only reviewed values enter the reader's
+calculation catalog. Admission records conditional operating scenarios separately
+from the four still-blocked valuation/financial scopes and production acceptance.
+
+NVDA's immutable `operating_case_2` draft derives a **new** observed-opening case
+at July 26, preserving the September-cutoff roll-forward gaps and source-case
+provenance. It uses FY27 H1 actuals plus Q3/Q4, not TTM plus two more quarters.
+Q3 holds the disclosed GAAP guidance midpoint constant; Q4 inputs are explicit
+analyst sensitivities, not probability-weighted or accepted forecasts. The
+53-week fiscal calendar matters: Q4 has 14 weeks versus Q3's 13, so +5% aggregate
+revenue is −2.5% per week. Q4's 71–72% management margin discussion is not separately
+GAAP-qualified; it informs an explicit assumption rather than a reported GAAP fact.
+Q3 guidance uncertainty is disclosed but not varied in these Q4 sensitivities.
+
+Reusable offline commands:
+
+```sh
+.venv/bin/python -m scripts.research_nvda_operating_case \
+  --case-dir reports/RESEARCH_STAGE3_20260919/case_1 \
+  --preflight-dir reports/RESEARCH_STAGE3_20260919/preflight_1 \
+  --output /new/draft-directory
+.venv/bin/python -m scripts.research_operating_review \
+  --source /new/draft-directory --review /independent/review.json \
+  --output /new/reviewed-directory
+```
+
+The review-attachment command validates the actual case context, retains source
+diagnostics/closure ledger/provenance, replaces the inherited diagnostic mandate
+with the English reader mandate, and emits **replay-only** inputs. It neither
+creates a research report nor authorizes live execution. Drafts 1 and 2 are
+preserved; draft 1's weekly-comparison diagnostics were superseded by draft 2.
+
+Final local handoff: `operating_case_2_independent_review.json` records the
+independent Astra/high economic review; `operating_reviewed_1/` contains the
+attached review, 36 calculated references, source context and replay-only request.
+The real 182-fact reviewed packet passed an end-to-end mechanics replay and
+checkpoint replay in a temporary directory (16 synthetic responses). It produced
+conditional operating admission while acceptance and valuation remained blocked.
+No synthetic report was retained as a research deliverable. The case context is
+198,132 UTF-8 bytes; this is a payload-size measurement, **not** a token estimate.
+
+The inherited 600-second overall replay budget is **not** the live plan. Proposed
+single English development pilot: 1,500,000 total tokens, 5,400 seconds overall,
+600 seconds per call, zero optional follow-ups, at most one reader repair, no
+provider fallback. Before dispatch, obtain explicit authorization and create a
+fresh live request with finalization reserves (1,200 seconds / 300,000 tokens,
+within—not in addition to—the total caps). Do not mutate the reviewed replay
+bundle. No live research calls have been made in this follow-up; subagent usage
+is separate and aggregate subagent token telemetry is unavailable.
+
 ## Remaining deliverables and ownership
 
 Engineering-owned (no user choice of WACC or assumptions needed):
 
-1. Finish Stage 2 fiscal-guidance/forecast alignment, economic underwriting,
-   opening-date roll-forward, capitalization/realization/tax and model-bound
-   commitments/funding coverage; preserve genuinely unavailable disclosures.
-2. Bind reviewed scenarios and material model inputs to those schedules in this
-   core-reader path, with deterministic scoped calculations and numeric references.
-   This is not delivered by the interim narrative-only case path.
-3. Run the completed model-backed offline replay and a final readiness review,
-   including context/budget estimates and substantive editorial evaluation.
-4. After an authorized development-validation pilot, compare its actual English
-   reader against the supplied report. No new report or superiority claim exists yet.
+1. The fiscal operating bridge, independent review attachment, numerical reader
+   integration and real-packet offline readiness checks are complete. Synthetic
+   model responses prove mechanics, not report quality.
+2. A full cash-flow valuation still requires economic underwriting, opening-date
+   roll-forward, capitalization/realization/tax and model-bound commitments/funding
+   coverage. Missing disclosures stay unknown. These block valuation conclusions,
+   not a useful conditional operating report, and are not user financial sign-off.
+3. After an authorized development-validation pilot, compare its actual English
+   reader against the supplied report. No new final report or superiority claim
+   exists yet. Fix substantive reader defects before claiming the Stage 3 exit.
 
 User checkpoints remain separate: authorize a **specific** bounded live plan before
 dispatch, review the completed report for usefulness/readability, and authorize

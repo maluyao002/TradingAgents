@@ -12,6 +12,45 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+### Stage 3 operating-model gap follow-up — September 19, 2026
+
+On PR #13 (`codex/research-stage-3` → `codex/deep-research-v2`), closed the
+first-challenger leakage review finding by running it before the case-blind planner.
+Added deterministic fiscal operating scenarios, exact source/period/assumption
+contracts, independently hash-bound economic review, scoped calculated references,
+reader integration and separate operating admission. Stale/unreviewed packages
+withhold both calculated outputs **and authored numerical caveats from prompts**;
+raw inputs remain in audit artifacts. No FCFF, DCF, equity target or funding
+approval is manufactured from an operating-profit bridge.
+
+NVDA now has `operating_case_2` plus a separately recorded independent review and
+`operating_reviewed_1` handoff. Original case/preflight/draft artifacts remain
+unchanged. Fiscal totals use H1 actual plus Q3/Q4 assumptions, preserve the
+14-week Q4, and distinguish Q3 GAAP guidance from non-GAAP-qualified Q4 discussion.
+The finalizer preserves diagnostics and derivation provenance, uses an English
+reader mandate, and cannot authorize live execution. Full scope and remaining
+cash-flow valuation work are in [the Stage 3 checkpoint](DEEP-RESEARCH-STAGE3.md).
+
+Delegation: Luna/medium source scout, Sol/high arithmetic/contracts and integration
+review, Terra/medium frozen-source adapter and handoff review, Astra/high independent
+economic review. Review fixes include exact long-decimal multiplication, fiscal
+opening-date binding, weekly growth arithmetic, draft prompt leakage, portable
+test fixtures and lossless handoff provenance. The 182-fact reviewed NVDA packet
+passed offline engine/checkpoint replay with 16 synthetic responses; all 36
+calculation references were available and acceptance remained blocked. This is
+not a new research report or evidence of superior writing quality.
+
+Final focused validation: **196 tests passed**, covering scenario/review/adapter
+contracts, case-to-reader integration, admission, numeric rendering, engine,
+bounded finalization, storage/recovery, preflight and reader/wire compatibility.
+Changed-file Ruff and whitespace checks passed; no full local suite was rerun.
+
+No live research call was dispatched. Pending user action: authorize the specific
+bounded English development pilot (1.5m tokens, 90 minutes overall, 600 seconds per
+call, no optional follow-up/provider fallback, at most one reader repair). Then
+engineering owns generation and actual-reader comparison; user usefulness review
+and merge/release remain separate checkpoints. Do not claim Stage 3 complete yet.
+
 ### Stage 3 case-backed reader engineering — September 19, 2026
 
 Following the Stage 2 merge, the user requested Stage 3 development. Work is on

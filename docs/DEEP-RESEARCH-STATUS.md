@@ -200,11 +200,17 @@ exact source passages, an eight-purpose reader schema and deterministic report/
 conclusion admission. Offline regressions and a real NVDA input preflight exercise
 the boundary. See [Stage 3 delivery and remaining work](DEEP-RESEARCH-STAGE3.md).
 
-This is **not the Stage 3 exit**: no new live English report was generated, and
-no case-bound forecast/scenario valuation was admitted. The interim case-backed
-path withholds all numerical valuation outputs rather than generating a new,
-unbound model. Stage 2's financial/economic closure and subsequent forecast
-integration remain engineering work, not a request for user financial sign-off.
+The gap-closing follow-up now integrates independently reviewed fiscal operating
+scenarios, exact H1-plus-Q3/Q4 calculations, immutable review attachment and
+reader numerical references. NVDA's Q3 guidance midpoint and Q4 analyst
+sensitivities retain the 53-week fiscal calendar and explicit accounting limits.
+
+This is **not the Stage 3 exit**: no new live English report or actual-reader
+comparison has been generated in this follow-up. Numerical cash-flow valuation,
+equity targets and funding clearance remain withheld. Those require additional
+financial/economic evidence and model linkage, not user approval of unsupported
+assumptions. A useful conditional operating report can proceed without them once
+the specific bounded live plan is authorized.
 
 Deliverables:
 
