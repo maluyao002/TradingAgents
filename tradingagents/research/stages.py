@@ -2,7 +2,7 @@
 
 from typing import Any, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, StrictBool, field_validator
 
 from .contracts import (
     Contract,
@@ -56,7 +56,7 @@ class VerificationOutput(Contract):
     supported_claim_ids: tuple[str, ...] = ()
     contradicted_claim_ids: tuple[str, ...] = ()
     findings: tuple[ReviewFinding, ...] = ()
-    reviewed_report: bool = False
+    reviewed_report: StrictBool = False
 
 
 class ReportSection(Contract):

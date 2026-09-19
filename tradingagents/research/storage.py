@@ -70,7 +70,7 @@ def read_json(path: Path, *, max_bytes: int = 32 * 1024 * 1024):
 
 def load_request_inputs(request: ResearchRequest) -> dict[str, bytes]:
     """Read each external artifact once; hash and parse these same immutable bytes."""
-    return {name: read_bytes(path) for name in ("evidence_path", "prior_dossier_path")
+    return {name: read_bytes(path) for name in ("evidence_path", "prior_dossier_path", "financial_case_path")
             if (path := getattr(request, name)) is not None}
 
 
@@ -85,6 +85,12 @@ def request_identity(request: ResearchRequest, inputs: dict[str, bytes] | None =
         settings.pop("valuation_method")
     if settings.get("share_count_basis") == "point_in_time_diluted":
         settings.pop("share_count_basis")
+    # Absent opt-ins must not invalidate historical preview/recovery identities.
+    if request.financial_case_path is None:
+        settings.pop("financial_case_path")
+    else:
+        settings["financial_case_path"] = hashlib.sha256(inputs["financial_case_path"]).hexdigest()
+        settings["case_workflow_revision"] = "case-reader-1"
     for name in ("evidence_path", "prior_dossier_path"):
         path = getattr(request, name)
         settings[name] = hashlib.sha256(inputs[name]).hexdigest() if path else None
