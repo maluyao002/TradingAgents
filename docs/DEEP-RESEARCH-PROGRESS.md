@@ -61,6 +61,31 @@ coverage regressions. Documentation is a separate handoff checkpoint.
 
 No new model call, external financial-data acquisition, Stage 2 reconciliation,
 Stage 3 integrated reader, schedule change or production activation is included.
+
+### Stage 1 self-review follow-up — September 18, 2026
+
+PR #11 remains on `codex/research-stage-1`, targeting `codex/deep-research-v2`;
+this follow-up does not merge it. No outstanding hosted review threads were present
+at the start of review. Coordinator self-review and an independent Sol/high review
+identified and fixed four boundaries:
+
+- Scoped memos now read only scoped forecasts and values, without consulting raw
+  blocked results or requiring raw equity fields before withholding them.
+- Payload construction rejects dropped/conflicting embedded reviewed inputs and
+  mismatched request identity, valuation method, evidence hash or source material.
+- Result filtering revalidates copied/constructed eligibility contracts before
+  allowing values through the presentation boundary.
+- Terminal g/ROIC reconciliation rejects nonpositive terminal NOPAT, including
+  loss/zero margins and a 100% tax rate, instead of claiming an undefined or
+  engine-inconsistent reinvestment fraction.
+
+Targeted verification: **141 tests passed** across the six affected derivation,
+result-scope, memo, reviewed-input, authored-probe and model-probe modules. No full
+local suite or live model call was run for these fixes. `AGENTS.md` records the
+user's preference for targeted tests during subsequent development; broad/shared
+changes and release checkpoints may justify broader tests. Required hosted CI
+is unchanged. Historical full-suite evidence above belongs to the earlier commit.
+
 The entries below preserve the prior freeze/publication chronology.
 
 Publication follow-through: the user confirmed keeping the work on the feature
