@@ -32,6 +32,22 @@ except ImportError:
 _POLL = 0.05
 _MAX_MESSAGE = 1024 * 1024
 _MAX_ARTIFACT = 32 * 1024 * 1024
+_INSPECTION_ATTEMPTS = 3
+_INSPECTION_RETRY_DELAY = 0.02
+_CLEANUP_SECONDS = 1.0
+_DIAGNOSTIC_NAME = "supervisor_diagnostic.json"
+
+
+class _TransientInspectionError(RuntimeError):
+    pass
+
+
+class _MalformedProcessTable(ValueError):
+    pass
+
+
+class _InspectionDeadlineExceeded(TimeoutError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -88,26 +104,90 @@ def remaining_wall_seconds(
         return max(0.0, request.budget.wall_seconds - elapsed)
 
 
-def _process_table() -> dict[int, tuple[int, str]]:
+def _parse_process_table(output: str) -> dict[int, tuple[int, str]]:
+    table: dict[int, tuple[int, str]] = {}
+    for line in output.splitlines():
+        parts = line.split(maxsplit=2)
+        if len(parts) != 3:
+            raise _MalformedProcessTable("invalid process table row")
+        try:
+            pid, parent = int(parts[0]), int(parts[1])
+        except ValueError as exc:
+            raise _MalformedProcessTable("invalid process table identity") from exc
+        birth = parts[2].strip()
+        if pid <= 0 or parent < 0 or not birth or pid in table:
+            raise _MalformedProcessTable("invalid process table values")
+        table[pid] = (parent, birth)
+    if not table:
+        raise _MalformedProcessTable("empty process table")
+    return table
+
+
+def _process_table(timeout_seconds: float | None = None) -> dict[int, tuple[int, str]]:
     """Read parentage and start identity; never select processes by name."""
-    if psutil is not None:
+    # In-process psutil calls cannot be interrupted reliably. Deadline-bound
+    # supervision always uses the subprocess path with an enforced timeout;
+    # optional psutil remains available only for unbounded diagnostic callers.
+    if psutil is not None and timeout_seconds is None:
         table = {}
         for process in psutil.process_iter():
             try:
                 table[process.pid] = (process.ppid(), str(process.create_time()))
-            except psutil.NoSuchProcess:
+            except (psutil.NoSuchProcess, psutil.ZombieProcess):
                 continue
+            except psutil.AccessDenied as exc:
+                # Omitting an inaccessible process could hide an owned descendant.
+                raise _TransientInspectionError("process access denied") from exc
+        if not table:
+            raise _MalformedProcessTable("empty process table")
         return table
-    output = subprocess.run(
-        ["/bin/ps", "-axo", "pid=,ppid=,lstart="],
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=0.3,
-        env={**os.environ, "LC_ALL": "C"},
-    ).stdout
-    rows = (line.split(maxsplit=2) for line in output.splitlines())
-    return {int(pid): (int(parent), birth) for pid, parent, birth in rows}
+    timeout = 0.3 if timeout_seconds is None else min(0.3, timeout_seconds)
+    if timeout <= 0:
+        raise _InspectionDeadlineExceeded("inspection deadline exhausted")
+    try:
+        output = subprocess.run(
+            ["/bin/ps", "-axo", "pid=,ppid=,lstart="],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=timeout,
+            env={**os.environ, "LC_ALL": "C"},
+        ).stdout
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise _TransientInspectionError("process inspection failed") from exc
+    return _parse_process_table(output)
+
+
+def _is_transient_inspection_error(exc: Exception) -> bool:
+    if isinstance(exc, _InspectionDeadlineExceeded):
+        return False
+    if isinstance(exc, (_TransientInspectionError, OSError, subprocess.SubprocessError)):
+        return True
+    return psutil is not None and isinstance(exc, psutil.AccessDenied)
+
+
+def _inspect_process_table(deadline: float) -> dict[int, tuple[int, str]]:
+    """Retry only transient inspection errors, never beyond the absolute deadline."""
+    for attempt in range(_INSPECTION_ATTEMPTS):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise _InspectionDeadlineExceeded("inspection deadline exhausted")
+        try:
+            table = _process_table(remaining)
+        except Exception as exc:
+            if not _is_transient_inspection_error(exc):
+                raise
+            if attempt + 1 == _INSPECTION_ATTEMPTS:
+                raise _TransientInspectionError("inspection retries exhausted") from None
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise _InspectionDeadlineExceeded("inspection deadline exhausted") from None
+            time.sleep(min(_INSPECTION_RETRY_DELAY, remaining))
+            continue
+        if time.monotonic() >= deadline:
+            raise _InspectionDeadlineExceeded("inspection deadline exhausted")
+        return table
+    raise AssertionError("unreachable inspection retry state")
 
 
 def _discover(owned: dict[int, str], table: dict[int, tuple[int, str]]) -> None:
@@ -123,9 +203,9 @@ def _discover(owned: dict[int, str], table: dict[int, tuple[int, str]]) -> None:
         live.update(additions)
 
 
-def _signal_owned(owned: dict[int, str], sig: int) -> bool:
+def _signal_owned(owned: dict[int, str], sig: int, *, deadline: float | None = None) -> bool:
     # Refresh immediately before signaling. Never signal a recycled PID or a group.
-    table = _process_table()
+    table = _process_table() if deadline is None else _inspect_process_table(deadline)
     success = True
     for pid, birth in owned.items():
         if table.get(pid, (None, None))[1] != birth or pid == os.getpid():
@@ -140,27 +220,67 @@ def _signal_owned(owned: dict[int, str], sig: int) -> bool:
 
 
 def _cleanup(process, owned: dict[int, str]) -> bool:
+    deadline = time.monotonic() + _CLEANUP_SECONDS
     success = True
     try:
         # Stop spawning before a final discovery, then kill the owned tree.
-        _discover(owned, _process_table())
-        success = _signal_owned(owned, signal.SIGSTOP)
-        _discover(owned, _process_table())
+        _discover(owned, _inspect_process_table(deadline))
+        success = _signal_owned(owned, signal.SIGSTOP, deadline=deadline)
+        _discover(owned, _inspect_process_table(deadline))
     except Exception:
         success = False
     finally:
         try:
-            success = _signal_owned(owned, signal.SIGKILL) and success
+            success = _signal_owned(owned, signal.SIGKILL, deadline=deadline) and success
         except Exception:
             success = False
         # multiprocessing owns this direct child and has not reaped/reused its PID.
         try:
             if process.is_alive():
                 process.kill()
-            process.join(timeout=0.5)
+            process.join(timeout=min(0.5, max(0.0, deadline - time.monotonic())))
         except Exception:
             success = False
     return success and not process.is_alive()
+
+
+def _write_diagnostic(output: Path, outcome: SupervisorResult, primary_code: str) -> None:
+    """Best-effort fixed-code diagnostic; never replace an existing run artifact.
+
+    A post-spawn failure may leave an otherwise empty output directory containing
+    only this audit record, making any later retry an explicit recovery decision.
+    """
+    content = canonical_json(
+        {
+            "schema_version": 1,
+            "status": outcome.status,
+            "code": outcome.code,
+            "primary_code": primary_code,
+        }
+    )
+    temporary: Path | None = None
+    try:
+        output.mkdir(parents=True, exist_ok=True)
+        if output.resolve() != output or not output.is_dir():
+            return
+        descriptor, name = tempfile.mkstemp(prefix=".supervisor-", dir=output)
+        temporary = Path(name)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(temporary, output / _DIAGNOSTIC_NAME)
+        directory_fd = os.open(output, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except (FileExistsError, OSError):
+        pass
+    finally:
+        if temporary is not None:
+            with suppress(OSError):
+                temporary.unlink(missing_ok=True)
 
 
 def _worker_entry(worker, request_json: str, status_path: str) -> None:
@@ -245,8 +365,13 @@ def run_supervised(
         return SupervisorResult("failed", None, "invalid_checkpoint")
     if timeout <= 0:
         return SupervisorResult("timeout", None, "wall_budget_exhausted")
+    deadline = time.monotonic() + timeout
     try:
-        _process_table()  # Fail before spawning if inspection is unavailable.
+        _inspect_process_table(deadline)  # Fail before spawning if inspection is unavailable.
+    except _InspectionDeadlineExceeded:
+        return SupervisorResult("timeout", None, "wall_timeout")
+    except _MalformedProcessTable:
+        return SupervisorResult("failed", None, "process_inspection_invalid")
     except Exception:
         return SupervisorResult("failed", None, "process_inspection_unavailable")
     output = request.output_dir.resolve()
@@ -259,17 +384,31 @@ def run_supervised(
         process = context.Process(
             target=_worker_entry, args=(worker, request.model_dump_json(), str(status_path))
         )
-        deadline = time.monotonic() + timeout
         try:
-            process.start()
+            try:
+                process.start()
+            except Exception:
+                outcome = SupervisorResult("failed", None, "worker_start_failed")
+                raise
             while True:
                 if time.monotonic() >= deadline:
                     outcome = SupervisorResult("timeout", None, "wall_timeout")
                     break
-                table = _process_table()
+                try:
+                    table = _inspect_process_table(deadline)
+                except _InspectionDeadlineExceeded:
+                    outcome = SupervisorResult("timeout", None, "wall_timeout")
+                    break
+                except _MalformedProcessTable:
+                    outcome = SupervisorResult("failed", None, "process_inspection_invalid")
+                    break
+                except Exception:
+                    outcome = SupervisorResult("failed", None, "process_inspection_failed")
+                    break
                 if not owned and process.pid in table:
                     if table[process.pid][0] != os.getpid():
-                        raise ValueError("worker identity mismatch")
+                        outcome = SupervisorResult("failed", None, "worker_identity_mismatch")
+                        break
                     owned[process.pid] = table[process.pid][1]
                 _discover(owned, table)
                 if time.monotonic() >= deadline:
@@ -278,14 +417,19 @@ def run_supervised(
                 ready = status_path.exists() or status_path.is_symlink()
                 if ready or not process.is_alive():
                     if ready or status_path.exists():  # Publication may race worker exit.
-                        outcome = _read_status(status_path, request, output)
+                        try:
+                            outcome = _read_status(status_path, request, output)
+                        except Exception:
+                            outcome = SupervisorResult("failed", None, "status_validation_failed")
                     break
                 time.sleep(min(_POLL, max(0, deadline - time.monotonic())))
         except KeyboardInterrupt:
             outcome = SupervisorResult("interrupted", None, "parent_interrupted")
         except Exception:
-            outcome = SupervisorResult("failed", None, "supervisor_failed")
+            if outcome.code != "worker_start_failed":
+                outcome = SupervisorResult("failed", None, "supervisor_failed")
         finally:
+            primary_code = outcome.code
             if process.pid is not None and not _cleanup(process, owned):
                 outcome = SupervisorResult(
                     outcome.status if outcome.status != "completed" else "failed",
@@ -294,4 +438,14 @@ def run_supervised(
                 )
             with suppress(ValueError):
                 process.close()
+        if outcome.code in {
+            "cleanup_failed",
+            "process_inspection_failed",
+            "process_inspection_invalid",
+            "status_validation_failed",
+            "supervisor_failed",
+            "worker_identity_mismatch",
+            "worker_start_failed",
+        }:
+            _write_diagnostic(output, outcome, primary_code)
     return outcome
