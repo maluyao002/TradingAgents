@@ -203,25 +203,61 @@ def parse_market_inputs(cache: FileSourceCache) -> tuple[tuple[SourceDocument, .
     }
 
 
-def _write_new_file(destination: Path, payload: bytes) -> None:
-    if destination.exists():
-        raise MarketInputParseError(f"destination already exists: {destination}")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{destination.name}.", dir=destination.parent)
-    temporary = Path(temporary_name)
+def _publish_new_files(blobs: dict[Path, bytes]) -> None:
+    """Publish synced files without replacement; roll back only our own links.
+
+    This is not a crash-atomic multi-file transaction. Callers publish the evidence
+    last as the completion marker; a hard interruption may leave a sidecar only.
+    """
+    for destination in blobs:
+        if os.path.lexists(destination):
+            raise MarketInputParseError(f"destination already exists: {destination}")
+    staged: dict[Path, Path] = {}
+    published: list[Path] = []
     try:
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(payload)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, destination)
+        for destination, payload in blobs.items():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            descriptor, temporary_name = tempfile.mkstemp(prefix=f".{destination.name}.", dir=destination.parent)
+            temporary = staged[destination] = Path(temporary_name)
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+        for destination, temporary in staged.items():
+            try:
+                os.link(temporary, destination, follow_symlinks=False)
+            except FileExistsError as exc:
+                raise MarketInputParseError(f"destination already exists: {destination}") from exc
+            published.append(destination)
+        for destination, temporary in staged.items():
+            current, owned = destination.lstat(), temporary.stat()
+            if (current.st_dev, current.st_ino) != (owned.st_dev, owned.st_ino):
+                raise MarketInputParseError("published artifact replaced before completion")
+    except BaseException:
+        for destination in reversed(published):
+            try:
+                current, owned = destination.lstat(), staged[destination].stat()
+                if (current.st_dev, current.st_ino) == (owned.st_dev, owned.st_ino):
+                    destination.unlink()
+            except FileNotFoundError:
+                pass
+        raise
     finally:
-        temporary.unlink(missing_ok=True)
+        for temporary in staged.values():
+            temporary.unlink(missing_ok=True)
+
+
+def _write_new_file(destination: Path, payload: bytes) -> None:
+    _publish_new_files({destination: payload})
 
 
 def merge_evidence(base_snapshot: Path, cache_dir: Path, destination: Path) -> EvidenceSnapshot:
     """Write a new snapshot with market documents, leaving inputs and cache untouched."""
-    base_path, cache_path, destination = Path(base_snapshot).resolve(), Path(cache_dir).resolve(), Path(destination).resolve(strict=False)
+    base_path, cache_path = Path(base_snapshot).resolve(), Path(cache_dir).resolve()
+    supplied = Path(destination).expanduser().absolute()
+    if os.path.lexists(supplied):
+        raise MarketInputParseError(f"destination already exists: {supplied}")
+    destination = supplied.parent.resolve() / supplied.name
     if destination == base_path or destination.is_relative_to(base_path.parent):
         raise MarketInputParseError("destination must be a new path outside the base snapshot directory")
     try:
@@ -237,7 +273,10 @@ def merge_evidence(base_snapshot: Path, cache_dir: Path, destination: Path) -> E
     data["cutoff"] = cutoff.isoformat()
     data["sources"] = [*(source.model_dump(mode="json") for source in base.sources), *(source.model_dump(mode="json") for source in documents)]
     merged = EvidenceSnapshot.model_validate(data)
-    _write_new_file(destination, canonical_json(merged))
     metadata = destination.with_suffix(destination.suffix + ".market-inputs.json")
-    _write_new_file(metadata, canonical_json({"market_inputs": inputs, "snapshot_sha256": hashlib.sha256(canonical_json(merged)).hexdigest()}))
+    raw = canonical_json(merged)
+    _publish_new_files({
+        metadata: canonical_json({"market_inputs": inputs, "snapshot_sha256": hashlib.sha256(raw).hexdigest()}),
+        destination: raw,
+    })
     return merged

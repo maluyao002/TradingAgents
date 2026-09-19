@@ -317,6 +317,15 @@ def test_facts_retain_exact_source_location_and_never_create_quarter_values() ->
     assert not any("q1" in fact.id or "q2" in fact.id for fact in facts)
 
 
+def test_filing_location_preserves_legacy_valid_row_span() -> None:
+    fact = _facts_by_id()["nvda-depreciation_amortization-h1-fy27"]
+    row = "Depreciation and amortization  2,124  1,280 \n"
+    start = FILING_TEXT.index(row)
+    end = start + len(row)
+
+    assert f"chars=[{start},{end})" in fact.location
+
+
 @pytest.mark.parametrize(
     ("target", "replacement", "message"),
     [
@@ -333,6 +342,84 @@ def test_changed_filing_header_or_row_fails_closed(
         extract_forecast_facts(_snapshot(filing_text=changed))
 
 
+@pytest.mark.parametrize(
+    ("filing_text", "release_text"),
+    [
+        (
+            FILING_TEXT.replace(
+                "Depreciation and amortization  ",
+                "Adjusted Depreciation and amortization  ",
+                1,
+            ),
+            RELEASE_TEXT,
+        ),
+        (
+            FILING_TEXT,
+            RELEASE_TEXT.replace(
+                "Depreciation and amortization\n",
+                "Adjusted Depreciation and amortization\n",
+                1,
+            ),
+        ),
+        (
+            FILING_TEXT.replace(
+                "Depreciation and amortization  ",
+                "Adjusted Depreciation and amortization  ",
+                1,
+            ),
+            RELEASE_TEXT.replace(
+                "Depreciation and amortization\n",
+                "Adjusted Depreciation and amortization\n",
+                1,
+            ),
+        ),
+        (
+            FILING_TEXT.replace(
+                "Depreciation and amortization  2,124  1,280 \n",
+                "Depreciation and amortization  2,124  1,280 trailing \n",
+                1,
+            ),
+            RELEASE_TEXT,
+        ),
+        (
+            FILING_TEXT,
+            RELEASE_TEXT.replace(
+                "Depreciation and amortization\n1,127\n668\n2,124\n1,280\n",
+                "Depreciation and amortization\n1,127\n668\n2,124\n1,280 trailing\n",
+                1,
+            ),
+        ),
+        (
+            FILING_TEXT.replace(
+                "Depreciation and amortization  2,124  1,280 \n",
+                "Depreciation and amortization  2,124  1,280 trailing \n",
+                1,
+            ),
+            RELEASE_TEXT.replace(
+                "Depreciation and amortization\n1,127\n668\n2,124\n1,280\n",
+                "Depreciation and amortization\n1,127\n668\n2,124\n1,280 trailing\n",
+                1,
+            ),
+        ),
+    ],
+    ids=(
+        "prefixed-label-filing-only",
+        "prefixed-label-release-only",
+        "prefixed-label-both",
+        "trailing-final-cell-filing-only",
+        "trailing-final-cell-release-only",
+        "trailing-final-cell-both",
+    ),
+)
+def test_metric_rows_require_exact_label_and_final_cell_boundaries(
+    filing_text: str, release_text: str
+) -> None:
+    with pytest.raises(ForecastFactExtractionError, match="required row"):
+        extract_forecast_facts(
+            _snapshot(filing_text=filing_text, release_text=release_text)
+        )
+
+
 def test_release_disagreement_and_existing_operand_conflicts_fail_closed() -> None:
     changed_release = RELEASE_TEXT.replace("2,124\n1,280", "2,125\n1,280", 1)
     with pytest.raises(ForecastFactExtractionError, match="filing and release.*disagree"):
@@ -342,6 +429,24 @@ def test_release_disagreement_and_existing_operand_conflicts_fail_closed() -> No
         extract_forecast_facts(_snapshot(tax_value="23399"))
     with pytest.raises(ForecastFactExtractionError, match="conflicts with the exact frozen row"):
         extract_forecast_facts(_snapshot(capex_value="4434"))
+
+
+def test_existing_generated_fact_with_altered_location_is_rejected() -> None:
+    snapshot = _snapshot()
+    additions = extract_forecast_facts(snapshot)
+    target_id = "nvda-depreciation_amortization-h1-fy27"
+    facts = tuple(
+        fact.model_copy(update={"location": "altered source location"})
+        if fact.id == target_id
+        else fact
+        for fact in (*snapshot.facts, *additions)
+    )
+    altered = EvidenceSnapshot.model_validate(
+        {**snapshot.model_dump(mode="json"), "facts": facts}
+    )
+
+    with pytest.raises(ForecastFactExtractionError, match="identifier conflicts"):
+        extract_forecast_facts(altered)
 
 
 def test_enrichment_preserves_81_facts_and_source_bytes_and_writes_exclusively(
