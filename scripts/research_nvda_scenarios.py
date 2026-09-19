@@ -15,13 +15,15 @@ from zoneinfo import ZoneInfo
 
 from pydantic import TypeAdapter
 
-from cli.research import load_request
+from cli.research import _resolve_paths, load_request
 from scripts.research_assumption_package import build_package
 from scripts.research_market_inputs import parse_market_inputs
 from tradingagents.research.assumptions import AssumptionPackage, AssumptionRange
-from tradingagents.research.contracts import EvidenceSnapshot
+from tradingagents.research.contracts import EvidenceSnapshot, ResearchRequest
+from tradingagents.research.engine import _calculate
 from tradingagents.research.evidence import validate_snapshot
 from tradingagents.research.model_sensitivity import recompute_sensitivity
+from tradingagents.research.result_scope import conservative_scope, scope_calculation
 from tradingagents.research.scenario_compiler import (
     REVIEWED_PACKET_FILES,
     ConditionalScenario,
@@ -29,7 +31,8 @@ from tradingagents.research.scenario_compiler import (
     compile_scenarios,
 )
 from tradingagents.research.sources import FileSourceCache
-from tradingagents.research.storage import canonical_json, digest, read_bytes, read_json
+from tradingagents.research.stages import ValuationProposal
+from tradingagents.research.storage import canonical_json, digest, parse_json, read_bytes, read_json
 from tradingagents.research.valuation import FCFFModelInput, ForecastPeriod, _calendar_anniversary
 
 D = Decimal
@@ -258,19 +261,25 @@ def compile_reviewed(packet: Path, review_path: Path, output: Path):
     manifest = read_json(packet / "manifest.json")
     if set(manifest.get("artifact_hashes", {})) != REVIEWED_PACKET_FILES:
         raise ValueError("prepared packet inventory incomplete")
+    blobs = {}
     for name, expected in manifest["artifact_hashes"].items():
-        if Path(name).name != name or hashlib.sha256(read_bytes(packet / name)).hexdigest() != expected:
+        if Path(name).name != name:
+            raise ValueError("prepared packet artifact path is invalid")
+        blobs[name] = read_bytes(packet / name)
+        if hashlib.sha256(blobs[name]).hexdigest() != expected:
             raise ValueError("prepared packet artifact hash mismatch")
-    request = load_request(packet / "request.json")
-    raw = read_bytes(packet / "evidence.json")
+    if len(blobs["request.json"]) > 1024 * 1024:
+        raise ValueError("request exceeds its 1 MiB size limit")
+    request = ResearchRequest.model_validate(_resolve_paths(parse_json(blobs["request.json"]), packet.resolve()))
+    raw = blobs["evidence.json"]
     snapshot = EvidenceSnapshot.model_validate_json(raw)
-    package = AssumptionPackage.model_validate(read_json(packet / "assumptions.json"))
-    cases = TypeAdapter(tuple[ConditionalScenario, ...]).validate_python(read_json(packet / "scenarios.json"))
+    package = AssumptionPackage.model_validate(parse_json(blobs["assumptions.json"]))
+    cases = TypeAdapter(tuple[ConditionalScenario, ...]).validate_python(parse_json(blobs["scenarios.json"]))
     review = read_json(review_path)
     source_package = package
     package = apply_conditional_review(package, cases, review, manifest)
     compiled = compile_scenarios(package, snapshot, request, raw, cases)
-    economic_audit = read_json(packet / "economic_audit.json")
+    economic_audit = parse_json(blobs["economic_audit.json"])
     sensitivities = {}
     for case in compiled["cases"]:
         model = TypeAdapter(FCFFModelInput).validate_python(case["typed_input"])
@@ -291,52 +300,103 @@ def compile_reviewed(packet: Path, review_path: Path, output: Path):
             share_count_basis=request.share_count_basis,
         ))
     base = next(case for case in compiled["cases"] if case["id"] == "base")
+    from scripts.research_reviewed_inputs import build_reviewed_inputs
+
+    reviewed_inputs = build_reviewed_inputs(snapshot, package, cases,
+        parse_json(blobs["market_inputs.json"]), economic_audit, digest(review))
+    scoped_results = {}
+    for case in compiled["cases"]:
+        calculation = _calculate(ValuationProposal.model_validate(case["proposal"]), request, snapshot)
+        scoped_results[case["id"]] = scope_calculation(calculation, conservative_scope(calculation))
     authored_context = {"ticker": request.ticker, "cutoff": request.cutoff.isoformat(),
                         "evidence_sha256": package.evidence_sha256, "proposal": base["proposal"],
                         "review_sha256": digest(review), "scope": SCOPE,
                         "review": review, "packet_manifest": manifest,
                         "source_assumptions": source_package.model_dump(mode="json"),
-                        "source_scenarios": [case.model_dump(mode="json") for case in cases]}
+                        "source_scenarios": [case.model_dump(mode="json") for case in cases],
+                        "reviewed_inputs": reviewed_inputs.model_dump(mode="json")}
+    # Offline readiness audits the same builder/serialization as the bounded probe.
+    from scripts.research_model_probe import build_payload
+    from tradingagents.research.reviewed_inputs import require_material_coverage
+
+    model_payload, admission = build_payload(request, snapshot, authored_context, reviewed_inputs)
+    coverage = require_material_coverage(canonical_json({key: value for key, value in model_payload.items()
+        if key not in {"system", "response_schema", "timeout_seconds"}}), reviewed_inputs)
     _publish(output.resolve(), {"compiled.json": canonical_json(compiled),
                                "assumptions.json": canonical_json(package),
                                "review.json": canonical_json(review),
                                "sensitivities.json": canonical_json(sensitivities),
                                "authored_context.json": canonical_json(authored_context),
+                               "reviewed_inputs.json": canonical_json(reviewed_inputs),
+                               "material_coverage.json": canonical_json({"mode": "offline_preflight", "dispatched": False,
+                                   "coverage": coverage, "admission_estimate": admission}),
+                               "scoped_results.json": canonical_json(scoped_results),
                                "valuation_memo.md": render_memo(compiled, economic_audit, snapshot,
-                                                                package.limitations).encode()})
+                                                                package.limitations, scoped_results).encode()})
     return compiled
 
 
 def render_memo(compiled: dict, economic_audit: dict, snapshot: EvidenceSnapshot,
-                review_limitations: tuple[str, ...] = ()) -> str:
+                review_limitations: tuple[str, ...] = (), scoped_results: dict | None = None) -> str:
+    def result_for(case):
+        if scoped_results is None:
+            return case["result"]
+        scoped = scoped_results[case["id"]]
+        eligibility = scoped.get("model_result_scope", {}).get("operating_asset_value", {})
+        return scoped.get("result", {}) if eligibility.get("status") == "conditional" else {}
+
     lines = ["# NVDA — conditional valuation development memo", "", SCOPE, "",
              f"Evidence cutoff: {snapshot.cutoff.isoformat()}. Review: automated agent, not human sign-off.", "",
              "## What drives the result", "", "The key disagreement is how quickly exceptional "
              "AI-infrastructure demand and profitability normalize—not whether today's revenue "
              "is large. The three authored paths vary growth, competition-sensitive margins, "
              "working-capital demands and operating-asset discount rates. None has an assigned "
-             "probability. The base case is a reference, not an expected outcome.", "",
-             "## Conditional results", "", "Present values below use the current diluted-share "
-             "proxy. They are not price targets or forecast trading returns. Monetary totals "
-             "are converted from exact model units to USD billions; per-share values are USD.", "",
-             "| Case | Discount rate | Terminal growth | Enterprise PV ($bn) | Equity PV ($bn) | $/current share | Terminal share of EV |",
-             "| --- | ---: | ---: | ---: | ---: | ---: | ---: |"]
-    for case in compiled["cases"]:
-        result, model = case["result"], case["typed_input"]
-        scale = D(model["units"]["amount_scale"]) / D("1e9")
-        lines.append(f"| {case['id']} | {D(model['discount_rate'])*100:.2f}% | {D(model['terminal_growth'])*100:.1f}% | "
-                     f"{D(result['enterprise_value'])*scale:.1f} | {D(result['equity_value'])*scale:.1f} | "
-                     f"{D(result['value_per_current_diluted_share']):.2f} | "
-                     f"{D(result['terminal_value_share_of_enterprise_value'])*100:.1f}% |")
+             "probability. The base case is a reference, not an expected outcome.", ""]
+    if scoped_results is not None:
+        # Preserve the historical audit renderer for old callers, while all newly
+        # compiled packets publish only scoped conclusions in the human memo.
+        lines.extend(["## Conditional operating-asset results", "",
+            "Equity/per-share conclusions are withheld: the equity bridge and opening date remain unresolved. "
+            "Company-wide funding is not assessed; positive FCFF is not a funding conclusion. "
+            "Raw compiled and sensitivity artifacts are mechanical audit data, not eligible targets.", "",
+            "| Case | Conditional enterprise PV ($bn) | Equity/per-share |",
+            "| --- | ---: | --- |"])
+        for case in compiled["cases"]:
+            result = result_for(case)
+            value = result.get("enterprise_value")
+            scale = D(case["typed_input"]["units"]["amount_scale"]) / D("1e9")
+            shown = "withheld" if value is None else f"{D(value)*scale:.1f}"
+            lines.append(f"| {case['id']} | {shown} | withheld |")
+    else:
+        lines.extend(["## Conditional results", "", "Present values below use the current diluted-share "
+            "proxy. They are not price targets or forecast trading returns. Monetary totals "
+            "are converted from exact model units to USD billions; per-share values are USD.", "",
+            "| Case | Discount rate | Terminal growth | Enterprise PV ($bn) | Equity PV ($bn) | $/current share | Terminal share of EV |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: |"])
+        for case in compiled["cases"]:
+            result, model = result_for(case), case["typed_input"]
+            scale = D(model["units"]["amount_scale"]) / D("1e9")
+            lines.append(f"| {case['id']} | {D(model['discount_rate'])*100:.2f}% | {D(model['terminal_growth'])*100:.1f}% | "
+                f"{D(result['enterprise_value'])*scale:.1f} | {D(result['equity_value'])*scale:.1f} | "
+                f"{D(result['value_per_current_diluted_share']):.2f} | "
+                f"{D(result['terminal_value_share_of_enterprise_value'])*100:.1f}% |")
     lines.extend(["", "## Scenario logic and financial bridges", ""])
     for case in compiled["cases"]:
-        lines.extend([f"### {case['id'].title()}", "", case["thesis"], "",
+        lines.extend([f"### {case['id'].title()}", "", case["thesis"], ""])
+        result = result_for(case)
+        if "forecasts" not in result:
+            lines.extend(["Operating calculations withheld.", ""])
+            if scoped_results is not None:
+                scope = scoped_results[case["id"]].get("model_result_scope", {})
+                lines.extend(scope.get("operating_asset_value", {}).get("reasons", ()))
+            continue
+        lines.extend([
                       f"Terminal ROIC assumption: {D(economic_audit[case['id']]['terminal_roic_assumption'])*100:.0f}%. "
                       "Terminal capex is reconciled to g/ROIC reinvestment after D&A and working capital.", "",
                       "| Year | Revenue ($bn) | GAAP margin | NOPAT ($bn) | D&A ($bn) | Capex ($bn) | ΔWC ($bn) | FCFF ($bn) |",
                       "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"])
         scale = D(case["typed_input"]["units"]["amount_scale"]) / D("1e9")
-        for inputs, row in zip(case["typed_input"]["periods"], case["result"]["forecasts"], strict=True):
+        for inputs, row in zip(case["typed_input"]["periods"], result["forecasts"], strict=True):
             values = [D(row[key]) * scale for key in ("revenue", "nopat", "depreciation_amortization", "capex", "change_in_working_capital", "fcff")]
             lines.append(f"| {row['label']} | {values[0]:.1f} | {D(inputs['operating_margin'])*100:.1f}% | "
                          + " | ".join(f"{value:.1f}" for value in values[1:]) + " |")

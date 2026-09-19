@@ -9,6 +9,35 @@ acceptance, see the [current status and roadmap](DEEP-RESEARCH-STATUS.md).
 
 ## Configuration and replay
 
+### Stage 1 reviewed-input delivery (offline)
+
+The reviewed NVDA scenario compiler now publishes `reviewed_inputs.json`,
+`material_coverage.json` and `scoped_results.json` alongside the existing audit
+bundle. It reads the already hash-verified packet bytes, not a second unverified
+copy. The material envelope includes exact market rows with headers/dates/units,
+historical facts and ancestry, complete assumptions/scenarios, and typed terminal
+reinvestment/ROIC derivations. Forecast judgments remain labeled analyst inputs.
+
+The bounded model probe rebuilds this envelope from its separately verified packet,
+including older real packets whose authored context originally carried only hashes.
+It checks the actual serialized model prompt before dispatch and persists coverage
+in `provenance.json`. Omitted/changed material fails without spending a model call.
+The envelope is included in admission estimates and is not silently truncated.
+Legacy contexts whose packet has neither market nor economic material are not
+Stage 1-assured; the full core research reader integration remains Stage 3 work.
+
+For new compiled memos and scoped probe results, conditional operating-asset values
+are separate from equity/per-share eligibility. The latter is withheld pending
+reconciliation; company-wide funding and opening-date alignment are `not_assessed`.
+Raw `compiled.json` and sensitivity numbers are retained for mechanical auditing,
+not for publication as eligible targets. A passing material audit establishes
+delivery/integrity, not a true forecast, full data coverage or human acceptance.
+
+Portable tests reproduce missing rows, hash-only references, changed assumptions
+and dropped terminal derivations. Optional local tests replay the preserved NVDA
+packet into temporary output, without modifying original reports or dispatching
+research calls. No live authorization is granted by offline compilation.
+
 Use the repository virtual environment:
 
 ```sh

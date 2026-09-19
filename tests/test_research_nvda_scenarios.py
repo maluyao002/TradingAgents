@@ -90,3 +90,31 @@ def test_reviewer_and_package_limitations_are_visible_in_memo():
                                                "Automated reviewer restricts this to a diagnostic."))
     assert "Mixed working capital remains unresolved." in memo
     assert "Automated reviewer restricts this to a diagnostic." in memo
+
+
+def test_scoped_memo_does_not_read_raw_blocked_numbers():
+    compiled = _compile()
+    compiled["cases"][0]["result"] = {"forecasts": [{"label": "RAW_BLOCKED_FORECAST"}]}
+    scoped = {"base": {"result": {}, "model_result_scope": {
+        "operating_asset_value": {"status": "blocked", "reasons": ["Material operating inputs missing."]},
+    }}}
+    memo = scenarios.render_memo(compiled, {}, _snapshot(), scoped_results=scoped)
+    assert "withheld" in memo
+    assert "Material operating inputs missing." in memo
+    assert compiled["cases"][0]["thesis"] in memo
+    assert "RAW_BLOCKED_FORECAST" not in memo
+    assert "| Year | Revenue" not in memo
+
+
+def test_scoped_memo_uses_only_scoped_forecasts():
+    compiled = _compile()
+    from copy import deepcopy
+
+    scoped_result = deepcopy(compiled["cases"][0]["result"])
+    compiled["cases"][0]["result"] = {"forecasts": [{"label": "RAW_UNVERIFIED"}]}
+    scoped = {"base": {"result": scoped_result, "model_result_scope": {
+        "operating_asset_value": {"status": "conditional", "reasons": ["Conditional operating case."]},
+    }}}
+    memo = scenarios.render_memo(compiled, {"base": {"terminal_roic_assumption": ".20"}},
+                                 _snapshot(), scoped_results=scoped)
+    assert "| Year | Revenue" in memo and "RAW_UNVERIFIED" not in memo

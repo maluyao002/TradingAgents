@@ -34,6 +34,12 @@ from tradingagents.research.engine import _calculate, _prompt_evidence
 from tradingagents.research.equity_valuation import EquityDCFModelInput
 from tradingagents.research.evidence import validate_snapshot
 from tradingagents.research.models import CodexModelService
+from tradingagents.research.result_scope import conservative_scope, scope_calculation
+from tradingagents.research.reviewed_inputs import (
+    ReviewedModelInputs,
+    require_material_coverage,
+    validate_material,
+)
 from tradingagents.research.scenario_compiler import (
     ConditionalScenario,
     apply_conditional_review,
@@ -126,10 +132,21 @@ def _model_schema(request: ResearchRequest) -> dict[str, Any]:
 
 
 def build_payload(
-    request: ResearchRequest, snapshot: EvidenceSnapshot, authored_context: dict[str, Any] | None = None
+    request: ResearchRequest, snapshot: EvidenceSnapshot, authored_context: dict[str, Any] | None = None,
+    reviewed_inputs: ReviewedModelInputs | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Build the exact one-call payload and a non-guaranteed admission estimate."""
 
+    if authored_context is not None and "reviewed_inputs" in authored_context and reviewed_inputs is None:
+        raise ModelProbeError("embedded reviewed inputs require independently validated inputs")
+    if reviewed_inputs is not None:
+        if (reviewed_inputs.ticker != request.ticker or reviewed_inputs.cutoff != request.cutoff
+                or reviewed_inputs.assumptions.valuation_method != request.valuation_method):
+            raise ModelProbeError("reviewed inputs differ from request identity")
+        validate_material(reviewed_inputs, snapshot)
+        if (authored_context is not None and "reviewed_inputs" in authored_context
+                and digest(authored_context["reviewed_inputs"]) != digest(reviewed_inputs)):
+            raise ModelProbeError("embedded reviewed inputs differ from independently validated inputs")
     base = instruction(ROLE, ValuationProposal)
     base["system"] += " " + "".join(ANALYST_AUTHORING_POLICY)
     queries = targeted_queries(request)
@@ -159,7 +176,10 @@ def build_payload(
         "max_output_tokens": MAX_OUTPUT_TOKENS,
     }
     if authored_context is not None:
-        payload["authored_conditional_model"] = authored_context
+        # The reusable envelope is delivered once, at top level, not duplicated.
+        payload["authored_conditional_model"] = {
+            key: value for key, value in authored_context.items() if key != "reviewed_inputs"
+        }
         payload["authored_model_review_scope"] = (
             "The supplied model is an analyst-authored conditional case, not reported fact or "
             "a previously verified forecast. Independently assess its economic support and "
@@ -170,6 +190,16 @@ def build_payload(
             " The review record is integrity-bound automated-review provenance, not human approval "
             "or proof that a forecast is true."
         )
+    if reviewed_inputs is not None:
+        payload["reviewed_inputs"] = reviewed_inputs.model_dump(mode="json")
+        payload["reviewed_input_policy"] = (
+            "Exact source material and terminal derivations below are mandatory model context. "
+            "ROIC and forecast values are analyst judgments, not reported facts. "
+            "Operating-asset calculations can be conditional while equity/per-share value is "
+            "withheld. Company-wide funding and opening-date alignment are not assessed; "
+            "a false external_funding_required flag is not an assessment of either."
+        )
+        require_material_coverage(payload, reviewed_inputs)
     codec = codec_for(
         ROLE,
         payload["response_schema"],
@@ -340,15 +370,24 @@ class ModelProbeWorker:
                 raise ModelProbeError("frozen evidence must be a JSON object")
             snapshot = validate_snapshot(EvidenceSnapshot.model_validate(payload_value), request)
             authored_context = None
+            reviewed_inputs = None
             if self.authored_context_path is not None:
                 context_before = _read_authored_context(self.authored_context_path)
                 authored_context = parse_json(context_before)
-                _validate_authored_context(authored_context, request, snapshot, evidence_before,
-                                           self.approved_review_sha256, self.reviewed_packet)
+                reviewed_inputs = _validate_authored_context(
+                    authored_context, request, snapshot, evidence_before,
+                    self.approved_review_sha256, self.reviewed_packet)
                 provenance["authored_context_sha256"] = hashlib.sha256(context_before).hexdigest()
                 provenance["approved_review_sha256"] = self.approved_review_sha256
                 provenance["reviewed_packet_manifest_sha256"] = digest(authored_context["packet_manifest"])
-            payload, preflight = build_payload(request, snapshot, authored_context)
+            payload, preflight = build_payload(request, snapshot, authored_context, reviewed_inputs)
+            if reviewed_inputs is not None:
+                # Audit the same serialized prompt representation used by the model adapter.
+                delivered = canonical_json({key: value for key, value in payload.items()
+                    if key not in {"system", "response_schema", "timeout_seconds"}})
+                coverage = require_material_coverage(delivered, reviewed_inputs)
+                provenance["material_coverage"] = coverage.model_dump(mode="json")
+                provenance["material_coverage_mode"] = "pre_dispatch"
             provenance["payload_sha256"] = hashlib.sha256(canonical_json(payload)).hexdigest()
             provenance["financial_model_schema_sha256"] = digest(
                 payload["financial_model_schema"]
@@ -396,6 +435,8 @@ class ModelProbeWorker:
                     else:
                         try:
                             calculation = _calculate(proposal, request, snapshot)
+                            if reviewed_inputs is not None:
+                                calculation = scope_calculation(calculation, conservative_scope(calculation))
                         except (TypeError, ValueError, ValidationError):
                             failure_code = "calculation_validation_failed"
                             probe["status"] = "invalid_output"
@@ -510,7 +551,7 @@ def _validate_authored_context(context, request, snapshot, evidence_bytes,
                                approved_review_sha256, reviewed_packet):
     required = {"ticker", "cutoff", "evidence_sha256", "proposal", "review_sha256", "scope",
                 "review", "packet_manifest", "source_assumptions", "source_scenarios"}
-    if not isinstance(context, dict) or set(context) != required:
+    if not isinstance(context, dict) or set(context) - {"reviewed_inputs"} != required:
         raise ModelProbeError("authored context fields do not match its bounded schema")
     if (context["ticker"] != request.ticker or context["cutoff"] != request.cutoff.isoformat()
             or context["evidence_sha256"] != hashlib.sha256(evidence_bytes).hexdigest()
@@ -546,6 +587,19 @@ def _validate_authored_context(context, request, snapshot, evidence_bytes,
     base = [case for case in compiled["cases"] if case["id"] == "base"]
     if len(base) != 1 or digest(base[0]["proposal"]) != digest(context["proposal"]):
         raise ModelProbeError("authored proposal differs from the exact reviewed conditional case")
+    market = parse_json(packet_blobs["market_inputs.json"])
+    economic = parse_json(packet_blobs["economic_audit.json"])
+    if not isinstance(market, dict) or not isinstance(economic, dict):
+        raise ModelProbeError("market and economic packet artifacts must be objects")
+    if market or economic or "reviewed_inputs" in context:
+        from scripts.research_reviewed_inputs import build_reviewed_inputs
+
+        bundle = build_reviewed_inputs(snapshot, reviewed, cases, market, economic, context["review_sha256"])
+        if "reviewed_inputs" in context and digest(context["reviewed_inputs"]) != digest(bundle):
+            raise ModelProbeError("authored reviewed inputs differ from the verified packet")
+        return bundle
+    # Legacy synthetic/non-material packets remain outside Stage 1 assurance.
+    return None
 
 
 def _fresh_output(value: Path) -> Path:
