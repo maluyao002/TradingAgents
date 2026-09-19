@@ -61,7 +61,38 @@ Independent Sol/high diagnosis concurs. Existing offline verification passes:
 do not reproduce or prove the specific production exception. No core code was
 changed to speculate around it.
 
-## Required engineering before another live attempt
+## Post-failure engineering — implemented, reviewed offline
+
+The subsequent PR #13 patch addresses the engineering items below without claiming
+to reproduce the original exception. Process inspection now retries narrowly
+classified transient failures at most three times within the absolute deadline;
+malformed data and identity mismatches fail closed. Deadline-bound inspection uses
+a timeout-enforced subprocess even when an optional process library is installed.
+Cleanup remains bounded and checks process identities. Sanitized fixed-code
+diagnostics are preserved without overwriting source checkpoints or an existing
+diagnostic.
+
+Separate same-case recovery validates the exact six saved replies against the
+**current engine's actual payloads** and stops offline before reconciliation. It
+binds unchanged reviewed inputs, plan identity, a fresh destination and an explicit
+new incremental budget. Imported stages are not dispatched or charged again;
+historical known counters remain in cumulative reporting and its completeness
+remains false. Strict authorization validation, source preservation, unsafe-file
+handling and continuation accounting have targeted regression coverage.
+
+The real failed NVDA prefix passes offline validation with 558,608 known tokens;
+the plan hash is
+`70fd539f30194be2e063c3dfad48959c49f4e41196b3ca921e4bc7c61a899d37`.
+No provider connection or new research call is needed for this validation.
+An offline capsule was prepared at `recovery_capsule_1/`, with manifest hash
+`7f5b91c1e43830238cbf8a1f031ec2ccd607570cb29c8fe67f6deed854e575f6`.
+It contains exact copies and an unfilled authorization request; original sources
+remain unchanged. Final targeted supervisor/recovery/engine/admission/storage
+verification: **163 passed**; independent supervisor and recovery reviews clear.
+See the [recovery procedure](DEEP-RESEARCH-CASE-RECOVERY.md) for the two separate
+commands and approval boundary. No final reader exists yet.
+
+### Original checklist and remaining authorization
 
 1. Preserve sanitized, fixed failure classifications for polling, worker identity
    and status validation; never emit raw exception text or credentials.
@@ -73,7 +104,8 @@ changed to speculate around it.
    retaining existing cleanup, unsafe-artifact and privacy tests.
 4. Design and test recovery for **the same reviewed case and exact frozen evidence**.
    Ordinary resume correctly blocks new calls with unknown usage; historical-prefix
-   recovery currently rejects case-backed runs. Do not clear `dispatched`, replace
+   recovery intentionally rejects case-backed runs; the new separate same-case
+   path is validated explicitly. Do not clear `dispatched`, replace
    unknown usage with zero, or import the old non-case recovery path unchecked.
 5. Obtain new explicit live authorization and budget treatment for the unknown call
    before a continuation or fresh run. The original one-attempt approval is not an

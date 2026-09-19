@@ -215,8 +215,12 @@ the specific bounded live plan is authorized.
 **Latest pilot outcome:** the user authorized the bounded plan and one attempt ran.
 Six analysis calls completed, but parent supervision failed during reconciliation.
 Known usage is 558,608 tokens plus an unknown interrupted call; no final reader
-exists. No retry was performed. Supervisor hardening and tested case-aware recovery
-are now the next engineering work, followed by separate live-retry authorization.
+exists. No retry was performed. Supervisor hardening and explicit same-case
+checkpoint recovery are now implemented and tested offline. Recovery validates the
+six original payloads with the current engine, preserves unknown historical usage,
+and requires a separately authorized incremental budget and fresh destination.
+The next live step still needs that authorization; code-review approval does not
+grant it. See the [recovery procedure](DEEP-RESEARCH-CASE-RECOVERY.md).
 See [pilot 1 outcome and diagnosis](DEEP-RESEARCH-STAGE3-PILOT1.md).
 
 Deliverables:

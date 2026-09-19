@@ -202,8 +202,11 @@ Latest update: the subsequently authorized live pilot failed in parent supervisi
 after six completed calls; it did not reach a final reader. Known usage is 558,608
 tokens plus an unsettled call. The input and checkpoints remain unchanged, and no
 live retry was attempted. [Pilot 1 diagnosis and recovery boundary](DEEP-RESEARCH-STAGE3-PILOT1.md)
-supersedes the pre-dispatch authorization checkpoint above. Supervisor reliability
-and same-case recovery now precede another specifically authorized live attempt.
+supersedes the pre-dispatch authorization checkpoint above. Supervisor hardening
+and exact same-case prefix recovery are implemented and tested offline. The
+[recovery procedure](DEEP-RESEARCH-CASE-RECOVERY.md) separates offline preparation
+from a new, destination-bound incremental authorization. No continuation has been
+dispatched; the original unknown usage and failed source remain unchanged.
 
 Engineering-owned (no user choice of WACC or assumptions needed):
 

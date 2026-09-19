@@ -12,6 +12,48 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+### Stage 3 supervisor/recovery and second PR review — September 19, 2026
+
+PR #13 remains on `codex/research-stage-3` targeting `codex/deep-research-v2`;
+no merge, main-branch change or live retry. The parent supervisor now preserves
+sanitized diagnostics, retries transient inspection within the absolute deadline,
+and retains fail-closed malformed-table/identity handling and bounded cleanup.
+Deadline-bound inspection cannot enter an uninterruptible optional-library path.
+The original pilot exception remains unproven, not retrospectively diagnosed.
+
+Implemented a separate fixed-prefix same-case recovery path and two commands:
+offline capsule preparation and explicitly authorized supervised continuation.
+The current engine verifies the actual six saved payloads, imports replies without
+new calls, checks exact reviewed input bytes and source preservation, and binds a
+new incremental budget to one destination. Historical known usage remains visible;
+unknown historical usage remains unknown. New unsettled usage blocks resume.
+Legacy non-case recovery and existing production-acceptance blocks are unchanged.
+
+Independent review: Terra/high reviewed Stage 3 changes and supervisor handling;
+Sol/high independently reviewed recovery, root engine integration and the
+continuation CLI. Fixed deadline handling, shallowly mutable capsule provenance,
+FIFO-lock blocking, strict authorization booleans, destination-bound approval and
+source/destination preservation. Final reviewers report no remaining actionable
+P1/P2 findings. The previously hosted blinded-challenger comment remains resolved.
+
+Final targeted verification: **163 tests passed**, covering supervisor lifecycle,
+same-case and legacy recovery, CLI authorization, engine integration, admission
+and storage. Completed replay makes no new calls and does not double-count prior
+usage; an unknown new dispatch prevents any further resumed call. Ruff and
+whitespace checks pass. No full local suite was rerun; hosted CI stays enabled.
+
+The actual failed NVDA prefix passed offline verification and was copied into
+`reports/RESEARCH_STAGE3_20260919/recovery_capsule_1/`. Plan hash:
+`70fd539f30194be2e063c3dfad48959c49f4e41196b3ca921e4bc7c61a899d37`.
+It retains 558,608 known source tokens, incomplete cumulative usage, exact input/
+checkpoint copies and an **unfilled authorization request**, not live permission.
+The original source is unchanged. No final reader was generated.
+
+Next: obtain a new specific incremental live budget with acknowledgement of the
+unknown historical call, then continue from reconciliation and compare the actual
+reader. Product acceptance and merge/release remain separate decisions. See the
+[recovery procedure](DEEP-RESEARCH-CASE-RECOVERY.md).
+
 ### Stage 3 authorized pilot 1 — September 19, 2026
 
 The user authorized the 1.5m-token / 90-minute / 600-second-per-call English NVDA
