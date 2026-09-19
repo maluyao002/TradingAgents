@@ -12,6 +12,22 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+### Stage 3 authorized pilot 1 — September 19, 2026
+
+The user authorized the 1.5m-token / 90-minute / 600-second-per-call English NVDA
+pilot. Six live stages completed on `a36d69c`, then the parent returned
+`supervisor_failed` while reconciliation was unsettled. No final reader or actual
+Claude comparison exists. Known tokens: 505,546 input + 53,062 output = 558,608;
+interrupted-call usage remains unknown. No retry/fallback/checkpoint rewrite.
+
+Independent diagnosis identifies a transient `/bin/ps` polling failure as the
+leading, unproven explanation; the generic exception handling lost the exact cause.
+44 existing supervisor tests and six budget/failure tests pass. No speculative
+code patch was applied. Next: sanitized supervisor diagnostics and bounded transient
+handling, followed by a tested case-aware recovery design and new live authorization.
+See [pilot outcome](DEEP-RESEARCH-STAGE3-PILOT1.md) for evidence, preserved artifacts,
+uncertainty and the distinction between checkpoint elapsed and whole-run usage.
+
 ### Stage 3 operating-model gap follow-up — September 19, 2026
 
 On PR #13 (`codex/research-stage-3` → `codex/deep-research-v2`), closed the

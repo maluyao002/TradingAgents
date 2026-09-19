@@ -212,6 +212,13 @@ financial/economic evidence and model linkage, not user approval of unsupported
 assumptions. A useful conditional operating report can proceed without them once
 the specific bounded live plan is authorized.
 
+**Latest pilot outcome:** the user authorized the bounded plan and one attempt ran.
+Six analysis calls completed, but parent supervision failed during reconciliation.
+Known usage is 558,608 tokens plus an unknown interrupted call; no final reader
+exists. No retry was performed. Supervisor hardening and tested case-aware recovery
+are now the next engineering work, followed by separate live-retry authorization.
+See [pilot 1 outcome and diagnosis](DEEP-RESEARCH-STAGE3-PILOT1.md).
+
 Deliverables:
 
 - Reviewed-case ingestion in the core research path, with invalidation when inputs

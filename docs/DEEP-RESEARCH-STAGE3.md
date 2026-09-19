@@ -198,6 +198,13 @@ is separate and aggregate subagent token telemetry is unavailable.
 
 ## Remaining deliverables and ownership
 
+Latest update: the subsequently authorized live pilot failed in parent supervision
+after six completed calls; it did not reach a final reader. Known usage is 558,608
+tokens plus an unsettled call. The input and checkpoints remain unchanged, and no
+live retry was attempted. [Pilot 1 diagnosis and recovery boundary](DEEP-RESEARCH-STAGE3-PILOT1.md)
+supersedes the pre-dispatch authorization checkpoint above. Supervisor reliability
+and same-case recovery now precede another specifically authorized live attempt.
+
 Engineering-owned (no user choice of WACC or assumptions needed):
 
 1. The fiscal operating bridge, independent review attachment, numerical reader
