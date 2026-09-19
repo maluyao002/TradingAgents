@@ -220,7 +220,12 @@ def _signal_owned(owned: dict[int, str], sig: int, *, deadline: float | None = N
 
 
 def _cleanup(process, owned: dict[int, str]) -> bool:
-    deadline = time.monotonic() + _CLEANUP_SECONDS
+    # Reserve a separate half of the cleanup allowance for KILL/reap. Discovery
+    # after SIGSTOP must not consume the inspection budget needed to kill those
+    # stopped descendants. The two bounded phases still total at most the
+    # cleanup allowance (apart from normal scheduling/syscall overhead).
+    phase_seconds = _CLEANUP_SECONDS / 2
+    deadline = time.monotonic() + phase_seconds
     success = True
     try:
         # Stop spawning before a final discovery, then kill the owned tree.
@@ -230,15 +235,16 @@ def _cleanup(process, owned: dict[int, str]) -> bool:
     except Exception:
         success = False
     finally:
+        kill_deadline = time.monotonic() + phase_seconds
         try:
-            success = _signal_owned(owned, signal.SIGKILL, deadline=deadline) and success
+            success = _signal_owned(owned, signal.SIGKILL, deadline=kill_deadline) and success
         except Exception:
             success = False
         # multiprocessing owns this direct child and has not reaped/reused its PID.
         try:
             if process.is_alive():
                 process.kill()
-            process.join(timeout=min(0.5, max(0.0, deadline - time.monotonic())))
+            process.join(timeout=min(0.5, max(0.0, kill_deadline - time.monotonic())))
         except Exception:
             success = False
     return success and not process.is_alive()

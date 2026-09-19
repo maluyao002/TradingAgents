@@ -560,6 +560,51 @@ def test_cleanup_attempts_kill_after_post_stop_discovery_error(monkeypatch, perm
     assert ((910002, signal.SIGKILL) in signals) is not permanent_denial
 
 
+@pytest.mark.parametrize("recycled_descendant", [False, True])
+def test_cleanup_reserves_fresh_kill_inspection_after_stop_phase_expires(
+    monkeypatch, recycled_descendant
+):
+    table = {910001: (os.getpid(), "root"), 910002: (910001, "child")}
+    now = [0.0]
+    deadlines = []
+    signals = []
+
+    def inspect(deadline):
+        deadlines.append(deadline)
+        if len(deadlines) == 3:
+            # The descendant has already received STOP, then discovery consumes
+            # its entire allowance. Final KILL must still get a fresh inspection.
+            now[0] = deadline
+            raise supervisor._InspectionDeadlineExceeded("discovery expired")
+        assert deadline > now[0]
+        if len(deadlines) == 4 and recycled_descendant:
+            return {**table, 910002: (os.getpid(), "replacement")}
+        return table
+
+    class Child:
+        alive = True
+
+        def is_alive(self):
+            return self.alive
+
+        def kill(self):
+            self.alive = False
+
+        def join(self, timeout):
+            assert 0 <= timeout <= 0.5
+            assert now[0] + timeout <= supervisor._CLEANUP_SECONDS
+
+    monkeypatch.setattr(supervisor.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(supervisor, "_inspect_process_table", inspect)
+    monkeypatch.setattr(supervisor.os, "kill", lambda pid, sig: signals.append((pid, sig)))
+    child = Child()
+    assert not supervisor._cleanup(child, {910001: "root"})
+    assert not child.alive
+    assert len(deadlines) == 4 and deadlines[-1] > deadlines[-2]
+    assert (910002, signal.SIGSTOP) in signals
+    assert ((910002, signal.SIGKILL) in signals) is (not recycled_descendant)
+
+
 def test_cleanup_failure_is_reported_without_secret(tmp_path, monkeypatch):
     original = supervisor._cleanup
 
