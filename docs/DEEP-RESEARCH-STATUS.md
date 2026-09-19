@@ -1,6 +1,6 @@
 # Deep Research V2 — current status and delivery roadmap
 
-Reconciled September 18, 2026; updated for the reviewed baseline merge and Stage 1.
+Reconciled September 18, 2026; updated September 19 for the Stage 1 merge and Stage 2 development.
 This is the current work index and recommended execution order, not new release
 acceptance or authorization for additional live calls. The original M0–M6 gates
 remain in [the implementation plan](DEEP-RESEARCH-PLAN.md).
@@ -112,8 +112,9 @@ Preserve all historical reports, checkpoints and commit identities.
 
 Maps to M1–M4. Engineering-owned; no new user decision is needed to specify it.
 
-Implementation is on `codex/research-stage-1`, based on the approved PR #10 merge
-`90ea63b` into `codex/deep-research-v2`. The new reusable material-input contract,
+Implementation was merged through PR #11 as `864a330` into `codex/deep-research-v2`.
+The fully merged local `codex/research-stage-1` branch was deleted at the user's
+request; its commits and the original baseline tag are preserved. The reusable material-input contract,
 typed terminal derivations, serialized-payload coverage audit and independent
 result-scope contracts are implemented. The existing frozen NVDA packet replays
 offline with both previously omitted input groups delivered. Newly compiled
@@ -144,6 +145,30 @@ supported business analysis; no new live call is required for this stage.
 ### Stage 2 — Close the NVDA financial case
 
 Maps to M1/M3. Depends on Stage 1's contracts; public-source work can proceed in parallel.
+
+**In progress on `codex/research-stage-2`, not economically closed.** The first
+reviewable tranche implements evidence-bound financial schedules, classification
+conventions, commitment timing/overlap rules, gap-to-conclusion mappings and an
+offline case-preparation command. Exact filing-note extraction adds 93 facts to
+the frozen 89-fact packet. A new draft preserves the old packet and its review
+identity rather than carrying old clearance to changed inputs.
+
+The draft separates the original mixed WC proxy from identified operating rows
+and the two unresolved mixed rows; cash/security balances from available excess
+cash; basic cover shares from a weighted-average diluted denominator; and
+contractual commitments from incremental model cash outflows. A bounded optional
+Microsoft customer transcript supplies both demand support and counterevidence,
+with actual retrieval time advancing the new draft's cutoff. The three inherited
+scenario paths and 27 mechanical sensitivity cells are recomputed as audit-only
+references, not newly underwritten forecasts or eligible targets.
+
+Still engineering-owned: fiscal guidance-to-model period alignment, refreshed
+company-specific forecasts, the opening-date roll-forward, realization/tax and
+capitalization schedules, and model-bound commitment/guarantee cash coverage.
+Public disclosures that cannot resolve mixed accounting rows stay as explicit
+gaps. Fresh independent economic review remains required before any refreshed
+case clearance. No live research run, Stage 3 reader integration or user product
+acceptance is implied by this tranche.
 
 Deliverables:
 
@@ -305,6 +330,11 @@ merged `codex/research-baseline-review` branch was deleted locally/remotely; its
 commits remain in feature history. The original baseline tag remains at `4cbbb07`.
 `main` and repository protection rules are unchanged. Stage 1 uses its own branch
 and PR; approval of PR #10 does not automatically merge subsequent stage work.
+
+Subsequently the user merged PR #11 into the feature integration branch as
+`864a330`. Stage 2 starts from that verified merge on `codex/research-stage-2`;
+only the merged local Stage 1 branch was removed. New Stage 2 work requires its
+own PR and is not automatically merged.
 
 Document ownership:
 
