@@ -20,6 +20,12 @@ was opened with base `codex/deep-research-v2` and head
 and resolved. Hosted CI and automatic PR review are checked separately from the
 local validation record; no merge or change to `main` is authorized by this action.
 
+Hosted CI subsequently exposed a Python 3.10 importer compatibility defect:
+`datetime.fromisoformat` on that version rejects a trailing UTC `Z`. The review
+branch normalizes only that suffix to `+00:00` before parsing, preserving offset
+validation and adding explicit UTC/offset/malformed-input regressions. This fix
+does not change the frozen feature branch or historical evidence artifacts.
+
 At the user's request, `codex/deep-research-v2` is preserved at
 `4cbbb0799887c0cd2fb0fd7f634db2ea77dc59cc`, with local annotated tag
 `research-v2-baseline-20260918`. Review fixes are isolated on
