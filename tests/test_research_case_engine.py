@@ -249,6 +249,14 @@ def test_historical_prefix_import_is_not_a_case_recovery_path(tmp_path):
     assert not services.models.calls
 
 
+def test_untrusted_case_recovery_context_cannot_bypass_the_typed_service(tmp_path):
+    request, services = case_setup(tmp_path)
+    services.models.case_recovery_context = {"schema_version": 1}
+    with pytest.raises(ValueError, match="validated case-recovery service"):
+        run_research(request, services)
+    assert not services.models.calls
+
+
 def test_successful_reader_repair_is_not_blocked_by_historical_finding(tmp_path):
     request, services = case_setup(tmp_path, CaseFixture(repair_warning=True))
     result = run_research(request, services)

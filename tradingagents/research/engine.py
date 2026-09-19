@@ -316,8 +316,18 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 return saved_result
         previous = store.load_stage("resources", {}) or {}
         recovery = getattr(services.models, "recovery_context", None)
+        case_recovery = getattr(services.models, "case_recovery_context", None)
         if recovery is not None and request.financial_case_path:
             raise ValueError("historical-prefix recovery cannot import stages into a new financial case")
+        if case_recovery is not None:
+            # This is a separately validated same-case prefix, never permission
+            # to pass a legacy recovery dictionary through the case boundary.
+            from .case_recovery import CaseRecoveryModelService
+
+            if recovery is not None or not isinstance(services.models, CaseRecoveryModelService):
+                raise ValueError("case recovery requires the validated case-recovery service")
+            services.models.validate_request(request, frozen)
+            recovery = case_recovery
         if recovery is not None:
             if not isinstance(recovery, dict) or recovery.get("schema_version") != 1:
                 raise ValueError("invalid explicit recovery context")
@@ -326,7 +336,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 if restore is None:
                     raise ValueError("recovery service cannot restore provenance")
                 restore(previous["recovery"])
-                recovery = services.models.recovery_context
+                recovery = (services.models.case_recovery_context if case_recovery is not None
+                            else services.models.recovery_context)
             previous_usage = Usage.model_validate(
                 previous.get(
                     "budget_usage",
@@ -375,6 +386,18 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
         def aggregate_usage():
             if recovery is None:
                 return tracker.usage
+            if case_recovery is not None:
+                # A new authorized budget covers only continuation calls. Keep
+                # the source's known spend in cumulative reporting, and never
+                # represent its unsettled call as measured or free.
+                historical = Usage.model_validate(recovery["previous_usage"])
+                return Usage(
+                    input_tokens=historical.input_tokens + tracker.usage.input_tokens,
+                    output_tokens=historical.output_tokens + tracker.usage.output_tokens,
+                    cached_input_tokens=historical.cached_input_tokens + tracker.usage.cached_input_tokens,
+                    reasoning_output_tokens=historical.reasoning_output_tokens + tracker.usage.reasoning_output_tokens,
+                    complete=False,
+                )
             # The known historical counters are useful for budget accounting, but
             # the source dispatch was never measured.  It remains incomplete for
             # every cumulative artifact and result produced by recovery.
@@ -390,7 +413,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             if recovery is not None:
                 resource_data.update(
                     budget_usage=tracker.usage.model_dump(mode="json"),
-                    recovery=services.models.recovery_context,
+                    recovery=(services.models.case_recovery_context if case_recovery is not None
+                              else services.models.recovery_context),
                 )
             store.save_stage("resources", {}, resource_data)
 
@@ -1133,7 +1157,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 )
         if recovery is not None:
             recovery_provenance = {
-                **services.models.recovery_context,
+                **(services.models.case_recovery_context if case_recovery is not None
+                   else services.models.recovery_context),
                 "aggregate_usage": aggregate_usage().model_dump(mode="json"),
                 "known_token_lower_bound": aggregate_usage().total_tokens,
                 "usage_total_unknown": True,
@@ -1154,6 +1179,11 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             **({"known_token_lower_bound": aggregate_usage().total_tokens,
                 "usage_total_unknown": True}
                if recovery is not None else {}),
+            **({"budget_scope": "new_continuation_calls_only",
+                "incremental_usage": tracker.usage.model_dump(mode="json"),
+                "elapsed_seconds_scope": "continuation_only",
+                "source_elapsed_seconds_scope": "last_checkpoint_not_total_wall"}
+               if case_recovery is not None else {}),
             "update": describe_update(prior, snapshot)})
         if request.dossier_dir is not None:
             created = datetime.now(timezone.utc)
