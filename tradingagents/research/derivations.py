@@ -59,6 +59,10 @@ def _derived_values(
     da_ratio: Decimal,
     wc_ratio: Decimal,
 ) -> tuple[Decimal, Decimal]:
+    # g/ROIC as a fraction of NOPAT requires positive terminal earnings. The
+    # engine does not recognize a tax benefit on losses; zero NOPAT is undefined.
+    if margin <= 0 or tax_rate >= 1:
+        raise ValueError("terminal derivation requires positive terminal NOPAT")
     try:
         with localcontext(_DECIMAL_CONTEXT):
             reinvestment = growth / roic

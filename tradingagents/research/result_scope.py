@@ -146,6 +146,9 @@ def scope_calculation(calculation: dict, scope: ModelResultScope) -> dict:
     if not isinstance(calculation, dict):
         raise TypeError("calculation must be a dict")
 
+    # Copied/constructed Pydantic objects can bypass nested field validation.
+    # Validate the full contract before treating any status as authorization.
+    scope = ModelResultScope.model_validate_json(scope.model_dump_json(warnings="error"))
     serialized_scope = scope.model_dump(mode="json")
     if "status" in calculation or "result" in calculation:
         output = {

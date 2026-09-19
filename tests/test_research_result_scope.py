@@ -61,6 +61,15 @@ def test_component_eligibility_requires_nonempty_nonblank_reasons_and_known_stat
         ComponentEligibility(status="accepted", reasons=("reason",))
 
 
+@pytest.mark.parametrize("component", ["operating_asset_value", "equity_per_share_value"])
+def test_scope_boundary_revalidates_forged_eligibility(component):
+    forged = scope().model_copy(update={
+        component: ComponentEligibility.model_construct(status="conditional", reasons=()),
+    })
+    with pytest.raises(ValidationError):
+        scope_calculation(calculation(), forged)
+
+
 @pytest.mark.parametrize("status", [0, -1, "approved"])
 def test_component_eligibility_rejects_zero_negative_and_bad_statuses(status):
     with pytest.raises(ValidationError):

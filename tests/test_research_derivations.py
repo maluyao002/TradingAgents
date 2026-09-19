@@ -115,6 +115,30 @@ def test_forged_model_copy_is_revalidated_before_terminal_math() -> None:
         terminal_derivation(forged, audit[cases[1].id])
 
 
+@pytest.mark.parametrize("margin,tax", [(D("0"), D(".25")), (D("-.1"), D(".25")), (D(".1"), D("1"))])
+def test_nonpositive_terminal_nopat_cannot_claim_reinvestment_reconciliation(margin, tax):
+    cases, audit = _cases_and_audit()
+    case = cases[1]
+    final = case.periods[-1]
+    growth = case.terminal_growth
+    capex = (
+        D(".20") + margin * (1 - tax) * growth / D(".20")
+        - final.working_capital_pct_revenue * growth / (1 + growth)
+    )
+    changed = _changed_final(
+        case, operating_margin=margin, tax_rate=tax,
+        depreciation_amortization_pct_revenue=D(".20"), capex_pct_revenue=capex,
+    )
+    changed_audit = {**audit[case.id], "terminal_capex_pct_revenue": capex}
+    with pytest.raises(ValueError, match="positive terminal NOPAT"):
+        terminal_derivation(changed, changed_audit)
+
+    values = _valid_contract_values()
+    values.update(operating_margin=margin, tax_rate=tax)
+    with pytest.raises(ValidationError, match="positive terminal NOPAT"):
+        TerminalReinvestmentDerivation.model_validate(values)
+
+
 def test_every_audit_field_is_required() -> None:
     cases, audit = _cases_and_audit()
     case = cases[1]

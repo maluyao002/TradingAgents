@@ -338,50 +338,65 @@ def compile_reviewed(packet: Path, review_path: Path, output: Path):
 
 def render_memo(compiled: dict, economic_audit: dict, snapshot: EvidenceSnapshot,
                 review_limitations: tuple[str, ...] = (), scoped_results: dict | None = None) -> str:
+    def result_for(case):
+        if scoped_results is None:
+            return case["result"]
+        scoped = scoped_results[case["id"]]
+        eligibility = scoped.get("model_result_scope", {}).get("operating_asset_value", {})
+        return scoped.get("result", {}) if eligibility.get("status") == "conditional" else {}
+
     lines = ["# NVDA — conditional valuation development memo", "", SCOPE, "",
              f"Evidence cutoff: {snapshot.cutoff.isoformat()}. Review: automated agent, not human sign-off.", "",
              "## What drives the result", "", "The key disagreement is how quickly exceptional "
              "AI-infrastructure demand and profitability normalize—not whether today's revenue "
              "is large. The three authored paths vary growth, competition-sensitive margins, "
              "working-capital demands and operating-asset discount rates. None has an assigned "
-             "probability. The base case is a reference, not an expected outcome.", "",
-             "## Conditional results", "", "Present values below use the current diluted-share "
-             "proxy. They are not price targets or forecast trading returns. Monetary totals "
-             "are converted from exact model units to USD billions; per-share values are USD.", "",
-             "| Case | Discount rate | Terminal growth | Enterprise PV ($bn) | Equity PV ($bn) | $/current share | Terminal share of EV |",
-             "| --- | ---: | ---: | ---: | ---: | ---: | ---: |"]
-    for case in compiled["cases"]:
-        result, model = case["result"], case["typed_input"]
-        scale = D(model["units"]["amount_scale"]) / D("1e9")
-        lines.append(f"| {case['id']} | {D(model['discount_rate'])*100:.2f}% | {D(model['terminal_growth'])*100:.1f}% | "
-                     f"{D(result['enterprise_value'])*scale:.1f} | {D(result['equity_value'])*scale:.1f} | "
-                     f"{D(result['value_per_current_diluted_share']):.2f} | "
-                     f"{D(result['terminal_value_share_of_enterprise_value'])*100:.1f}% |")
+             "probability. The base case is a reference, not an expected outcome.", ""]
     if scoped_results is not None:
         # Preserve the historical audit renderer for old callers, while all newly
         # compiled packets publish only scoped conclusions in the human memo.
-        table_start = lines.index("## Conditional results")
-        lines[table_start:] = ["## Conditional operating-asset results", "",
+        lines.extend(["## Conditional operating-asset results", "",
             "Equity/per-share conclusions are withheld: the equity bridge and opening date remain unresolved. "
             "Company-wide funding is not assessed; positive FCFF is not a funding conclusion. "
             "Raw compiled and sensitivity artifacts are mechanical audit data, not eligible targets.", "",
             "| Case | Conditional enterprise PV ($bn) | Equity/per-share |",
-            "| --- | ---: | --- |"]
+            "| --- | ---: | --- |"])
         for case in compiled["cases"]:
-            result = scoped_results[case["id"]].get("result", {})
+            result = result_for(case)
             value = result.get("enterprise_value")
             scale = D(case["typed_input"]["units"]["amount_scale"]) / D("1e9")
             shown = "withheld" if value is None else f"{D(value)*scale:.1f}"
             lines.append(f"| {case['id']} | {shown} | withheld |")
+    else:
+        lines.extend(["## Conditional results", "", "Present values below use the current diluted-share "
+            "proxy. They are not price targets or forecast trading returns. Monetary totals "
+            "are converted from exact model units to USD billions; per-share values are USD.", "",
+            "| Case | Discount rate | Terminal growth | Enterprise PV ($bn) | Equity PV ($bn) | $/current share | Terminal share of EV |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: |"])
+        for case in compiled["cases"]:
+            result, model = result_for(case), case["typed_input"]
+            scale = D(model["units"]["amount_scale"]) / D("1e9")
+            lines.append(f"| {case['id']} | {D(model['discount_rate'])*100:.2f}% | {D(model['terminal_growth'])*100:.1f}% | "
+                f"{D(result['enterprise_value'])*scale:.1f} | {D(result['equity_value'])*scale:.1f} | "
+                f"{D(result['value_per_current_diluted_share']):.2f} | "
+                f"{D(result['terminal_value_share_of_enterprise_value'])*100:.1f}% |")
     lines.extend(["", "## Scenario logic and financial bridges", ""])
     for case in compiled["cases"]:
-        lines.extend([f"### {case['id'].title()}", "", case["thesis"], "",
+        lines.extend([f"### {case['id'].title()}", "", case["thesis"], ""])
+        result = result_for(case)
+        if "forecasts" not in result:
+            lines.extend(["Operating calculations withheld.", ""])
+            if scoped_results is not None:
+                scope = scoped_results[case["id"]].get("model_result_scope", {})
+                lines.extend(scope.get("operating_asset_value", {}).get("reasons", ()))
+            continue
+        lines.extend([
                       f"Terminal ROIC assumption: {D(economic_audit[case['id']]['terminal_roic_assumption'])*100:.0f}%. "
                       "Terminal capex is reconciled to g/ROIC reinvestment after D&A and working capital.", "",
                       "| Year | Revenue ($bn) | GAAP margin | NOPAT ($bn) | D&A ($bn) | Capex ($bn) | ΔWC ($bn) | FCFF ($bn) |",
                       "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"])
         scale = D(case["typed_input"]["units"]["amount_scale"]) / D("1e9")
-        for inputs, row in zip(case["typed_input"]["periods"], case["result"]["forecasts"], strict=True):
+        for inputs, row in zip(case["typed_input"]["periods"], result["forecasts"], strict=True):
             values = [D(row[key]) * scale for key in ("revenue", "nopat", "depreciation_amortization", "capex", "change_in_working_capital", "fcff")]
             lines.append(f"| {row['label']} | {values[0]:.1f} | {D(inputs['operating_margin'])*100:.1f}% | "
                          + " | ".join(f"{value:.1f}" for value in values[1:]) + " |")

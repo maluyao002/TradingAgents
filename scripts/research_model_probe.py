@@ -35,7 +35,11 @@ from tradingagents.research.equity_valuation import EquityDCFModelInput
 from tradingagents.research.evidence import validate_snapshot
 from tradingagents.research.models import CodexModelService
 from tradingagents.research.result_scope import conservative_scope, scope_calculation
-from tradingagents.research.reviewed_inputs import ReviewedModelInputs, require_material_coverage
+from tradingagents.research.reviewed_inputs import (
+    ReviewedModelInputs,
+    require_material_coverage,
+    validate_material,
+)
 from tradingagents.research.scenario_compiler import (
     ConditionalScenario,
     apply_conditional_review,
@@ -133,6 +137,16 @@ def build_payload(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Build the exact one-call payload and a non-guaranteed admission estimate."""
 
+    if authored_context is not None and "reviewed_inputs" in authored_context and reviewed_inputs is None:
+        raise ModelProbeError("embedded reviewed inputs require independently validated inputs")
+    if reviewed_inputs is not None:
+        if (reviewed_inputs.ticker != request.ticker or reviewed_inputs.cutoff != request.cutoff
+                or reviewed_inputs.assumptions.valuation_method != request.valuation_method):
+            raise ModelProbeError("reviewed inputs differ from request identity")
+        validate_material(reviewed_inputs, snapshot)
+        if (authored_context is not None and "reviewed_inputs" in authored_context
+                and digest(authored_context["reviewed_inputs"]) != digest(reviewed_inputs)):
+            raise ModelProbeError("embedded reviewed inputs differ from independently validated inputs")
     base = instruction(ROLE, ValuationProposal)
     base["system"] += " " + "".join(ANALYST_AUTHORING_POLICY)
     queries = targeted_queries(request)

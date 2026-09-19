@@ -84,6 +84,35 @@ def test_actual_serialized_payload_contains_rows_headers_dates_and_derivations()
     assert estimate["estimated_input_components_utf8_bytes"]["canonical_prompt"] == len(prompt)
 
 
+def test_embedded_reviewed_envelope_requires_independently_validated_inputs():
+    request, snapshot, bundle = delivery_fixture()
+    with pytest.raises(ValueError, match="independently validated"):
+        build_payload(request, snapshot, {"reviewed_inputs": bundle.model_dump(mode="json")})
+
+
+@pytest.mark.parametrize("mismatch", ["request", "method", "snapshot", "source"])
+def test_payload_builder_rejects_a_different_request_or_snapshot(mismatch):
+    request, snapshot, bundle = delivery_fixture()
+    if mismatch == "request":
+        request = request.model_copy(update={"ticker": "OTHER"})
+    elif mismatch == "method":
+        request = request.model_copy(update={"valuation_method": "equity_fcfe"})
+    elif mismatch == "snapshot":
+        snapshot = snapshot.model_copy(update={"ticker": "OTHER"})
+    else:
+        snapshot = snapshot.model_copy(update={"sources": snapshot.sources[:1]})
+    with pytest.raises(ValueError, match="identity|source"):
+        build_payload(request, snapshot, reviewed_inputs=bundle)
+
+
+def test_payload_builder_rejects_conflicting_embedded_envelope():
+    request, snapshot, bundle = delivery_fixture()
+    embedded = bundle.model_dump(mode="json")
+    embedded["market_inputs"]["risk_free_rate"] = ".99"
+    with pytest.raises(ValueError, match="differ from independently validated"):
+        build_payload(request, snapshot, {"reviewed_inputs": embedded}, bundle)
+
+
 @pytest.mark.parametrize("section", ["source_material", "market_inputs", "terminal_derivations",
     "economic_derivations", "assumptions", "scenarios", "financial_facts", "review_sha256", "limitations"])
 def test_hash_inventory_cannot_replace_delivered_material(section):
@@ -209,19 +238,40 @@ def test_compiler_preserves_request_size_limit(tmp_path):
     assert not (tmp_path / "output").exists()
 
 
+def _dispatcher_bundle(request, context):
+    """Minimal matching contract for isolated dispatcher tests, not market assurance."""
+    from tradingagents.research.assumptions import AssumptionPackage
+    from tradingagents.research.reviewed_inputs import ExactSourceMaterial, ReviewedModelInputs
+    from tradingagents.research.scenario_compiler import ConditionalScenario
+
+    snapshot = EvidenceSnapshot.model_validate_json(read_bytes(request.evidence_path))
+    source = snapshot.sources[0]
+    return ReviewedModelInputs(ticker=request.ticker, cutoff=request.cutoff,
+        evidence_sha256=context["evidence_sha256"], review_sha256=context["review_sha256"],
+        source_material=(ExactSourceMaterial(id="synthetic-statement", source_id=source.id,
+            source_sha256=source.content_sha256, start=0, end=len(source.content), text=source.content,
+            context="Synthetic dispatcher fixture", unit="USD", observation_date="2024-12-31"),),
+        market_inputs={}, economic_derivations={}, financial_facts=snapshot.facts,
+        assumptions=AssumptionPackage.model_validate(context["source_assumptions"]),
+        scenarios=tuple(ConditionalScenario.model_validate(case) for case in context["source_scenarios"]),
+        terminal_derivations=(), limitations=("Dispatcher fixture, not economic acceptance.",))
+
+
 @pytest.mark.skipif(os.name != "posix", reason="authored probe requires POSIX file guards")
 def test_dispatch_boundary_reaudits_payload_after_builder(tmp_path, monkeypatch):
     from scripts import research_model_probe as probe
     from tests.test_research_authored_probe import fixture, worker
     from tests.test_research_model_probe import _install_service
 
-    request, _, path = fixture(tmp_path)
-    _, _, bundle = delivery_fixture()
+    request, context, path = fixture(tmp_path)
+    bundle = _dispatcher_bundle(request, context)
     original = probe.build_payload
+    altered = []
 
     def omit(*args, **kwargs):
         payload, estimate = original(*args, **kwargs)
         payload.pop("reviewed_inputs")
+        altered.append(True)
         return payload, estimate
 
     # Isolate the final dispatch guard from packet construction, tested separately.
@@ -229,7 +279,7 @@ def test_dispatch_boundary_reaudits_payload_after_builder(tmp_path, monkeypatch)
     monkeypatch.setattr(probe, "build_payload", omit)
     calls = _install_service(monkeypatch)
     result = worker(tmp_path, path)(request)
-    assert not calls and result.usage.total_tokens == 0
+    assert altered and not calls and result.usage.total_tokens == 0
     assert result.stop_reason == "model_probe_failed"
 
 
@@ -240,7 +290,7 @@ def test_scoped_probe_keeps_operating_output_but_withholds_equity(tmp_path, monk
     from tests.test_research_model_probe import _install_service
 
     request, context, path = fixture(tmp_path)
-    _, _, bundle = delivery_fixture()
+    bundle = _dispatcher_bundle(request, context)
     monkeypatch.setattr(probe, "_validate_authored_context", lambda *args: bundle)
     calls = _install_service(monkeypatch, data=context["proposal"])
     result = worker(tmp_path, path)(request)
