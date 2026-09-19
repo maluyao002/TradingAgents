@@ -161,7 +161,7 @@ def test_worker_failure_is_sanitized(tmp_path, capfd, worker):
 def test_parent_rejects_unsafe_artifact_targets(tmp_path, worker):
     result = supervisor.run_supervised(worker, request(tmp_path), timeout_seconds=5)
     assert result.status == "failed" and result.result is None
-    assert result.code == "supervisor_failed"
+    assert result.code == "status_validation_failed"
 
 
 def test_timeout_kills_detached_and_reparented_descendants_preserves_checkpoint(tmp_path):
@@ -188,9 +188,9 @@ def test_parent_interrupt_cleans_its_tree(tmp_path, monkeypatch):
     original = supervisor._process_table
     interrupted = False
 
-    def interrupt_after_tracking():
+    def interrupt_after_tracking(timeout_seconds=None):
         nonlocal interrupted
-        table = original()
+        table = original(timeout_seconds)
         if (request(tmp_path).output_dir / "grandchild.json").exists() and not interrupted:
             interrupted = True
             raise KeyboardInterrupt
@@ -218,13 +218,171 @@ def test_invalid_timeout_cannot_exceed_request_budget(tmp_path, timeout):
 
 
 def test_inspection_unavailable_fails_before_spawning(tmp_path, monkeypatch):
-    def denied():
+    calls = 0
+
+    def denied(timeout_seconds=None):
+        nonlocal calls
+        calls += 1
         raise PermissionError(SECRET)
 
     monkeypatch.setattr(supervisor, "_process_table", denied)
     result = supervisor.run_supervised(success_worker, request(tmp_path))
     assert result.code == "process_inspection_unavailable"
+    assert calls == supervisor._INSPECTION_ATTEMPTS
     assert not request(tmp_path).output_dir.exists()
+
+
+def test_transient_post_spawn_inspection_recovers(tmp_path, monkeypatch):
+    original = supervisor._process_table
+    calls = 0
+
+    def inspect(timeout_seconds=None):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise PermissionError(SECRET)
+        return original(timeout_seconds)
+
+    monkeypatch.setattr(supervisor, "_process_table", inspect)
+    result = supervisor.run_supervised(success_worker, request(tmp_path), 5)
+    assert result.status == result.code == "completed"
+    assert calls >= 3
+    assert not (request(tmp_path).output_dir / supervisor._DIAGNOSTIC_NAME).exists()
+
+
+def test_psutil_access_denial_fails_the_whole_snapshot(monkeypatch):
+    class AccessDenied(Exception):
+        pass
+
+    class NoSuchProcess(Exception):
+        pass
+
+    class ZombieProcess(NoSuchProcess):
+        pass
+
+    class DeniedProcess:
+        pid = 910001
+
+        def ppid(self):
+            raise AccessDenied(SECRET)
+
+        def create_time(self):
+            pytest.fail("denied process row should not be retained")
+
+    class FakePsutil:
+        @staticmethod
+        def process_iter():
+            return [DeniedProcess()]
+
+    FakePsutil.AccessDenied = AccessDenied
+    FakePsutil.NoSuchProcess = NoSuchProcess
+    FakePsutil.ZombieProcess = ZombieProcess
+    monkeypatch.setattr(supervisor, "psutil", FakePsutil)
+    with pytest.raises(supervisor._TransientInspectionError) as error:
+        supervisor._process_table()
+    assert SECRET not in str(error.value)
+
+
+def test_deadline_bound_inspection_never_calls_uninterruptible_psutil(monkeypatch):
+    class StalledPsutil:
+        @staticmethod
+        def process_iter():
+            pytest.fail("deadline-bound inspection entered in-process psutil")
+
+    observed = []
+
+    def bounded_run(*args, **kwargs):
+        observed.append(kwargs["timeout"])
+        return subprocess.CompletedProcess(args[0], 0, stdout="123 1 Sat Sep 19 08:00:00 2026\n")
+
+    monkeypatch.setattr(supervisor, "psutil", StalledPsutil)
+    monkeypatch.setattr(supervisor.subprocess, "run", bounded_run)
+    assert supervisor._process_table(0.04) == {123: (1, "Sat Sep 19 08:00:00 2026")}
+    assert observed == [0.04]
+
+
+def test_persistent_post_spawn_inspection_failure_cleans_and_records_fixed_codes(
+    tmp_path, monkeypatch
+):
+    original = supervisor._process_table
+    calls = 0
+    research_request = request(tmp_path)
+    checkpoint(research_request, 1)
+    checkpoint_path = research_request.output_dir / "stages/resources.json"
+    original_checkpoint = checkpoint_path.read_bytes()
+
+    def inspect(timeout_seconds=None):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return original(timeout_seconds)
+        raise PermissionError(SECRET)
+
+    monkeypatch.setattr(supervisor, "_process_table", inspect)
+    result = supervisor.run_supervised(success_worker, research_request, 5)
+    assert result.status == "failed" and result.code == "cleanup_failed"
+    assert calls >= 1 + 2 * supervisor._INSPECTION_ATTEMPTS
+    diagnostic = json.loads(
+        (request(tmp_path).output_dir / supervisor._DIAGNOSTIC_NAME).read_bytes()
+    )
+    assert diagnostic == {
+        "schema_version": 1,
+        "status": "failed",
+        "code": "cleanup_failed",
+        "primary_code": "process_inspection_failed",
+    }
+    assert SECRET not in json.dumps(diagnostic) + repr(result)
+    assert checkpoint_path.read_bytes() == original_checkpoint
+
+
+def test_inspection_does_not_start_or_retry_past_deadline(monkeypatch):
+    calls = 0
+
+    def inspect(timeout_seconds=None):
+        nonlocal calls
+        calls += 1
+        raise AssertionError("inspection ran past deadline")
+
+    monkeypatch.setattr(supervisor, "_process_table", inspect)
+    with pytest.raises(supervisor._InspectionDeadlineExceeded):
+        supervisor._inspect_process_table(time.monotonic() - 0.001)
+    assert calls == 0
+
+
+def test_malformed_post_spawn_process_table_fails_closed_without_retry(tmp_path, monkeypatch):
+    original = supervisor._process_table
+    calls = 0
+
+    def inspect(timeout_seconds=None):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            return supervisor._parse_process_table(f"not-a-pid 1 {SECRET}")
+        return original(timeout_seconds)
+
+    monkeypatch.setattr(supervisor, "_process_table", inspect)
+    result = supervisor.run_supervised(success_worker, request(tmp_path), 5)
+    assert result.status == "failed" and result.code == "process_inspection_invalid"
+    diagnostic = json.loads(
+        (request(tmp_path).output_dir / supervisor._DIAGNOSTIC_NAME).read_bytes()
+    )
+    assert diagnostic == {
+        "schema_version": 1,
+        "status": "failed",
+        "code": "process_inspection_invalid",
+        "primary_code": "process_inspection_invalid",
+    }
+    assert SECRET not in json.dumps(diagnostic) + repr(result)
+
+
+def test_diagnostic_never_overwrites_existing_owned_name(tmp_path):
+    output = request(tmp_path).output_dir.resolve()
+    output.mkdir(parents=True)
+    diagnostic = output / supervisor._DIAGNOSTIC_NAME
+    diagnostic.write_bytes(b"original-audit-record")
+    outcome = supervisor.SupervisorResult("failed", None, "process_inspection_failed")
+    supervisor._write_diagnostic(output, outcome, outcome.code)
+    assert diagnostic.read_bytes() == b"original-audit-record"
 
 
 def test_missing_explicit_timeout_uses_request_wall_budget(tmp_path):
@@ -373,7 +531,7 @@ def test_cleanup_attempts_kill_after_post_stop_discovery_error(monkeypatch, perm
     calls = 0
     signals = []
 
-    def inspect():
+    def inspect(timeout_seconds=None):
         nonlocal calls
         calls += 1
         if calls == 3 or (permanent_denial and calls >= 3):
@@ -395,11 +553,56 @@ def test_cleanup_attempts_kill_after_post_stop_discovery_error(monkeypatch, perm
     monkeypatch.setattr(supervisor, "_process_table", inspect)
     monkeypatch.setattr(supervisor.os, "kill", lambda pid, sig: signals.append((pid, sig)))
     child = Child()
-    assert not supervisor._cleanup(child, {910001: "root"})
+    assert supervisor._cleanup(child, {910001: "root"}) is (not permanent_denial)
     assert not child.alive
-    assert calls == 4  # KILL identity inspection still attempted after failed discovery.
+    assert calls >= 5  # Transient discovery and KILL identity inspection are both retried.
     assert (910002, signal.SIGSTOP) in signals
     assert ((910002, signal.SIGKILL) in signals) is not permanent_denial
+
+
+@pytest.mark.parametrize("recycled_descendant", [False, True])
+def test_cleanup_reserves_fresh_kill_inspection_after_stop_phase_expires(
+    monkeypatch, recycled_descendant
+):
+    table = {910001: (os.getpid(), "root"), 910002: (910001, "child")}
+    now = [0.0]
+    deadlines = []
+    signals = []
+
+    def inspect(deadline):
+        deadlines.append(deadline)
+        if len(deadlines) == 3:
+            # The descendant has already received STOP, then discovery consumes
+            # its entire allowance. Final KILL must still get a fresh inspection.
+            now[0] = deadline
+            raise supervisor._InspectionDeadlineExceeded("discovery expired")
+        assert deadline > now[0]
+        if len(deadlines) == 4 and recycled_descendant:
+            return {**table, 910002: (os.getpid(), "replacement")}
+        return table
+
+    class Child:
+        alive = True
+
+        def is_alive(self):
+            return self.alive
+
+        def kill(self):
+            self.alive = False
+
+        def join(self, timeout):
+            assert 0 <= timeout <= 0.5
+            assert now[0] + timeout <= supervisor._CLEANUP_SECONDS
+
+    monkeypatch.setattr(supervisor.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(supervisor, "_inspect_process_table", inspect)
+    monkeypatch.setattr(supervisor.os, "kill", lambda pid, sig: signals.append((pid, sig)))
+    child = Child()
+    assert not supervisor._cleanup(child, {910001: "root"})
+    assert not child.alive
+    assert len(deadlines) == 4 and deadlines[-1] > deadlines[-2]
+    assert (910002, signal.SIGSTOP) in signals
+    assert ((910002, signal.SIGKILL) in signals) is (not recycled_descendant)
 
 
 def test_cleanup_failure_is_reported_without_secret(tmp_path, monkeypatch):

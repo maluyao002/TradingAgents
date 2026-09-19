@@ -1,6 +1,6 @@
 # Deep Research V2 — current status and delivery roadmap
 
-Reconciled September 18, 2026; updated September 19 for the Stage 1 merge and Stage 2 development.
+Reconciled September 18, 2026; updated September 19 for the Stage 2 merge and Stage 3 engineering.
 This is the current work index and recommended execution order, not new release
 acceptance or authorization for additional live calls. The original M0–M6 gates
 remain in [the implementation plan](DEEP-RESEARCH-PLAN.md).
@@ -62,7 +62,7 @@ no research-model calls were used for that code review.
 | M1: Evidence/financial history/expectations | Acquisition and normalization mechanics; narrow real NVDA/HOOD packets | Eight-quarter/five-year coverage, guidance history, eligible estimates, independent ecosystem evidence and measured material-event coverage |
 | M2: Research/adaptive investigation | Roles, local follow-up, challenge, usage and recovery implemented; older recovery demonstrated live | Reliable material-input delivery, gap classification, external follow-up, selective dependent reruns and cross-company assumption checks |
 | M3: Financial models/valuation | Tested FCFF, broker-equity DCF and other calculation utilities; real conditional NVDA scenarios | Company-specific economic schedules, complete capital/funding/shares, source-backed horizon bridges and broad template validation |
-| M4: Review/reader production | Older live previews; improved reader/audit and exact-artifact gates tested offline | Stronger English pair, semantic-quality evaluation, integrated scenarios and graded conclusion eligibility; preview-only acceptance is still hardcoded |
+| M4: Review/reader production | Older live previews; improved reader/audit, exact-artifact gates, and opt-in case-backed reader/admission policy tested offline | Stronger English pair, semantic-quality evaluation and integrated reviewed forecasts; legacy runs remain preview-only and production activation remains disabled |
 | M5: Dossiers/updates/evaluation | Immutable history, promotion safeguards, prior eligibility and forecast-vintage utilities | Dependency-aware reuse, full change attribution, accepted end-to-end updates and forecast scoring on real comparable actuals |
 | M6: Benchmark/release | Rubrics, scoring contracts, defect fixtures and registered comparator identities | Matched legacy/V2/single-agent runs, human-reviewed labels, blind review, broader windows, repeat pilots and release decision |
 
@@ -192,6 +192,36 @@ remains explicitly limited and the acceptance gap remains open.
 ### Stage 3 — Deliver one integrated English NVDA report
 
 Maps to M2–M4. Depends on Stages 1–2; reader/recovery testing can start earlier.
+
+**Engineering checkpoint in progress:** the user requested Stage 3 development
+after the Stage 2 first-tranche merge. A separate `codex/research-stage-3` branch
+now integrates draft/reviewed financial cases, immutable case/evidence identities,
+exact source passages, an eight-purpose reader schema and deterministic report/
+conclusion admission. Offline regressions and a real NVDA input preflight exercise
+the boundary. See [Stage 3 delivery and remaining work](DEEP-RESEARCH-STAGE3.md).
+
+The gap-closing follow-up now integrates independently reviewed fiscal operating
+scenarios, exact H1-plus-Q3/Q4 calculations, immutable review attachment and
+reader numerical references. NVDA's Q3 guidance midpoint and Q4 analyst
+sensitivities retain the 53-week fiscal calendar and explicit accounting limits.
+
+This is **not the Stage 3 exit**: no new live English report or actual-reader
+comparison has been generated in this follow-up. Numerical cash-flow valuation,
+equity targets and funding clearance remain withheld. Those require additional
+financial/economic evidence and model linkage, not user approval of unsupported
+assumptions. A useful conditional operating report can proceed without them once
+the specific bounded live plan is authorized.
+
+**Latest pilot outcome:** the user authorized the bounded plan and one attempt ran.
+Six analysis calls completed, but parent supervision failed during reconciliation.
+Known usage is 558,608 tokens plus an unknown interrupted call; no final reader
+exists. No retry was performed. Supervisor hardening and explicit same-case
+checkpoint recovery are now implemented and tested offline. Recovery validates the
+six original payloads with the current engine, preserves unknown historical usage,
+and requires a separately authorized incremental budget and fresh destination.
+The next live step still needs that authorization; code-review approval does not
+grant it. See the [recovery procedure](DEEP-RESEARCH-CASE-RECOVERY.md).
+See [pilot 1 outcome and diagnosis](DEEP-RESEARCH-STAGE3-PILOT1.md).
 
 Deliverables:
 

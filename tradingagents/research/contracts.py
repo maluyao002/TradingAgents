@@ -105,6 +105,7 @@ class ResearchRequest(Contract):
     models: dict[str, ModelSetting] = Field(default_factory=default_roles)
     budget: Budget = Field(default_factory=Budget)
     evidence_path: Path | None = None
+    financial_case_path: Path | None = None
     prior_dossier_path: Path | None = None
     dossier_dir: Path | None = None
     instrument: InstrumentIdentity | None = None
@@ -120,6 +121,10 @@ class ResearchRequest(Contract):
 
     @model_validator(mode="after")
     def required_roles(self):
+        if self.financial_case_path is not None and (
+            self.quality_revision != "evidence-led-bounded" or self.valuation_method != "fcff"
+        ):
+            raise ValueError("financial-case ingestion requires the bounded evidence-led FCFF workflow")
         if self.valuation_method != "fcff" and self.quality_revision == "foundation":
             raise ValueError("equity FCFE requires the evidence-led workflow")
         if self.share_count_basis != "point_in_time_diluted" and self.quality_revision == "foundation":

@@ -16,8 +16,8 @@ class CalculatedValue(Contract):
     unit: str
     currency: str | None = None
     classification: str = "illustrative_calculation_not_reported_fact"
-    valuation_method: Literal["fcff", "equity_fcfe"]
-    share_count_basis: Literal["point_in_time_diluted", "latest_quarter_diluted_proxy"]
+    valuation_method: Literal["fcff", "equity_fcfe", "operating_scenario"]
+    share_count_basis: Literal["point_in_time_diluted", "latest_quarter_diluted_proxy", "not_applicable"]
     model_input_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     model_result_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     evidence_ids: tuple[Identifier, ...]

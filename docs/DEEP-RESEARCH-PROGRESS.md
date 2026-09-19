@@ -12,6 +12,161 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+### Stage 3 supervisor/recovery and second PR review — September 19, 2026
+
+PR #13 remains on `codex/research-stage-3` targeting `codex/deep-research-v2`;
+no merge, main-branch change or live retry. The parent supervisor now preserves
+sanitized diagnostics, retries transient inspection within the absolute deadline,
+and retains fail-closed malformed-table/identity handling and bounded cleanup.
+Deadline-bound inspection cannot enter an uninterruptible optional-library path.
+The original pilot exception remains unproven, not retrospectively diagnosed.
+
+Implemented a separate fixed-prefix same-case recovery path and two commands:
+offline capsule preparation and explicitly authorized supervised continuation.
+The current engine verifies the actual six saved payloads, imports replies without
+new calls, checks exact reviewed input bytes and source preservation, and binds a
+new incremental budget to one destination. Historical known usage remains visible;
+unknown historical usage remains unknown. New unsettled usage blocks resume.
+Legacy non-case recovery and existing production-acceptance blocks are unchanged.
+
+Independent review: Terra/high reviewed Stage 3 changes and supervisor handling;
+Sol/high independently reviewed recovery, root engine integration and the
+continuation CLI. Fixed deadline handling, shallowly mutable capsule provenance,
+FIFO-lock blocking, strict authorization booleans, destination-bound approval and
+source/destination preservation. Final reviewers report no remaining actionable
+P1/P2 findings. The previously hosted blinded-challenger comment remains resolved.
+
+Final targeted verification: **163 tests passed**, covering supervisor lifecycle,
+same-case and legacy recovery, CLI authorization, engine integration, admission
+and storage. Completed replay makes no new calls and does not double-count prior
+usage; an unknown new dispatch prevents any further resumed call. Ruff and
+whitespace checks pass. No full local suite was rerun; hosted CI stays enabled.
+
+The actual failed NVDA prefix passed offline verification and was copied into
+`reports/RESEARCH_STAGE3_20260919/recovery_capsule_1/`. Plan hash:
+`70fd539f30194be2e063c3dfad48959c49f4e41196b3ca921e4bc7c61a899d37`.
+It retains 558,608 known source tokens, incomplete cumulative usage, exact input/
+checkpoint copies and an **unfilled authorization request**, not live permission.
+The original source is unchanged. No final reader was generated.
+
+Next: obtain a new specific incremental live budget with acknowledgement of the
+unknown historical call, then continue from reconciliation and compare the actual
+reader. Product acceptance and merge/release remain separate decisions. See the
+[recovery procedure](DEEP-RESEARCH-CASE-RECOVERY.md).
+
+Fresh hosted review of `94a8b70` found two further P2 items. Cleanup now reserves
+separate bounded stop/discovery and KILL/reap phases, so an expired discovery
+deadline cannot consume the final identity-check/kill allowance. PID reuse still
+prevents signaling. New NVDA operating packages express independent review as a
+timeless precondition rather than retaining a contradictory “draft-only” claim
+after review attachment. Historical reviewed packets remain immutable, including
+their legacy wording; the final reader check must not conflate that wording with
+the actual hash-bound operating-review status. Valuation-case review is separate
+and remains incomplete. Follow-up verification: **53 supervisor tests and 8
+package/review-attachment tests passed**, with lint and whitespace clean. Sol/high
+independently reviewed the cleanup fix and found no remaining issue. All six
+hosted checks had passed before this narrow follow-up; CI remains enabled for it.
+
+### Stage 3 authorized pilot 1 — September 19, 2026
+
+The user authorized the 1.5m-token / 90-minute / 600-second-per-call English NVDA
+pilot. Six live stages completed on `a36d69c`, then the parent returned
+`supervisor_failed` while reconciliation was unsettled. No final reader or actual
+Claude comparison exists. Known tokens: 505,546 input + 53,062 output = 558,608;
+interrupted-call usage remains unknown. No retry/fallback/checkpoint rewrite.
+
+Independent diagnosis identifies a transient `/bin/ps` polling failure as the
+leading, unproven explanation; the generic exception handling lost the exact cause.
+44 existing supervisor tests and six budget/failure tests pass. No speculative
+code patch was applied. Next: sanitized supervisor diagnostics and bounded transient
+handling, followed by a tested case-aware recovery design and new live authorization.
+See [pilot outcome](DEEP-RESEARCH-STAGE3-PILOT1.md) for evidence, preserved artifacts,
+uncertainty and the distinction between checkpoint elapsed and whole-run usage.
+
+### Stage 3 operating-model gap follow-up — September 19, 2026
+
+On PR #13 (`codex/research-stage-3` → `codex/deep-research-v2`), closed the
+first-challenger leakage review finding by running it before the case-blind planner.
+Added deterministic fiscal operating scenarios, exact source/period/assumption
+contracts, independently hash-bound economic review, scoped calculated references,
+reader integration and separate operating admission. Stale/unreviewed packages
+withhold both calculated outputs **and authored numerical caveats from prompts**;
+raw inputs remain in audit artifacts. No FCFF, DCF, equity target or funding
+approval is manufactured from an operating-profit bridge.
+
+NVDA now has `operating_case_2` plus a separately recorded independent review and
+`operating_reviewed_1` handoff. Original case/preflight/draft artifacts remain
+unchanged. Fiscal totals use H1 actual plus Q3/Q4 assumptions, preserve the
+14-week Q4, and distinguish Q3 GAAP guidance from non-GAAP-qualified Q4 discussion.
+The finalizer preserves diagnostics and derivation provenance, uses an English
+reader mandate, and cannot authorize live execution. Full scope and remaining
+cash-flow valuation work are in [the Stage 3 checkpoint](DEEP-RESEARCH-STAGE3.md).
+
+Delegation: Luna/medium source scout, Sol/high arithmetic/contracts and integration
+review, Terra/medium frozen-source adapter and handoff review, Astra/high independent
+economic review. Review fixes include exact long-decimal multiplication, fiscal
+opening-date binding, weekly growth arithmetic, draft prompt leakage, portable
+test fixtures and lossless handoff provenance. The 182-fact reviewed NVDA packet
+passed offline engine/checkpoint replay with 16 synthetic responses; all 36
+calculation references were available and acceptance remained blocked. This is
+not a new research report or evidence of superior writing quality.
+
+Final focused validation: **196 tests passed**, covering scenario/review/adapter
+contracts, case-to-reader integration, admission, numeric rendering, engine,
+bounded finalization, storage/recovery, preflight and reader/wire compatibility.
+Changed-file Ruff and whitespace checks passed; no full local suite was rerun.
+
+No live research call was dispatched. Pending user action: authorize the specific
+bounded English development pilot (1.5m tokens, 90 minutes overall, 600 seconds per
+call, no optional follow-up/provider fallback, at most one reader repair). Then
+engineering owns generation and actual-reader comparison; user usefulness review
+and merge/release remain separate checkpoints. Do not claim Stage 3 complete yet.
+
+### Stage 3 case-backed reader engineering — September 19, 2026
+
+Following the Stage 2 merge, the user requested Stage 3 development. Work is on
+`codex/research-stage-3`, based on `ee35098`, with PR target
+`codex/deep-research-v2`. `main`, the baseline tag, schedules and old artifacts
+remain untouched. Full scope, limitations and the editorial comparison rubric are
+in [the Stage 3 checkpoint](DEEP-RESEARCH-STAGE3.md).
+
+Delivered: content-bound case ingestion and optional review; recomputed financial
+reconciliation; actual selected source passages and per-stage payload audit;
+eight-purpose English-first reader structure; exact-reader limitation coverage and
+admission separating completion, qualitative eligibility, financial conclusions,
+acceptance prerequisites and disabled production activation. Changed case/evidence
+invalidates checkpoints; old prefix-recovery cannot be mislabeled as case-aware
+analysis. Ordinary replay and existing unknown-usage safeguards remain intact.
+
+The interim case-backed path intentionally does not call the unbound valuation
+agent: reviewed forecasts have not yet been connected to the Stage 2 schedules.
+It exports neither enterprise/equity valuation numbers nor a supported target.
+Existing non-opt-in research remains compatible. This checkpoint does not claim
+Stage 2 financial closure or Stage 3's model-backed final report.
+
+Offline NVDA regeneration and reader-input preflight completed in new
+`reports/RESEARCH_STAGE3_20260919/{case_1,preflight_1}` directories: 182 facts,
+zero model calls, no new research report, no changes to old source packets.
+The new command verifies case/packet manifests, includes exact authored passages,
+and emits a replay-only request rather than implicit live authorization.
+
+Delegation: Luna/medium mapped integration seams and the comparator's editorial
+patterns; Sol/high implemented the case boundary; Terra/medium implemented
+admission. Coordinator integrated engine/request/storage/CLI, reader structure,
+preflight and end-to-end regressions. Separate Terra and Sol reviews cover
+integration and admission correctness. Source passage/review hash binding,
+required limitation-coverage attestations, blocked financial prerequisites,
+repair-history handling and finalization headroom receive specific regressions.
+Final local verification: **240 targeted tests passed**, covering the new case/
+admission/preflight boundaries plus affected engine, CLI, storage, wire, legacy
+evidence-led, bounded-finalization and recovery paths. Changed-file Ruff and
+whitespace checks pass. Independent review caught permissive boolean coercion;
+strict response/attestation booleans and regressions resolve it, and the reviewer
+confirmed no remaining findings. The legacy-identity fixture was updated to omit
+the new absent opt-in field, preserving rather than changing its historical hash.
+Hosted checks are recorded on the PR; no local full-suite or live research run
+was used for this checkpoint.
+
 ### Stage 2 first development tranche — September 19, 2026
 
 PR #12 review follow-up: the user authorized resolving the review, merging into

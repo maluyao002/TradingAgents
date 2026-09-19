@@ -23,7 +23,7 @@ from tradingagents.research.replay import ReplayModelService, SnapshotEvidenceSe
 from tradingagents.research.services import ModelReply, ResearchServices
 from tradingagents.research.storage import read_json
 
-_PATH_FIELDS = ("output_dir", "evidence_path", "prior_dossier_path", "dossier_dir")
+_PATH_FIELDS = ("output_dir", "evidence_path", "prior_dossier_path", "dossier_dir", "financial_case_path")
 _REPLAY_MINIMUM_RESPONSES = {
     "planner": 1,
     "challenger": 2,
@@ -91,6 +91,7 @@ def safe_summary(request: ResearchRequest) -> dict[str, object]:
         "cutoff": request.cutoff.isoformat(),
         "dossier_dir": str(request.dossier_dir) if request.dossier_dir else None,
         "evidence_path": str(request.evidence_path) if request.evidence_path else None,
+        "financial_case_path": str(request.financial_case_path) if request.financial_case_path else None,
         "internal_language": request.internal_language,
         "model_roles": {role: setting.effort for role, setting in sorted(request.models.items())},
         "output_dir": str(request.output_dir),
@@ -111,7 +112,7 @@ def safe_summary(request: ResearchRequest) -> dict[str, object]:
     }
 
 
-def load_responses(path: Path) -> dict[str, list[dict[str, object]]]:
+def load_responses(path: Path, *, case_backed: bool = False) -> dict[str, list[dict[str, object]]]:
     """Load bounded, strict frozen model replies without exposing malformed input."""
     try:
         payload = read_json(path.resolve(), max_bytes=32 * 1024 * 1024)
@@ -133,6 +134,7 @@ def load_responses(path: Path) -> dict[str, list[dict[str, object]]]:
         normalized[role] = validated
     if any(
         len(normalized.get(role, [])) < count for role, count in _REPLAY_MINIMUM_RESPONSES.items()
+        if not (case_backed and role == "valuation")
     ):
         raise ValueError("responses do not cover the required initial replay stages")
     return normalized
@@ -193,7 +195,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("replay execution requires evidence_path", file=sys.stderr)
             return 2
         try:
-            responses = load_responses(args.responses)
+            responses = load_responses(args.responses, case_backed=request.financial_case_path is not None)
             snapshot = load_snapshot(request.evidence_path, request)
             services = ResearchServices(
                 evidence=SnapshotEvidenceService(snapshot),
