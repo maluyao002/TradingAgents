@@ -10,6 +10,68 @@ checkout). Live schedules, provider settings, historical reports, and user tasks
 are unchanged. Local commits are used as reviewable checkpoints; no remote push
 or pull request is implicit.
 
+## Frozen baseline and separate review branch — September 18, 2026
+
+Publication follow-through: the user confirmed keeping the work on the feature
+branch, not `main`. The frozen branch/tag and separate review branch were then
+published to origin, and [PR #10](https://github.com/maluyao002/TradingAgents/pull/10)
+was opened with base `codex/deep-research-v2` and head
+`codex/research-baseline-review`. The publication blocker described below is historical
+and resolved. Hosted CI and automatic PR review are checked separately from the
+local validation record; no merge or change to `main` is authorized by this action.
+
+Hosted CI subsequently exposed a Python 3.10 importer compatibility defect:
+`datetime.fromisoformat` on that version rejects a trailing UTC `Z`. The review
+branch normalizes only that suffix to `+00:00` before parsing, preserving offset
+validation and adding explicit UTC/offset/malformed-input regressions. This fix
+does not change the frozen feature branch or historical evidence artifacts.
+The cross-version rerun additionally found that Python 3.10 accepts a duplicated
+UTC designator after normalization; the importer now rejects stray `Z` characters
+explicitly. A weekly timeout regression now allows two seconds for healthy process
+startup (the hanging worker sleeps five), without changing production timeouts.
+
+At the user's request, `codex/deep-research-v2` is preserved at
+`4cbbb0799887c0cd2fb0fd7f634db2ea77dc59cc`, with local annotated tag
+`research-v2-baseline-20260918`. Review fixes are isolated on
+`codex/research-baseline-review`; the baseline branch and tag have not moved.
+The intended PR base is the frozen feature branch, not `main`. Stage 1 work has
+not begun and no merge is implicit.
+
+Focused Sol/high and Terra/medium review covered the latest source/forecast/model
+and probe/CI changes, not an exhaustive re-audit of every historical commit.
+All identified findings were resolved and independently rechecked:
+
+- CI's offline test step now excludes `integration`, rather than relying on missing
+  credentials to prevent a live DeepSeek test. Collection with a sentinel key
+  proves that the live class is deselected without dispatching a request.
+- Authored-probe tests declare their POSIX-only file-guard requirement.
+- Three repository-wide Ruff import-order failures are fixed.
+- Market snapshot/metadata publication uses synced staging and exclusive links;
+  collisions never overwrite an existing output. Hosted review subsequently found
+  a race in ownership-checked rollback, so failures now preserve all published paths
+  and clean up only private staging names. Final ownership checks detect observed
+  replacement. Directory-entry durability/order and crash-atomic pairing are not
+  claimed: consumers must validate both artifacts and the snapshot hash, not rely
+  on evidence-file presence as a completion marker.
+- Forecast rows require exact label/cell boundaries. Reused generated facts must
+  retain exact source locations. The original valid filing spans are preserved,
+  and the existing 89-fact snapshot still validates idempotently, unchanged.
+
+Initial review-fix commits: `8ceff80` (CI/portability/lint) and `238046f`
+(publication/provenance). Latest local validation: **2,003 passed, 1 skipped, 1 deselected,
+18 existing warnings, 65 subtests passed** using `pytest -q -m 'not integration'`
+with the configured PDF runtime. Focused source/model tests passed 41 cases;
+repository-wide Ruff and `git diff --check` pass. No research-model calls occurred.
+
+Public publication is blocked pending explicit confirmation: origin
+`maluyao002/TradingAgents` is public, and the approval check rejected publication
+of the 51 unpublished baseline commits without that confirmation. No workaround,
+remote push, tag publication or PR creation was attempted after the rejection.
+The Git checkpoint excludes ignored reports, credentials and local run artifacts;
+it is not a remote backup of those files. Once confirmed, publish the baseline/tag
+and review branch, create the focused PR, check hosted CI/comments and address
+actionable feedback. No automatic merge or Stage 1/live-research execution follows.
+
 ## Roadmap reconciliation and workspace organization — September 18, 2026
 
 The original M0–M6 plan, follow-up commits, actual artifacts and current code were

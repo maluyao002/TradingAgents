@@ -1,4 +1,4 @@
-from tradingagents.research.stages import AnalysisOutput, ROLE_INSTRUCTIONS, instruction
+from tradingagents.research.stages import ROLE_INSTRUCTIONS, AnalysisOutput, instruction
 
 
 def test_all_roles_receive_evidence_language_and_identifier_contracts():

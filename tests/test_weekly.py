@@ -441,7 +441,8 @@ def test_company_failure_continues_but_shared_limit_blocks_remaining(tmp_path):
 
 @pytest.mark.unit
 def test_hung_company_is_terminated_and_next_company_runs(tmp_path):
-    config = _config(tmp_path, company_timeout=0.2)
+    # Allow process startup on busy CI runners; the hanging worker sleeps 5s.
+    config = _config(tmp_path, company_timeout=2)
     manifest_path = run_batch(
         config,
         batch_id="timeout",

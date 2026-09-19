@@ -229,7 +229,7 @@ def _decimal(token: str, *, source_id: str, label: str) -> Decimal:
 
 
 def _row(table: _Table, label: str, pattern: str, *, negative: bool = False) -> _Row:
-    matches = list(re.finditer(pattern, table.text))
+    matches = list(re.finditer(pattern, table.text, flags=re.MULTILINE))
     if len(matches) != 1:
         raise ForecastFactExtractionError(
             f"{table.source.id}: {table.name} required row {label!r} changed, "
@@ -254,7 +254,7 @@ def _row(table: _Table, label: str, pattern: str, *, negative: bool = False) -> 
 
 def _filing_four_column_row(table: _Table, label: str) -> _Row:
     pattern = (
-        rf"{re.escape(label)}  (?P<v1>{_PLAIN_NUMBER})  (?P<v2>{_PLAIN_NUMBER})  "
+        rf"^{re.escape(label)}  (?P<v1>{_PLAIN_NUMBER})  (?P<v2>{_PLAIN_NUMBER})  "
         rf"(?P<v3>{_PLAIN_NUMBER})  (?P<v4>{_PLAIN_NUMBER}) \n"
     )
     return _row(table, label, pattern)
@@ -263,18 +263,20 @@ def _filing_four_column_row(table: _Table, label: str) -> _Row:
 def _filing_two_column_row(table: _Table, label: str, *, negative: bool = False) -> _Row:
     if negative:
         pattern = (
-            rf"{re.escape(label)}  \((?P<v1>{_PLAIN_NUMBER})\)  "
+            rf"^{re.escape(label)}  \((?P<v1>{_PLAIN_NUMBER})\)  "
             rf"\((?P<v2>{_PLAIN_NUMBER})\) \n"
         )
     else:
         pattern = (
-            rf"{re.escape(label)}  (?P<v1>{_PLAIN_NUMBER})  "
+            rf"^{re.escape(label)}  (?P<v1>{_PLAIN_NUMBER})  "
             rf"(?P<v2>{_PLAIN_NUMBER}) \n"
         )
     return _row(table, label, pattern, negative=negative)
 
 
-def _release_four_column_row(table: _Table, label: str, *, negative: bool = False) -> _Row:
+def _release_four_column_row(
+    table: _Table, label: str, *, next_label: str, negative: bool = False
+) -> _Row:
     if negative:
         cells = "\n".join(
             rf"\((?P<v{index}>{_PLAIN_NUMBER})\n\)" for index in range(1, 5)
@@ -286,7 +288,7 @@ def _release_four_column_row(table: _Table, label: str, *, negative: bool = Fals
     return _row(
         table,
         label,
-        rf"{re.escape(label)}\n{cells}",
+        rf"^{re.escape(label)}\n{cells}$(?=\n{re.escape(next_label)}$)",
         negative=negative,
     )
 
@@ -517,15 +519,18 @@ def _candidate_facts(
     )
 
     release_pretax = _release_four_column_row(
-        release_income, "Income before income tax"
+        release_income, "Income before income tax", next_label="Income tax expense"
     )
-    release_tax = _release_four_column_row(release_income, "Income tax expense")
+    release_tax = _release_four_column_row(
+        release_income, "Income tax expense", next_label="Net income"
+    )
     release_da = _release_four_column_row(
-        release_cashflow, "Depreciation and amortization"
+        release_cashflow, "Depreciation and amortization", next_label="Deferred income taxes"
     )
     release_capex = _release_four_column_row(
         release_cashflow,
         "Purchases related to property and equipment and intangible assets",
+        next_label="Acquisitions, net of cash acquired",
         negative=True,
     )
 
@@ -659,6 +664,7 @@ def _same_fact_semantics(left: FinancialFact, right: FinancialFact) -> bool:
         "period_start",
         "period_end",
         "basis",
+        "location",
         "segment",
         "inputs",
         "formula",

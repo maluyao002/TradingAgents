@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timezone
 from decimal import Decimal
 from hashlib import sha256
@@ -5,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from scripts import research_market_inputs as market
 from scripts.research_market_inputs import (
     MarketInputParseError,
     _parse_beta,
@@ -90,3 +92,112 @@ def test_merge_writes_new_snapshot_without_touching_base_or_cache(tmp_path: Path
     ]
     assert sha256(raw.read_bytes()).hexdigest() == before
     assert destination.with_suffix(".json.market-inputs.json").is_file()
+
+    collision = tmp_path / "occupied" / "evidence.json"
+    collision.parent.mkdir()
+    occupied_sidecar = collision.with_suffix(".json.market-inputs.json")
+    occupied_sidecar.write_bytes(b"existing metadata")
+    with pytest.raises(MarketInputParseError, match="already exists"):
+        merge_evidence(base_path, cache_dir, collision)
+    assert not collision.exists()
+    assert occupied_sidecar.read_bytes() == b"existing metadata"
+
+
+def test_exclusive_publish_preserves_a_concurrent_winner(tmp_path, monkeypatch):
+    destination = tmp_path / "evidence.json"
+    original = os.link
+
+    def competing_link(source, target, **kwargs):
+        target.write_bytes(b"concurrent winner")
+        return original(source, target, **kwargs)
+
+    monkeypatch.setattr(market.os, "link", competing_link)
+    with pytest.raises(MarketInputParseError, match="already exists"):
+        market._write_new_file(destination, b"new payload")
+    assert destination.read_bytes() == b"concurrent winner"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["evidence.json"]
+
+
+@pytest.mark.parametrize("replace_owned", [False, True])
+def test_pair_failure_preserves_owned_and_replacement_outputs(tmp_path, monkeypatch, replace_owned):
+    sidecar, evidence = tmp_path / "metadata.json", tmp_path / "evidence.json"
+    original = os.link
+
+    def fail_second(source, target, **kwargs):
+        if target == evidence:
+            if replace_owned:
+                sidecar.unlink()
+                sidecar.write_bytes(b"another publisher")
+            raise OSError("simulated second publication failure")
+        return original(source, target, **kwargs)
+
+    monkeypatch.setattr(market.os, "link", fail_second)
+    with pytest.raises(OSError, match="second publication"):
+        market._publish_new_files({sidecar: b"metadata", evidence: b"evidence"})
+    assert not evidence.exists()
+    if replace_owned:
+        assert sidecar.read_bytes() == b"another publisher"
+    else:
+        assert sidecar.read_bytes() == b"metadata"
+    assert not list(tmp_path.glob(".*"))
+
+
+def test_existing_sidecar_blocks_both_outputs(tmp_path):
+    sidecar, evidence = tmp_path / "metadata.json", tmp_path / "evidence.json"
+    sidecar.write_bytes(b"existing metadata")
+    with pytest.raises(MarketInputParseError, match="already exists"):
+        market._publish_new_files({sidecar: b"new metadata", evidence: b"evidence"})
+    assert sidecar.read_bytes() == b"existing metadata"
+    assert not evidence.exists()
+
+
+def test_success_path_sidecar_replacement_blocks_completion(tmp_path, monkeypatch):
+    sidecar, evidence = tmp_path / "metadata.json", tmp_path / "evidence.json"
+    original = os.link
+
+    def replace_sidecar_before_evidence(source, target, **kwargs):
+        if target == evidence:
+            sidecar.unlink()
+            sidecar.write_bytes(b"foreign replacement")
+        return original(source, target, **kwargs)
+
+    monkeypatch.setattr(market.os, "link", replace_sidecar_before_evidence)
+    with pytest.raises(MarketInputParseError, match="replaced before completion"):
+        market._publish_new_files({sidecar: b"metadata", evidence: b"evidence"})
+    assert sidecar.read_bytes() == b"foreign replacement"
+    assert evidence.read_bytes() == b"evidence"
+    assert not list(tmp_path.glob(".*"))
+
+
+def test_failure_cleanup_never_unlinks_a_published_path(tmp_path, monkeypatch):
+    sidecar, evidence = tmp_path / "metadata.json", tmp_path / "evidence.json"
+    original_link, original_unlink = os.link, Path.unlink
+    published_unlinks = []
+
+    def fail_second(source, target, **kwargs):
+        if target == evidence:
+            raise OSError("second link failed")
+        return original_link(source, target, **kwargs)
+
+    def guard_unlink(path, *args, **kwargs):
+        if path in {sidecar, evidence}:
+            published_unlinks.append(path)
+            raise AssertionError("cleanup must not unlink published paths")
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(market.os, "link", fail_second)
+    monkeypatch.setattr(Path, "unlink", guard_unlink)
+    with pytest.raises(OSError, match="second link failed"):
+        market._publish_new_files({sidecar: b"metadata", evidence: b"evidence"})
+    assert not published_unlinks
+    assert sidecar.read_bytes() == b"metadata"
+    assert not evidence.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="symlink creation may require Windows privileges")
+def test_merge_rejects_a_dangling_destination_symlink_before_resolution(tmp_path):
+    target, link = tmp_path / "absent-target", tmp_path / "output-link"
+    link.symlink_to(target)
+    with pytest.raises(MarketInputParseError, match="already exists"):
+        merge_evidence(tmp_path / "not-read.json", tmp_path / "cache", link)
+    assert link.is_symlink() and not target.exists()

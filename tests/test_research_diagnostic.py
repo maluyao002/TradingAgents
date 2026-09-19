@@ -133,12 +133,13 @@ def test_valuation_source_failure_prevents_provider_start(tmp_path, monkeypatch)
 @pytest.mark.parametrize("mutation", [None, "artifact", "stage", "request", "symlink"])
 def test_valuation_context_verifies_real_checkpoint_prefix(tmp_path, mutation):
     from hashlib import sha256
+
     from tests.test_research_engine import replies
     from tradingagents.codex.adapter import CodexStructuredOutputError
+    from tradingagents.research.contracts import SourceDocument
     from tradingagents.research.engine import run_research
     from tradingagents.research.replay import ReplayModelService, SnapshotEvidenceService
     from tradingagents.research.services import ResearchServices
-    from tradingagents.research.contracts import SourceDocument
 
     home = tmp_path / "runtime"
     request = ResearchRequest(ticker="TEST", cutoff="2026-09-17T00:00:00Z", backend="codex",

@@ -25,6 +25,26 @@ def fixed_clock() -> datetime:
     return FIXED_NOW
 
 
+@pytest.mark.parametrize("value", ["2026-08-01T13:00:00Z", "2026-08-01T13:00:00+00:00",
+                                 "2026-08-01T09:00:00-04:00"])
+def test_timestamp_normalizes_utc_designator_for_python310(value, monkeypatch):
+    class Python310Datetime:
+        @staticmethod
+        def fromisoformat(text):
+            if text.endswith("Z"):
+                raise ValueError("Python 3.10 does not accept the UTC designator")
+            return datetime.fromisoformat(text)
+
+    monkeypatch.setattr(local_evidence, "datetime", Python310Datetime)
+    assert local_evidence._timestamp(value, "test") == datetime(2026, 8, 1, 13, tzinfo=timezone.utc)
+
+
+@pytest.mark.parametrize("value", ["2026-08-01T13:00:00", "2026-08-01T13:00:00ZZ", "not-a-date"])
+def test_timestamp_still_rejects_naive_or_malformed_inputs(value):
+    with pytest.raises(ValueError):
+        local_evidence._timestamp(value, "test")
+
+
 def source(local_file: Path, **overrides):
     value = {
         "id": "release-q2",
