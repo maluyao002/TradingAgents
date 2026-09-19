@@ -1,7 +1,11 @@
 # Stage 3 — case-backed reader engineering checkpoint
 
-September 19, 2026. Development branch: `codex/research-stage-3`; integration
-target: `codex/deep-research-v2`, never `main`. This is an engineering checkpoint,
+September 19, 2026. PR #13 merged into `codex/deep-research-v2`; the Stage 3
+subbranch was deleted. The case-editor fix is in open PR #14 on
+`codex/research-case-editor-wire`, targeting that integration branch, never `main`.
+The authorized continuation produced a substantive English review draft but
+stopped before repair/export; see [the outcome](DEEP-RESEARCH-STAGE3-CONTINUATION.md).
+This is an engineering checkpoint,
 **not completion of Stage 3's model-backed NVDA report or permission for live calls**.
 
 ## Delivered boundary

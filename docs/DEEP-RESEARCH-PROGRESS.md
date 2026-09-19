@@ -12,6 +12,30 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+### Stage 3 merged; authorized continuation and comparison — September 19, 2026
+
+PR #13 merged as `9cc61d7` into `codex/deep-research-v2`; its local and remote
+subbranch were deleted without changing main. The user approved the English NVDA
+continuation/comparison and automatic retries up to 3m combined new tokens.
+
+The first attempt spent 308,858 tokens before a locally rejected case-editor
+schema. Exact offline replay proved no editor provider dispatch. Fix `c2d9dd0`
+adds strict wire support on separate branch/PR #14. Independent Sol/high review,
+75 root targeted tests, 84 reviewer-scope tests, lint and hosted CI passed.
+
+The retry generated a full English draft and completed factual verification plus
+18 coverage batches (205 issues), using 1,039,397 new tokens. It stopped at
+budget admission before repair and did not export an admitted final report.
+Campaign total: 1,348,255 new tokens; original 558,608 plus interrupted-call unknown
+remain separate. All source/capsule/result hashes checked unchanged.
+
+The exact review draft and Terra/high-assisted comparison are in local
+`reports/RESEARCH_STAGE3_20260919/review_handoff_1/`. Core reasoning improved, but
+audit-heavy rendering, stale/opaque issues and scoped admission remain engineering
+work. Financial/independent evidence gaps remain real; no gate was bypassed.
+Stage 3 remains open. PR #14 is not merged; stop for user review before Stage 4.
+See [detailed outcome](DEEP-RESEARCH-STAGE3-CONTINUATION.md).
+
 ### Stage 3 supervisor/recovery and second PR review — September 19, 2026
 
 PR #13 remains on `codex/research-stage-3` targeting `codex/deep-research-v2`;
