@@ -12,6 +12,51 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+### Stage 3 case-backed reader engineering — September 19, 2026
+
+Following the Stage 2 merge, the user requested Stage 3 development. Work is on
+`codex/research-stage-3`, based on `ee35098`, with PR target
+`codex/deep-research-v2`. `main`, the baseline tag, schedules and old artifacts
+remain untouched. Full scope, limitations and the editorial comparison rubric are
+in [the Stage 3 checkpoint](DEEP-RESEARCH-STAGE3.md).
+
+Delivered: content-bound case ingestion and optional review; recomputed financial
+reconciliation; actual selected source passages and per-stage payload audit;
+eight-purpose English-first reader structure; exact-reader limitation coverage and
+admission separating completion, qualitative eligibility, financial conclusions,
+acceptance prerequisites and disabled production activation. Changed case/evidence
+invalidates checkpoints; old prefix-recovery cannot be mislabeled as case-aware
+analysis. Ordinary replay and existing unknown-usage safeguards remain intact.
+
+The interim case-backed path intentionally does not call the unbound valuation
+agent: reviewed forecasts have not yet been connected to the Stage 2 schedules.
+It exports neither enterprise/equity valuation numbers nor a supported target.
+Existing non-opt-in research remains compatible. This checkpoint does not claim
+Stage 2 financial closure or Stage 3's model-backed final report.
+
+Offline NVDA regeneration and reader-input preflight completed in new
+`reports/RESEARCH_STAGE3_20260919/{case_1,preflight_1}` directories: 182 facts,
+zero model calls, no new research report, no changes to old source packets.
+The new command verifies case/packet manifests, includes exact authored passages,
+and emits a replay-only request rather than implicit live authorization.
+
+Delegation: Luna/medium mapped integration seams and the comparator's editorial
+patterns; Sol/high implemented the case boundary; Terra/medium implemented
+admission. Coordinator integrated engine/request/storage/CLI, reader structure,
+preflight and end-to-end regressions. Separate Terra and Sol reviews cover
+integration and admission correctness. Source passage/review hash binding,
+required limitation-coverage attestations, blocked financial prerequisites,
+repair-history handling and finalization headroom receive specific regressions.
+Final local verification: **240 targeted tests passed**, covering the new case/
+admission/preflight boundaries plus affected engine, CLI, storage, wire, legacy
+evidence-led, bounded-finalization and recovery paths. Changed-file Ruff and
+whitespace checks pass. Independent review caught permissive boolean coercion;
+strict response/attestation booleans and regressions resolve it, and the reviewer
+confirmed no remaining findings. The legacy-identity fixture was updated to omit
+the new absent opt-in field, preserving rather than changing its historical hash.
+Hosted checks are recorded on the PR; no local full-suite or live research run
+was used for this checkpoint.
+
 ### Stage 2 first development tranche — September 19, 2026
 
 PR #12 review follow-up: the user authorized resolving the review, merging into
