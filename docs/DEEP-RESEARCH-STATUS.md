@@ -1,6 +1,6 @@
 # Deep Research V2 — current status and delivery roadmap
 
-Reconciled September 18, 2026; updated September 19 for the Stage 2 merge and Stage 3 engineering.
+Reconciled September 18, 2026; updated September 19 for the Stage 3 merge and live continuation.
 This is the current work index and recommended execution order, not new release
 acceptance or authorization for additional live calls. The original M0–M6 gates
 remain in [the implementation plan](DEEP-RESEARCH-PLAN.md).
@@ -9,7 +9,8 @@ remain in [the implementation plan](DEEP-RESEARCH-PLAN.md).
 
 We have a substantial tested research-engine foundation, one older completed
 bilingual research preview, and a newer independently reviewed conditional NVDA
-valuation memo. We do **not** yet have the intended improved, model-backed English
+valuation memo. A new substantive English NVDA review draft now exists, but its
+repair/export and admission did not complete. We do **not** yet have the intended improved, model-backed English
 NVDA/HOOD report pair or an accepted production engine.
 
 The bottleneck has moved from runtime/schema reliability to evidence delivery,
@@ -146,7 +147,7 @@ supported business analysis; no new live call is required for this stage.
 
 Maps to M1/M3. Depends on Stage 1's contracts; public-source work can proceed in parallel.
 
-**In progress on `codex/research-stage-2`, not economically closed.** The first
+**First tranche merged through PR #12; not economically closed.** The first
 reviewable tranche implements evidence-bound financial schedules, classification
 conventions, commitment timing/overlap rules, gap-to-conclusion mappings and an
 offline case-preparation command. Exact filing-note extraction adds 93 facts to
@@ -193,9 +194,9 @@ remains explicitly limited and the acceptance gap remains open.
 
 Maps to M2–M4. Depends on Stages 1–2; reader/recovery testing can start earlier.
 
-**Engineering checkpoint in progress:** the user requested Stage 3 development
-after the Stage 2 first-tranche merge. A separate `codex/research-stage-3` branch
-now integrates draft/reviewed financial cases, immutable case/evidence identities,
+**Engineering checkpoint merged through PR #13** as `9cc61d7` into
+`codex/deep-research-v2`; the local and remote Stage 3 subbranch were deleted.
+The implementation integrates draft/reviewed financial cases, immutable case/evidence identities,
 exact source passages, an eight-purpose reader schema and deterministic report/
 conclusion admission. Offline regressions and a real NVDA input preflight exercise
 the boundary. See [Stage 3 delivery and remaining work](DEEP-RESEARCH-STAGE3.md).
@@ -205,23 +206,34 @@ scenarios, exact H1-plus-Q3/Q4 calculations, immutable review attachment and
 reader numerical references. NVDA's Q3 guidance midpoint and Q4 analyst
 sensitivities retain the 53-week fiscal calendar and explicit accounting limits.
 
-This is **not the Stage 3 exit**: no new live English report or actual-reader
-comparison has been generated in this follow-up. Numerical cash-flow valuation,
+This is **not the Stage 3 exit**: a new live English review draft and actual-reader
+comparison exist, but no admitted final export. Numerical cash-flow valuation,
 equity targets and funding clearance remain withheld. Those require additional
 financial/economic evidence and model linkage, not user approval of unsupported
 assumptions. A useful conditional operating report can proceed without them once
 the specific bounded live plan is authorized.
 
-**Latest pilot outcome:** the user authorized the bounded plan and one attempt ran.
-Six analysis calls completed, but parent supervision failed during reconciliation.
-Known usage is 558,608 tokens plus an unknown interrupted call; no final reader
-exists. No retry was performed. Supervisor hardening and explicit same-case
-checkpoint recovery are now implemented and tested offline. Recovery validates the
-six original payloads with the current engine, preserves unknown historical usage,
-and requires a separately authorized incremental budget and fresh destination.
-The next live step still needs that authorization; code-review approval does not
-grant it. See the [recovery procedure](DEEP-RESEARCH-CASE-RECOVERY.md).
-See [pilot 1 outcome and diagnosis](DEEP-RESEARCH-STAGE3-PILOT1.md).
+**Latest live outcome:** after the original six-call interruption, the user
+authorized continuation and automatic retries up to 3,000,000 combined new tokens,
+90 minutes overall and 600 seconds per call. The first continuation consumed
+308,858 tokens and exposed a local case-editor wire registration failure. Exact
+offline reproduction proved no provider dispatch for that editor. Fix `c2d9dd0`
+is in open PR #14 on `codex/research-case-editor-wire`, targeting the feature
+integration branch, not main. The retry consumed 1,039,397 new tokens, generated
+a full English draft, and completed factual review plus 18 issue-coverage batches.
+Conservative budget admission stopped before repair; final export remains blocked.
+
+New campaign usage is **1,348,255 tokens**, below the 3m ceiling. The original
+558,608 known tokens and interrupted-call unknown remain separate. No source
+checkpoint or acceptance gate was rewritten. The draft/comparison are under
+`reports/RESEARCH_STAGE3_20260919/review_handoff_1/`; the engine's failure reader
+is only a diagnostic placeholder. See the [continuation outcome](DEEP-RESEARCH-STAGE3-CONTINUATION.md).
+
+Next engineering priorities are evidence-backed issue resolution, complete claim
+context in coverage checks, scoped admission, efficient bounded finalization and
+reader/audit separation. These are not solved by another identical live attempt.
+The user reviews the actual draft and comparison before further development;
+Stage 4 and production activation have not started.
 
 Deliverables:
 

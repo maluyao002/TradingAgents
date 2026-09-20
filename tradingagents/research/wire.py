@@ -15,6 +15,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, WithJsonSchema, field_validator
 from pydantic_core import SchemaError, SchemaValidator, core_schema
 
+from .case_report import CaseReportDraft, SectionPurpose
 from .contracts import Identifier
 from .investigation_review import InvestigationReview
 from .report_review import ReaderVerification
@@ -225,6 +226,15 @@ class WireReportDraft(_WireContract):
     investment_view: Literal["favorable", "neutral", "cautious", "unrated"]
 
 
+class WireCaseReportSection(WireReportSection):
+    purpose: SectionPurpose
+
+
+class WireCaseReportDraft(WireReportDraft):
+    sections: tuple[WireCaseReportSection, ...] = Field(min_length=8, max_length=8)
+    investment_view: Literal["unrated"]
+
+
 def validate_strict_schema(schema: dict[str, Any]) -> None:
     """Reject schemas that cannot be sent as strict structured outputs."""
     if not isinstance(schema, dict) or schema.get("type") != "object":
@@ -303,6 +313,10 @@ def codec_for(role: str, response_schema: dict[str, Any], *, valuation_method="f
         domain_model, wire_model = InvestigationReview, WireInvestigationReview
     if role == "verifier" and response_schema == ReaderVerification.model_json_schema():
         domain_model, wire_model = ReaderVerification, WireReaderVerification
+    if role == "editor" and response_schema == CaseReportDraft.model_json_schema():
+        # Additive opt-in contract: the existing wire-v2 schemas/identities are
+        # unchanged, and this domain contract previously failed before dispatch.
+        domain_model, wire_model = CaseReportDraft, WireCaseReportDraft
     if response_schema != domain_model.model_json_schema():
         raise ValueError("unknown research response schema")
     output_schema = wire_model.model_json_schema()
