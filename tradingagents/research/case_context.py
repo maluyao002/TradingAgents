@@ -9,7 +9,8 @@ finds an operating schedule conditionally eligible.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import dataclass, field
 from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
@@ -29,6 +30,7 @@ from .financial_case import (
     reconcile_financial_case,
 )
 from .operating_scenarios import (
+    LimitationOrigin,
     OperatingScenarioPackage,
     OperatingScenarioResult,
     evaluate_operating_scenarios,
@@ -138,6 +140,7 @@ class CaseContext:
     scope: ModelResultScope
     reviewed: bool
     operating_scenarios: OperatingScenarioResult | None = None
+    limitation_origins: dict[str, list[dict[str, object]]] = field(default_factory=dict)
 
     def model_context(self) -> dict:
         """Return JSON-native schedules, evidence, review, limitations, and scope."""
@@ -166,7 +169,8 @@ class CaseContext:
             "financial_reconciliation": self.reconciliation.model_dump(mode="json"),
             "output_scope": self.scope.model_dump(mode="json"),
             "limitations": list(self.limitations),
-            **({"operating_scenarios": self.operating_scenarios.model_context}
+            "limitation_origins": deepcopy(self.limitation_origins),
+            **({"operating_scenarios": deepcopy(self.operating_scenarios.model_context)}
                if self.operating_scenarios is not None else {}),
         }
 
@@ -378,17 +382,27 @@ def _limitations(
     review: FinancialCaseReview | None,
     reconciliation: FinancialReconciliation,
     source_limitations: tuple[str, ...],
-) -> tuple[str, ...]:
-    values = [_MODEL_LINKAGE_LIMITATION]
+) -> tuple[tuple[str, ...], dict[str, list[dict[str, object]]]]:
+    values: list[str] = []
+    origins: dict[str, list[LimitationOrigin]] = {}
+
+    def add(text: str, origin_id: str) -> None:
+        values.append(text)
+        origins.setdefault(text, []).append(LimitationOrigin(origin_id=origin_id))
+
+    add(_MODEL_LINKAGE_LIMITATION, "case.model.linkage")
     if review is None or review.status == "draft":
-        values.append(_DRAFT_LIMITATION)
+        add(_DRAFT_LIMITATION, "case.review.draft")
     if review is not None:
-        values.extend(review.limitations)
-        values.extend(
-            f"Independent review finding [{finding.severity}] {finding.code}: {finding.message}"
-            for finding in review.findings
-        )
-    values.extend(f"Open financial-case gap {gap.id}: {gap.description}" for gap in case.gaps)
+        for index, text in enumerate(review.limitations):
+            add(text, f"case.review.limitation.{index}")
+        for index, finding in enumerate(review.findings):
+            add(
+                f"Independent review finding [{finding.severity}] {finding.code}: {finding.message}",
+                f"case.review.finding.{index}",
+            )
+    for gap in case.gaps:
+        add(f"Open financial-case gap {gap.id}: {gap.description}", f"case.gap.{gap.id}")
     for name in (
         "operating_asset_value",
         "equity_per_share_value",
@@ -397,9 +411,14 @@ def _limitations(
     ):
         component = getattr(reconciliation.output_eligibility, name)
         if component.status == "blocked":
-            values.extend(component.reasons)
-    values.extend(source_limitations)
-    return tuple(dict.fromkeys(values))
+            for index, reason in enumerate(component.reasons):
+                add(reason, f"case.scope.{name}.{index}")
+    for index, text in enumerate(source_limitations):
+        add(text, f"case.source_material.{index}")
+    return tuple(dict.fromkeys(values)), {
+        text: [record.model_dump(mode="json") for record in records]
+        for text, records in origins.items()
+    }
 
 
 def load_case_context(
@@ -460,12 +479,14 @@ def load_case_context(
         selected_facts, checked_snapshot, source_passages
     )
     scope = _blocked_scope(reconciliation)
-    limitations = _limitations(case, review, reconciliation, source_limitations)
+    limitations, limitation_origins = _limitations(case, review, reconciliation, source_limitations)
     reviewed = review is not None and review.status == "reviewed"
     operating = (evaluate_operating_scenarios(envelope.operating_scenarios, case, checked_snapshot)
                  if envelope.operating_scenarios is not None else None)
     if operating is not None:
         limitations = tuple(dict.fromkeys((*limitations, *operating.limitations)))
+        for text, origins in operating.limitation_origins.items():
+            limitation_origins[text] = [*limitation_origins.get(text, ()), *origins]
 
     provisional = CaseContext(
         case=case,
@@ -479,6 +500,7 @@ def load_case_context(
         scope=scope,
         reviewed=reviewed,
         operating_scenarios=operating,
+        limitation_origins=limitation_origins,
     )
     artifacts = {
         "financial_case.json": canonical_json(case),
@@ -501,4 +523,5 @@ def load_case_context(
         scope=scope,
         reviewed=reviewed,
         operating_scenarios=operating,
+        limitation_origins=limitation_origins,
     )

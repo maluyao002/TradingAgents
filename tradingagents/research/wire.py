@@ -19,9 +19,10 @@ from .case_report import CaseReportDraft, SectionPurpose
 from .contracts import Identifier
 from .investigation_review import InvestigationReview
 from .report_review import ReaderVerification
+from .review_lifecycle import LifecycleVerification
 from .stages import AnalysisOutput, ReportDraft, ValuationProposal, VerificationOutput
 
-WIRE_SCHEMA_VERSION = "research-wire-v2"
+WIRE_SCHEMA_VERSION = "research-wire-v3"
 # Keep exact financial values as strings at the generation boundary. Pydantic's
 # default Decimal schema contains a lookahead pattern that is not portable across
 # structured-output regex engines. Decimal still validates finite values locally;
@@ -208,10 +209,40 @@ class WireLimitationDisposition(_WireContract):
     decision: Literal["reader_covered", "audit_only_operational", "audit_only_immaterial", "unresolved"]
     rationale: str
     reader_excerpt: str
+    reader_excerpts: tuple[str, ...]
 
 
 class WireReaderVerification(WireVerificationOutput):
     limitation_dispositions: tuple[WireLimitationDisposition, ...]
+
+
+class WireEvidenceWitness(_WireContract):
+    reference: str
+    excerpt: str
+
+
+class WireIssueResolution(_WireContract):
+    issue_id: str
+    status: Literal["open", "resolved", "superseded"]
+    rationale: str
+    witnesses: tuple[WireEvidenceWitness, ...]
+    reader_excerpts: tuple[str, ...]
+
+
+class WireFindingDisposition(_WireContract):
+    finding_code: str
+    disposition: Literal["report_defect", "disclosed_limitation"]
+    rationale: str
+    reader_excerpts: tuple[str, ...]
+    conclusion_scopes: tuple[Literal[
+        "operating_asset_value", "equity_per_share_value", "funding_assessment",
+        "opening_date_alignment", "research_uncertainty",
+    ], ...]
+
+
+class WireLifecycleVerification(WireVerificationOutput):
+    issue_resolutions: tuple[WireIssueResolution, ...]
+    finding_dispositions: tuple[WireFindingDisposition, ...]
 
 
 class WireReportSection(_WireContract):
@@ -313,9 +344,10 @@ def codec_for(role: str, response_schema: dict[str, Any], *, valuation_method="f
         domain_model, wire_model = InvestigationReview, WireInvestigationReview
     if role == "verifier" and response_schema == ReaderVerification.model_json_schema():
         domain_model, wire_model = ReaderVerification, WireReaderVerification
+    if role == "verifier" and response_schema == LifecycleVerification.model_json_schema():
+        domain_model, wire_model = LifecycleVerification, WireLifecycleVerification
     if role == "editor" and response_schema == CaseReportDraft.model_json_schema():
-        # Additive opt-in contract: the existing wire-v2 schemas/identities are
-        # unchanged, and this domain contract previously failed before dispatch.
+        # Case-backed readers retain all eight purposes at the provider boundary.
         domain_model, wire_model = CaseReportDraft, WireCaseReportDraft
     if response_schema != domain_model.model_json_schema():
         raise ValueError("unknown research response schema")

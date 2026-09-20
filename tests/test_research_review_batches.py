@@ -59,6 +59,23 @@ def test_bad_member_disposition_never_passes_via_other_members(mutation):
     assert any(finding.severity == "critical" for finding in result.findings)
 
 
+def test_batch_and_combined_validation_do_not_duplicate_generated_findings():
+    issues = limitation_packet(["first", "second"])
+    reader = "Common paragraph"
+    hashed = sha256(reader.encode()).hexdigest()
+    review = ReaderVerification(reviewed_report=True, limitation_dispositions=[{
+        "issue_id": issues[0]["issue_id"], "decision": "reader_covered",
+        "rationale": "Covered.", "reader_excerpt": reader,
+    }])
+    combined = combine_coverage(VerificationOutput(reviewed_report=True), (
+        CoverageBatchResult(hashed, tuple(issues), review),
+    ), issues, reader, hashed)
+    generated = [finding for finding in combined.findings
+                 if finding.code == "limitation_disposition"]
+    assert len(generated) == 1
+    assert generated[0].affected_ids == (issues[1]["issue_id"],)
+
+
 @pytest.mark.parametrize("bad", ["changed_reader", "changed_hash", "missing_batch", "duplicate_batch", "claim_decision"])
 def test_batch_identity_and_assignment_are_enforced(bad):
     reader = "Original reader"

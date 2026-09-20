@@ -28,6 +28,7 @@ from .contracts import (
     ReportLanguage,
     ResearchRequest,
     ResearchResult,
+    ReviewFinding,
     Usage,
 )
 from .dossiers import DossierStore
@@ -37,7 +38,12 @@ from .investigation import collect_tasks, make_ledger
 from .investigation_review import InvestigationReview
 from .reader import ReaderIssue, render_reader
 from .rendering import render_references
-from .report_review import ReaderVerification, check_dispositions, limitation_packet
+from .report_review import (
+    ReaderVerification,
+    check_dispositions,
+    limitation_packet,
+    validated_disposition_ids,
+)
 from .result_scope import scope_calculation
 from .review_batches import (
     CoverageBatchResult,
@@ -45,6 +51,13 @@ from .review_batches import (
     combine_coverage,
     coverage_batches,
     finalization_allowance,
+)
+from .review_lifecycle import (
+    LIFECYCLE_POLICY,
+    LifecycleVerification,
+    enrich_issues,
+    evidence_catalog,
+    reconcile_review,
 )
 from .services import ModelReply, ResearchServices
 from .stages import AnalysisOutput, ReportDraft, ValuationProposal, VerificationOutput, instruction
@@ -364,6 +377,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
         role_indices = defaultdict(int)
         outputs, reviews = {}, []
         active_admission_findings = []
+        pre_editor_findings = []
+        retired_reader_texts = set()
         gaps = ["V2 source coverage and company-specific model acceptance remain pending."]
         snapshot = EvidenceSnapshot(ticker=request.ticker, cutoff=request.cutoff)
         draft, drafts, valuation = None, {}, {"status": "unavailable"}
@@ -594,18 +609,20 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                         "limitations": list(case_context.limitations)}, case_context.scope)
             return candidate, scoped
 
-        def reader_inputs():
+        def reader_inputs(*, include_retired=False):
             # Mandatory model caveats do not depend on the editor remembering them.
             material = [ReaderIssue(
                 message=message, provenance_id=f"valuation.limitations[{index}]",
                 severity="critical", category="financial", code="valuation_scope",
-            ) for index, message in enumerate(valuation.get("limitations", []))]
+            ) for index, message in enumerate(valuation.get("limitations", []))
+                if include_retired or message not in retired_reader_texts]
             if valuation.get("status") == "unavailable" and not material:
                 material.append(ReaderIssue(
                     message="Valuation unavailable; this report supplies no supported price target.",
                     provenance_id="valuation.status", severity="critical", category="financial",
                 ))
-            return [*gaps, *material]
+            current_gaps = gaps if include_retired else [text for text in gaps if text not in retired_reader_texts]
+            return [*current_gaps, *material]
 
         def record_investigations(cycle):
             for task in collect_tasks(outputs, proposal, valuation):
@@ -637,6 +654,15 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             rendered = render_reader(request, candidate, snapshot, reader_inputs(), language)
             rendered_hash = hashlib.sha256(rendered.reader_text.encode("utf-8")).hexdigest()
             limitations = limitation_packet(required_limitations())
+            if bounded_review:
+                origins = case_context.limitation_origins if case_context else {}
+                limitations = enrich_issues(
+                    limitations, outputs, pre_editor_findings,
+                    protected_texts=[text for text in valuation.get("limitations", [])
+                                     if not origins.get(text)
+                                     or any(not origin["retirable"] for origin in origins[text])],
+                    limitation_origins=origins,
+                )
             review_data = {
                 "draft": candidate.model_dump(mode="json"), "analyses": outputs,
                 "valuation": valuation, "rendered_reader": rendered.reader_text,
@@ -646,7 +672,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 "limitation_review": limitations,
                 "limitation_policy": "For EVERY limitation issue ID return one disposition. "
                     "Material financial/research caveats must be reader_covered with an exact "
-                    "excerpt showing the caveat in the rendered reader. Audit-only is allowed "
+                    "excerpt showing the caveat in the rendered reader. Use reader_excerpts for "
+                    "multiple separately exact passages; never join passages with ellipses. "
+                    "Audit-only is allowed "
                     "only for genuinely operational or immaterial details, with a specific "
                     "rationale. Never classify a financially material unknown as immaterial "
                     "to improve readability. Return unresolved when it is missing.",
@@ -662,15 +690,43 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     "review": ReaderVerification().model_dump(mode="json"),
                     "exported": False, "coverage_batches": [],
                 }
-                batches = coverage_batches(limitations)
                 factual_data = {key: value for key, value in review_data.items()
                                 if key not in {"limitation_review", "limitation_policy"}}
+                resolution_evidence = evidence_catalog(
+                    snapshot, calculated_values, eligible_ids=_known_ids(snapshot), case_context=case_context,
+                )
+                factual_data.update(
+                    inherited_issues=limitations, resolution_evidence=resolution_evidence,
+                    issue_resolution_policy=LIFECYCLE_POLICY,
+                    conclusion_scope=case_context.scope.model_dump(mode="json") if case_context else None,
+                )
                 factual_data["review_scope"] = (
                     "Verify the exact full report's factual, numerical and causal claims. "
                     "Do not return limitation dispositions here; complete per-issue material "
                     "caveat coverage is checked in separate mandatory batches against these same bytes.")
-                main_review = call(stage, "verifier", factual_data, VerificationOutput,
-                                   True, language=language)
+                factual_review = call(stage, "verifier", factual_data, LifecycleVerification,
+                                      True, language=language)
+                main_review, limitations, lifecycle = reconcile_review(
+                    factual_review, limitations, resolution_evidence, rendered.reader_text,
+                    case_context.scope if case_context else None,
+                )
+                reader_verifications[language]["issue_lifecycle"] = lifecycle
+                still_rendered = [item["issue_id"] for item in lifecycle["issues"]
+                                  if item["status"] in {"resolved", "superseded"}
+                                  and item["text"] in rendered.reader_text]
+                if still_rendered:
+                    main_review = main_review.model_copy(update={"findings": (
+                        *main_review.findings, ReviewFinding(
+                            code="retired_issue_still_rendered", severity="critical", category="editorial",
+                            message="Retired historical warnings remain verbatim in the reader; remove "
+                                    "them from the next candidate, preserving their audit records.",
+                            affected_ids=tuple(still_rendered)),
+                    )})
+                # Only a subsequent candidate may omit retired warnings. This
+                # candidate's bytes and attestation are never rewritten in place.
+                retired_reader_texts.update(item["text"] for item in lifecycle["issues"]
+                                           if item["status"] in {"resolved", "superseded"})
+                batches = coverage_batches(limitations)
                 batch_results = []
                 for index, items in enumerate(batches):
                     batch_stage = f"{stage}-coverage-{index}"
@@ -679,7 +735,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                         "rendered_reader_sha256": rendered_hash,
                         "limitation_review": list(items),
                         "limitation_policy": review_data["limitation_policy"],
-                        "review_scope": "Only assess each supplied issue's materiality and "
+                        "review_scope": "Underlying claims and prior findings are supplied as "
+                            "context, not proof. Missing claim context must remain unresolved. "
+                            "Only assess each supplied issue's materiality and "
                             "coverage in the exact rendered text. Do not adjudicate factual "
                             "claim IDs or imply source verification. Set reviewed_report only "
                             "if you performed this coverage review. Each distinct issue needs "
@@ -708,9 +766,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             if request.financial_case_path:
                 reader_verifications[language].update({
                     "required_limitation_ids": [item["issue_id"] for item in limitations],
-                    "validated_limitation_ids": [item.issue_id for item in verification.limitation_dispositions]
-                    if verification.reviewed_report and not any(
-                        item.severity in {"warning", "critical"} for item in verification.findings) else [],
+                    "validated_limitation_ids": list(validated_disposition_ids(
+                        verification, limitations, rendered.reader_text)),
                 })
             return verification, rendered
 
@@ -910,6 +967,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 gaps.extend(text for text in required_limitations() if text not in existing_gap_texts)
             review = call("verify_claims", "verifier", outputs, VerificationOutput, True)
             reviews.extend(review.findings)
+            pre_editor_findings.extend(review.findings)
             active_admission_findings.extend(review.findings)
             claim_ids = {claim["id"] for output in outputs.values()
                          for claim in output.get("claims", [])}
@@ -944,14 +1002,19 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 if (not final_review.reviewed_report or any(
                         item.severity in {"warning", "critical"} for item in final_review.findings)):
                     reviews.extend(final_review.findings)
-                    gaps.extend(item.message for item in final_review.findings
-                                if item.severity in {"warning", "critical"})
+                    # Reader defects are repair instructions and audit history,
+                    # not new eternal financial limitations to echo in the reader.
                     # One repair only, admitted from the existing finalization reserve.
                     source_draft = call("repair_report", "editor", {
-                        **editor_data, "draft_to_repair": source_draft.model_dump(mode="json"),
+                        **editor_data,
+                        "limitations": [text for text in gaps if text not in retired_reader_texts],
+                        "issue_lifecycle": reader_verifications[request.report_language].get("issue_lifecycle"),
+                        "draft_to_repair": source_draft.model_dump(mode="json"),
                         "repair_findings": final_review.model_dump(mode="json"),
                         "repair_policy": "Resolve or explicitly qualify findings using existing "
-                                         "evidence only. Do not remove material limitations.",
+                                         "evidence only. Do not remove material limitations. "
+                                         "Remove historical warnings explicitly retired with "
+                                         "evidence in issue_lifecycle; retain their audit history.",
                     }, draft_schema, True, language=request.report_language)
                     draft = prepare_draft(source_draft, request.report_language)
                     final_review, rendered = verify_reader(
@@ -962,6 +1025,11 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                      "valuation": valuation}, VerificationOutput, True)
                 final_review = block_reader_contradictions(final_review)
             reviews.extend(final_review.findings)
+            if bounded_review:
+                lifecycle = reader_verifications.get(request.report_language, {}).get("issue_lifecycle", {})
+                retired = set(lifecycle.get("retired_issue_ids", []))
+                active_admission_findings[:] = [finding for finding in pre_editor_findings
+                    if "limitation-" + digest(finding.message) not in retired]
             active_admission_findings.extend(final_review.findings)
             if not final_review.reviewed_report or any(
                 item.severity in ({"warning", "critical"} if evidence_led else {"critical"})
@@ -1095,13 +1163,28 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             # The reader bytes remain frozen at verification. The companion audit
             # must still include later warnings/failures (e.g. an optional translation).
             final_audit = render_reader(request, primary_draft, snapshot,
-                                        reader_inputs(), request.report_language).limitations_audit
+                                        reader_inputs(include_retired=True), request.report_language).limitations_audit
             verification = reader_verifications.get(request.report_language, {})
             dispositions = {item["issue_id"]: item for item in verification.get("review", {}).get(
                 "limitation_dispositions", [])} if verification.get("exported") else {}
+            lifecycle = verification.get("issue_lifecycle", {})
+            retired_issues = {item["issue_id"]: item for item in lifecycle.get("issues", [])
+                              if item["status"] in {"resolved", "superseded"}} if (
+                verification.get("exported")
+                and lifecycle.get("reader_sha256") == hashlib.sha256(reader.encode("utf-8")).hexdigest()
+            ) else {}
             for item in final_audit["unresolved_issues"]["consolidated_exact_text"]:
                 disposition_id = "limitation-" + digest(item["original_text"])
                 item["disposition_id"] = disposition_id
+                retired_issue = retired_issues.get(disposition_id)
+                if retired_issue:
+                    # The history-inclusive rendering above is not the exported
+                    # reader. Keep retired records, but do not claim they appear
+                    # in it or remain unresolved coverage obligations.
+                    item["lifecycle_status"] = retired_issue["status"]
+                    item["displayed_in_reader"] = False
+                    item["reader_display"] = "audit_only_retired"
+                    continue
                 disposition = dispositions.get(disposition_id)
                 if disposition:
                     item["verified_disposition"] = disposition
@@ -1110,7 +1193,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                         item["reader_display"] = "verified_editorial_representation"
             final_audit["unresolved_issues"]["unrepresented_issue_ids"] = [
                 item["issue_id"] for item in final_audit["unresolved_issues"]["consolidated_exact_text"]
-                if not item["displayed_in_reader"]]
+                if not item["displayed_in_reader"] and item["reader_display"] != "audit_only_retired"]
             artifacts["reader_limitations.json"] = canonical_json({
                 **final_audit,
                 "exported_reader_sha256": hashlib.sha256(reader.encode("utf-8")).hexdigest(),

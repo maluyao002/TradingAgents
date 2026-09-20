@@ -133,7 +133,7 @@ def test_case_editor_reaches_strict_adapter_and_preserves_scoped_structure(tmp_p
 
 def test_model_identity_includes_wire_contract_version(tmp_path):
     first = CodexModelService(tmp_path / "runtime", adapter_factory=Adapter)
-    assert WIRE_SCHEMA_VERSION == "research-wire-v2"
+    assert WIRE_SCHEMA_VERSION == "research-wire-v3"
     assert first.identity != CodexModelService(
         tmp_path / "different-runtime", adapter_factory=Adapter).identity
 

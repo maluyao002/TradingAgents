@@ -12,6 +12,57 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+### Sequential PR integration review — September 19, 2026
+
+The user authorized fresh reviews, resolution of findings and sequential merge
+of PRs #14 and #15 into `codex/deep-research-v2`, never main. PR #14 merged as
+`261fe98` after Terra/medium independently found no actionable code findings;
+69 focused wire/model/case-engine tests, lint and hosted checks passed.
+
+PR #15 was reviewed against the updated integration base. Its 265-test focused
+scope passed. Coordinator review reproduced a stale audit display flag after
+successful operating-notice retirement: the original warning was retained in
+audit correctly, but incorrectly labeled as present in the actual reader.
+The correction binds retirement display metadata to the exported reader's final
+lifecycle hash, preserves history and keeps current economic caveats visible.
+Its non-optional regression fails before the fix. Sol/high independently found
+nested mutable aliases between lifecycle input, remaining issues and audit;
+independent deep copies fix this with three-direction mutation regressions.
+All 83 directly affected lifecycle/reader/case/scenario tests pass, including
+negative audit tests for unexported readers and mismatched lifecycle hashes.
+No live research or historical artifact changes are involved.
+
+### Five reader-review fixes — September 19, 2026
+
+The user authorized implementation and independent code review on separate branch
+`codex/research-review-lifecycle`. Added evidence-bound, exact-reader issue
+resolution; full claim/finding/question context; separate exact coverage spans;
+per-issue validation; explicit retirement of corrected pre-editor findings; and
+scoped disclosures without changing deterministic financial eligibility.
+Historical findings stay in audit, and unresolved/forged decisions remain blocking.
+
+The final focused **267-test** scope passed, with lint and whitespace clean.
+Independent Sol/high source review found no outstanding actionable findings after
+origin-safe retirement and the adversarial follow-ups; its post-patch scope passed
+38 tests. Offline inspection reconstructs all 205 saved NVDA issues without missing
+proposition context and preserves 112 traceable dispositions, but does not admit
+that historical draft. No new live calls, main changes or merge. Provider wire and
+engine identities are versioned to prevent silently reusing old approvals.
+Reviewed operating-metadata retirement requires its exact current package witness;
+same-text protected origins still block retirement. Unreviewed numerical notes do
+not leak through provenance metadata. The actual frozen reviewed NVDA packet
+passes a synthetic end-to-end metadata-repair fixture without changing its source
+bytes or clearing financial/acceptance gates.
+Final review hardening prevents exported nested provenance/context objects from
+aliasing machine-owned protection state. Its focused follow-up passed 67 tests,
+including the new mutation regression; both reviewers report no further finding.
+Hosted PR review then found that reviewed operating caveats were too broadly
+retirable. Narrowed eligibility to the exact legacy code-owned draft-status notice;
+all current authored/reviewer economic caveats remain protected even with a valid
+review hash. Added negative economic-caveat and positive legacy-status regressions.
+The hosted-review fix passed 86 directly affected tests, lint and whitespace checks.
+See [review lifecycle repair](DEEP-RESEARCH-REVIEW-LIFECYCLE.md).
+
 ### Stage 3 merged; authorized continuation and comparison — September 19, 2026
 
 PR #13 merged as `9cc61d7` into `codex/deep-research-v2`; its local and remote

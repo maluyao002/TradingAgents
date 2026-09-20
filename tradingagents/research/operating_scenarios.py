@@ -8,7 +8,7 @@ does not produce cash flow, valuation, funding, per-share, or terminal outputs.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Context, Decimal, localcontext
 from typing import Literal
@@ -33,6 +33,12 @@ _BOUNDARY_LIMITATION = (
 _DRAFT_LIMITATION = (
     "The operating-scenario package lacks a current independent conditional review; "
     "its numerical inputs remain audit-only and cannot be presented as a forecast."
+)
+# Compatibility for the exact code-owned status notice emitted by the original
+# draft-package builder. Attaching a current independent review supersedes this
+# notice, not arbitrary authored caveats. No fuzzy/keyword status classification.
+_LEGACY_REVIEW_STATUS_LIMITATION = (
+    "Draft-only package; an independent hash-bound review must occur after finalization."
 )
 
 
@@ -240,6 +246,24 @@ class OperatingScenarioPackage(Contract):
         return self
 
 
+class LimitationOrigin(Contract):
+    """A machine-readable limitation source; text alone never authorizes retirement."""
+
+    origin_id: Identifier
+    retirable: bool = False
+    required_witness_reference: Literal["review:operating_scenarios"] | None = None
+    package_sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+    @model_validator(mode="after")
+    def retirement_metadata_is_complete(self):
+        if self.retirable:
+            if self.required_witness_reference != "review:operating_scenarios" or not self.package_sha256:
+                raise ValueError("retirable limitation origins require reviewed operating metadata")
+        elif self.required_witness_reference is not None or self.package_sha256 is not None:
+            raise ValueError("protected limitation origins cannot carry retirement metadata")
+        return self
+
+
 @dataclass(frozen=True)
 class OperatingScenarioResult:
     reviewed: bool
@@ -247,6 +271,7 @@ class OperatingScenarioResult:
     model_context: dict
     artifacts: dict[str, bytes]
     calculated_values: tuple[CalculatedValue, ...]
+    limitation_origins: dict[str, list[dict[str, object]]] = field(default_factory=dict)
 
 
 def operating_scenario_package_sha256(package: OperatingScenarioPackage) -> str:
@@ -473,6 +498,51 @@ def _review_errors(package: OperatingScenarioPackage) -> tuple[str, ...]:
     return tuple(errors)
 
 
+def _limitation_origins(
+    package: OperatingScenarioPackage,
+    review: OperatingScenarioReview | None,
+    review_errors: tuple[str, ...],
+    *,
+    reviewed: bool,
+    package_sha256: str,
+) -> dict[str, list[dict[str, object]]]:
+    """Retain all sources for duplicate text; deterministic origins stay protected."""
+    origins: dict[str, list[LimitationOrigin]] = {}
+
+    def add(text: str, origin_id: str, *, retirable: bool) -> None:
+        origins.setdefault(text, []).append(LimitationOrigin(
+            origin_id=origin_id,
+            retirable=retirable,
+            required_witness_reference="review:operating_scenarios" if retirable else None,
+            package_sha256=package_sha256 if retirable else None,
+        ))
+
+    if reviewed:
+        for index, text in enumerate(package.limitations):
+            legacy_status = text == _LEGACY_REVIEW_STATUS_LIMITATION
+            origin_kind = "review_status" if legacy_status else "limitation"
+            add(text, f"operating.package.{origin_kind}.{index}", retirable=legacy_status)
+    if review is not None and reviewed:
+        for index, text in enumerate(review.limitations):
+            add(text, f"operating.review.limitation.{index}", retirable=False)
+        for index, finding in enumerate(review.findings):
+            if finding.severity == "info":
+                add(
+                    f"Independent review finding [info] {finding.code}: {finding.message}",
+                    f"operating.review.info.{index}",
+                    retirable=False,
+                )
+    for index, text in enumerate(review_errors):
+        add(text, f"operating.review.error.{index}", retirable=False)
+    if not reviewed:
+        add(_DRAFT_LIMITATION, "operating.review.draft", retirable=False)
+    add(_BOUNDARY_LIMITATION, "operating.boundary", retirable=False)
+    return {
+        text: [record.model_dump(mode="json") for record in records]
+        for text, records in origins.items()
+    }
+
+
 def _evidence_union(*values: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(item for group in values for item in group))
 
@@ -674,6 +744,7 @@ def evaluate_operating_scenarios(
     review_errors = _review_errors(package)
     reviewed = not review_errors
     review = package.review
+    package_hash = operating_scenario_package_sha256(package)
     limitations = tuple(
         dict.fromkeys(
             (
@@ -690,7 +761,9 @@ def evaluate_operating_scenarios(
             )
         )
     )
-    package_hash = operating_scenario_package_sha256(package)
+    limitation_origins = _limitation_origins(
+        package, review, review_errors, reviewed=reviewed, package_sha256=package_hash,
+    )
     if reviewed:
         scenarios = _numerical_outputs(package)
         calculated_values = _calculated_values(package, scenarios)
@@ -760,4 +833,5 @@ def evaluate_operating_scenarios(
         model_context=model_context,
         artifacts=artifacts,
         calculated_values=calculated_values,
+        limitation_origins=limitation_origins,
     )
