@@ -107,7 +107,7 @@ def test_explicit_complete_reader_coverage_exports_exact_reviewed_bytes(tmp_path
     assert [
         {key: value for key, value in item.items() if key != "schema_version"}
         for item in verification["review"]["limitation_dispositions"]
-    ] == dispositions
+    ] == [{**item, "reader_excerpts": []} for item in dispositions]
     assert verification["exported"] is True
     audit = read_json(request.output_dir / "reader_limitations.json")
     material_issue = next(

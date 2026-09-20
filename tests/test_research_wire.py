@@ -9,6 +9,8 @@ from tests.test_research_equity_valuation import _model as equity_model
 from tests.test_research_valuation import _model
 from tradingagents.research.case_report import SECTION_PURPOSES, CaseReportDraft
 from tradingagents.research.investigation_review import InvestigationReview
+from tradingagents.research.report_review import ReaderVerification
+from tradingagents.research.review_lifecycle import LifecycleVerification
 from tradingagents.research.stages import (
     AnalysisOutput,
     ReportDraft,
@@ -61,6 +63,8 @@ def test_investigation_wire_is_closed_and_does_not_replace_legacy_verification()
     ("business", AnalysisOutput),
     ("valuation", ValuationProposal),
     ("verifier", VerificationOutput),
+    ("verifier", ReaderVerification),
+    ("verifier", LifecycleVerification),
     ("editor", ReportDraft),
     ("editor", CaseReportDraft),
 ])
@@ -117,6 +121,22 @@ def test_case_editor_wire_preserves_purposes_and_legacy_contract():
     assert codec_for("editor", ReportDraft.model_json_schema()).domain_model is ReportDraft
     with pytest.raises(ValueError, match="unknown research response schema"):
         codec_for("business", CaseReportDraft.model_json_schema())
+
+
+def test_lifecycle_wire_requires_explicit_resolution_fields():
+    codec = codec_for("verifier", LifecycleVerification.model_json_schema())
+    payload = {
+        "schema_version": 1, "supported_claim_ids": [], "contradicted_claim_ids": [],
+        "findings": [], "reviewed_report": True,
+        "issue_resolutions": [{"schema_version": 1, "issue_id": "old", "status": "superseded",
+            "rationale": "New reviewed evidence.", "reader_excerpts": ["Current conditional result."],
+            "witnesses": [{"schema_version": 1, "reference": "calculation:base", "excerpt": "42"}]}],
+        "finding_dispositions": [],
+    }
+    assert codec.decode(payload) == payload
+    del payload["issue_resolutions"][0]["witnesses"]
+    with pytest.raises(ValidationError):
+        codec.decode(payload)
 
 
 @pytest.mark.parametrize("invalid", ["missing", "duplicate", "unknown", "rated", "extra"])

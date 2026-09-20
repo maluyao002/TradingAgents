@@ -190,7 +190,7 @@ def test_opt_in_does_not_change_legacy_request_identity(tmp_path):
                                                      "quality_revision", "valuation_method", "share_count_basis"})
     settings["evidence_path"] = sha256(legacy.evidence_path.read_bytes()).hexdigest()
     settings["prior_dossier_path"] = None
-    assert request_identity(legacy) == digest({"engine": "research-v2-preview-3", "settings": settings})
+    assert request_identity(legacy) == digest({"engine": "research-v2-preview-4", "settings": settings})
     assert request_identity(legacy) != request_identity(request)
 
 

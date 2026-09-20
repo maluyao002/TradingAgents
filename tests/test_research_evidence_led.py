@@ -46,7 +46,7 @@ def test_foundation_identity_is_byte_compatible_and_revision_is_distinct(tmp_pat
         "financial_case_path",
     })
     assert request_identity(request) == digest({
-        "engine": "research-v2-preview-3", "settings": settings,
+        "engine": "research-v2-preview-4", "settings": settings,
     })
     assert request_identity(request.model_copy(update={
         "quality_revision": "evidence-led",
