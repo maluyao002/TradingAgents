@@ -9,6 +9,7 @@ finds an operating schedule conditionally eligible.
 from __future__ import annotations
 
 import hashlib
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -168,8 +169,8 @@ class CaseContext:
             "financial_reconciliation": self.reconciliation.model_dump(mode="json"),
             "output_scope": self.scope.model_dump(mode="json"),
             "limitations": list(self.limitations),
-            "limitation_origins": self.limitation_origins,
-            **({"operating_scenarios": self.operating_scenarios.model_context}
+            "limitation_origins": deepcopy(self.limitation_origins),
+            **({"operating_scenarios": deepcopy(self.operating_scenarios.model_context)}
                if self.operating_scenarios is not None else {}),
         }
 

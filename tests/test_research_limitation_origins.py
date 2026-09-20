@@ -12,6 +12,33 @@ from tradingagents.research.operating_scenarios import (
 from tradingagents.research.storage import canonical_json
 
 
+def test_prompt_origin_metadata_does_not_alias_machine_protection(tmp_path):
+    from copy import deepcopy
+
+    from tradingagents.research.report_review import limitation_packet
+    from tradingagents.research.review_lifecycle import enrich_issues
+
+    package, case, snapshot = _reviewed()
+    request = ResearchRequest(
+        ticker=case.ticker, cutoff=case.cutoff, timezone=case.timezone, backend="api",
+        output_dir=tmp_path / "out", quality_revision="evidence-led-bounded",
+        financial_case_path=tmp_path / "case.json",
+    )
+    context = load_case_context(canonical_json({
+        "case": case, "operating_scenarios": package,
+    }), request, snapshot)
+    before = deepcopy(context.limitation_origins)
+    operating_before = deepcopy(context.operating_scenarios.model_context)
+    packet = context.model_context()
+    packet["limitation_origins"][_BOUNDARY_LIMITATION][0]["retirable"] = True
+    packet["operating_scenarios"]["package_sha256"] = "f" * 64
+    enriched = enrich_issues(limitation_packet([_BOUNDARY_LIMITATION]), {}, [],
+                             limitation_origins=context.limitation_origins)
+    enriched[0]["origins"][0]["retirable"] = True
+    assert context.limitation_origins == before
+    assert context.operating_scenarios.model_context == operating_before
+
+
 def test_reviewed_operating_origins_require_the_package_metadata_witness():
     package, case, snapshot = _reviewed()
     result = evaluate_operating_scenarios(package, case, snapshot)

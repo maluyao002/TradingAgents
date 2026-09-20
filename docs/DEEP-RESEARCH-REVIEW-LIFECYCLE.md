@@ -82,6 +82,11 @@ integration and unreviewed numerical-note leakage. Independent final review foun
 no outstanding actionable production-code findings; its post-patch focus passed
 38 tests. A semantic verifier judgment remains necessary in any future live run.
 
+Final defensive follow-up copies exported provenance/context structures so a
+consumer cannot mutate machine-owned retirement protections through shared nested
+objects. The new mutation regression and 66 directly related tests passed (67 in
+that follow-up scope); both reviewers endorsed the fix without further findings.
+
 ## Remaining delivery work
 
 After code review and integration, obtain a separate live-validation budget and

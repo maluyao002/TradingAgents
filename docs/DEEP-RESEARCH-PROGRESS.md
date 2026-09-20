@@ -33,6 +33,9 @@ same-text protected origins still block retirement. Unreviewed numerical notes d
 not leak through provenance metadata. The actual frozen reviewed NVDA packet
 passes a synthetic end-to-end metadata-repair fixture without changing its source
 bytes or clearing financial/acceptance gates.
+Final review hardening prevents exported nested provenance/context objects from
+aliasing machine-owned protection state. Its focused follow-up passed 67 tests,
+including the new mutation regression; both reviewers report no further finding.
 See [review lifecycle repair](DEEP-RESEARCH-REVIEW-LIFECYCLE.md).
 
 ### Stage 3 merged; authorized continuation and comparison — September 19, 2026

@@ -6,6 +6,7 @@ Missing decisions retain the original issue. Historical records are never edited
 """
 
 from collections import Counter
+from copy import deepcopy
 from hashlib import sha256
 from typing import Literal
 
@@ -89,7 +90,7 @@ def enrich_issues(issues, outputs, prior_findings, protected_texts=(), limitatio
                                      if (identifier not in claims and identifier not in records)
                                      or (identifier == unverified_claim and identifier not in claims)]
         item["prior_findings"] = [f.model_dump(mode="json") for f in related]
-        item["origins"] = (limitation_origins or {}).get(item["text"], [])
+        item["origins"] = deepcopy((limitation_origins or {}).get(item["text"], []))
         item["resolution_protected"] = (item["text"] in protected_texts
                                         or any(not origin["retirable"] for origin in item["origins"])
                                         or any(f.category == "security" for f in related))
