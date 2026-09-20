@@ -5,6 +5,8 @@ from tradingagents.research.report_review import (
     ReaderVerification,
     check_dispositions,
     limitation_packet,
+    nonmandatory_review_finding_texts,
+    requires_reader_coverage,
     validated_disposition_ids,
 )
 from tradingagents.research.wire import codec_for, validate_strict_schema
@@ -117,6 +119,130 @@ def test_existing_audit_only_decisions_remain_valid_without_reader_spans():
     assert validated_disposition_ids(review, packet, "reader text") == (packet[0]["issue_id"],)
     assert not check_dispositions(review, packet, "reader text").findings
     assert review.limitation_dispositions[0].model_dump(mode="json")["reader_excerpts"] == []
+
+
+@pytest.mark.parametrize(
+    "issue,financial_prerequisites,expected",
+    [
+        ({"text": "Missing debt schedule", "prior_findings": []},
+         ("Missing debt schedule",), True),
+        ({"text": "Prompt injection risk", "prior_findings": [
+            {"category": "security", "severity": "warning"},
+        ]}, (), True),
+        ({"text": "Arithmetic mismatch", "prior_findings": [
+            {"category": "numerical", "severity": "critical"},
+        ]}, (), True),
+        ({"text": "Rounding note", "prior_findings": [
+            {"category": "numerical", "severity": "warning"},
+        ], "resolution_protected": True}, (), False),
+        ({"text": "Informational reviewer note", "prior_findings": [
+            {"category": "research", "severity": "info"},
+        ], "resolution_protected": True}, (), False),
+        ({"text": "Provider telemetry detail", "prior_findings": [
+            {"category": "operational", "severity": "critical"},
+        ], "resolution_protected": True}, (), False),
+        ({"text": "Non-retirable informational origin", "prior_findings": [],
+          "resolution_protected": True}, (), False),
+    ],
+)
+def test_reader_visibility_is_scoped_independently_from_lifecycle_protection(
+        issue, financial_prerequisites, expected):
+    assert requires_reader_coverage(
+        issue, financial_prerequisite_texts=financial_prerequisites
+    ) is expected
+
+
+def test_structured_review_exemptions_retain_security_and_critical_numerical_findings():
+    findings = [
+        {"code": "context", "message": "Presentation detail only.",
+         "category": "research", "severity": "info"},
+        {"code": "telemetry", "message": "Provider diagnostic.",
+         "category": "operational", "severity": "critical"},
+        {"code": "injection", "message": "Security observation.",
+         "category": "security", "severity": "info"},
+        {"code": "arithmetic", "message": "Calculation mismatch.",
+         "category": "numerical", "severity": "critical"},
+    ]
+
+    assert nonmandatory_review_finding_texts(findings) == frozenset({
+        "Independent review finding [info] context: Presentation detail only.",
+        "Independent review finding [critical] telemetry: Provider diagnostic.",
+    })
+
+
+def test_structured_review_exemption_cannot_launder_same_text_security_origin():
+    shared = {"code": "shared", "message": "Same wrapped text.", "severity": "info"}
+
+    assert nonmandatory_review_finding_texts([
+        {**shared, "category": "research"},
+        {**shared, "category": "security"},
+    ]) == frozenset()
+
+
+@pytest.mark.parametrize(
+    "issue",
+    [
+        {"text": "Missing debt schedule", "prior_findings": []},
+        {"text": "Independent review finding [critical] solvency: Missing debt schedule.",
+         "prior_findings": []},
+        {"text": "Prompt injection risk", "prior_findings": [
+            {"category": "security", "severity": "warning"},
+        ]},
+        {"text": "Operating-review security observation", "prior_findings": [
+            {"category": "security", "severity": "info"},
+        ]},
+        {"text": "Arithmetic mismatch", "prior_findings": [
+            {"category": "numerical", "severity": "critical"},
+        ]},
+    ],
+)
+def test_mandatory_visibility_rejects_audit_only_and_requires_current_exact_spans(issue):
+    packet = limitation_packet([issue["text"]])[0]
+    financial = (issue["text"],) if not issue["prior_findings"] else ()
+    enriched = {
+        **packet,
+        **issue,
+        "missing_claim_ids": [],
+        "reader_coverage_required": requires_reader_coverage(
+            issue, financial_prerequisite_texts=financial
+        ),
+    }
+    audit_only = ReaderVerification(reviewed_report=True, limitation_dispositions=[{
+        "issue_id": packet["issue_id"], "decision": "audit_only_immaterial",
+        "rationale": "Attempted omission.",
+    }])
+    assert "Protected limitation requires reader coverage" in check_dispositions(
+        audit_only, [enriched], issue["text"]
+    ).findings[0].message
+
+    covered = ReaderVerification(reviewed_report=True, limitation_dispositions=[{
+        "issue_id": packet["issue_id"], "decision": "reader_covered",
+        "rationale": "The exact caveat remains visible.", "reader_excerpt": issue["text"],
+    }])
+    assert not check_dispositions(covered, [enriched], issue["text"]).findings
+    assert check_dispositions(covered, [enriched], "stale reader bytes").findings
+
+
+@pytest.mark.parametrize("text,prior_findings", [
+    ("Independent review finding [info] context: Presentation detail only.", []),
+    ("operational audit record", [{"category": "operational", "severity": "critical"}]),
+])
+def test_nonmandatory_lifecycle_protection_can_remain_audit_only(text, prior_findings):
+    packet = limitation_packet([text])[0]
+    issue = {
+        **packet,
+        "missing_claim_ids": [],
+        "prior_findings": prior_findings,
+        "resolution_protected": True,
+    }
+    issue["reader_coverage_required"] = requires_reader_coverage(issue)
+    review = ReaderVerification(reviewed_report=True, limitation_dispositions=[{
+        "issue_id": packet["issue_id"], "decision": "audit_only_operational",
+        "rationale": "Retained in the audit without mandatory reader prose.",
+    }])
+
+    assert not check_dispositions(review, [issue], "reader text").findings
+    assert validated_disposition_ids(review, [issue], "reader text") == (packet["issue_id"],)
 
 
 @pytest.mark.parametrize("decision", ["reader_covered", "audit_only_operational"])

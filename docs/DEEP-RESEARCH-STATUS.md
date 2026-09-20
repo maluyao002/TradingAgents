@@ -238,9 +238,25 @@ feature integration branch. The pre-merge follow-up also corrects audit display
 flags for retired historical notices; it does not alter report acceptance.
 See [the repair design and validation](DEEP-RESEARCH-REVIEW-LIFECYCLE.md).
 Historical NVDA artifacts and financial gates remain unchanged; no new live
-research is authorized by these offline repairs. Efficient finalization planning,
-reader/audit presentation and actual report acceptance remain work. Stage 4 and
-production activation have not started.
+research is authorized by those offline repairs. Finalization planning and reader
+presentation are addressed in the subsequent offline delivery below; actual
+report acceptance remains open. Stage 4 and production activation have not started.
+
+**Offline follow-up steps 2–3:** finalization efficiency and reader presentation
+are implemented on `codex/research-finalization-reader`, targeting the feature
+integration branch through a separate PR. This is not closure of original roadmap
+Stage 2 or Stage 3. Added lossless exact-context grouping, full-payload cost plans,
+clean exact-reader coverage reuse, and separately authorized candidate continuation
+for the initial settled-usage English case scope. Compact candidates are reviewed
+before export, retain every mandatory caveat in coverage/audit, distinguish
+paragraph citations from section-only source inventories, and support reviewed
+scenario tables and declared-unit percentages. A 363-test targeted integration
+scope passed. The saved NVDA formatting preview is 45.7% smaller but remains
+unverified; its paragraph-citation deficiency is now explicitly detected.
+See [implementation, scope and validation](DEEP-RESEARCH-FINALIZATION-READER.md).
+Next after review/integration: obtain a new bounded live budget, validate the actual
+NVDA English export, then obtain user acceptance. Financial/evidence closure and
+HOOD generality remain separate work; no live run is authorized by this change.
 
 Deliverables:
 

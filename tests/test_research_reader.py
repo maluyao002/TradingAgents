@@ -2,8 +2,14 @@ from hashlib import sha256
 
 import pytest
 
+from tradingagents.research.case_report import (
+    CASE_READER_REQUIREMENTS,
+    SECTION_PURPOSES,
+    CaseReportDraft,
+)
 from tradingagents.research.contracts import (
     EvidenceSnapshot,
+    FinancialFact,
     ResearchRequest,
     ReviewFinding,
     SourceDocument,
@@ -154,6 +160,34 @@ def test_source_footnotes_and_section_evidence_have_stable_machine_mapping(tmp_p
     ]
 
 
+def test_explicit_financial_fact_reference_resolves_through_source_ancestry(tmp_path):
+    request = _request(tmp_path)
+    source = _source("filing")
+    fact = FinancialFact(
+        id="anchor-revenue",
+        source_id="filing",
+        metric="revenue",
+        value=1,
+        unit="USD",
+        currency="USD",
+        period_end="2026-06-30",
+        basis="GAAP",
+        location="synthetic",
+    )
+    snapshot = EvidenceSnapshot(
+        ticker="TEST", cutoff=request.cutoff, sources=(source,), facts=(fact,)
+    )
+    draft = _draft(limitations=("Scope is limited.",), evidence_ids=("anchor-revenue",))
+    draft = draft.model_copy(
+        update={"sections": (draft.sections[0].model_copy(update={"text": "Revenue anchor. [anchor-revenue]"}),)}
+    )
+
+    rendered = render_reader(request, draft, snapshot, ())
+
+    assert "Revenue anchor. [^1]" in rendered.reader_text
+    assert "[anchor-revenue]" not in rendered.reader_text
+
+
 def test_structured_critical_blockers_are_not_hidden_and_operational_logs_stay_out(tmp_path):
     request = _request(tmp_path)
     snapshot = EvidenceSnapshot(ticker="TEST", cutoff=request.cutoff, sources=(_source(),))
@@ -182,6 +216,7 @@ def test_structured_critical_blockers_are_not_hidden_and_operational_logs_stay_o
     assert "The filing contradicts the reported margin claim." in rendered.reader_text
     assert "A critical operational issue affected research completeness" in rendered.reader_text
     assert "SECRET-raw-log" not in rendered.reader_text
+    assert "audit issue `" not in rendered.reader_text
     issues = rendered.limitations_audit["unresolved_issues"]
     assert [item["original_text"] for item in issues["occurrences"]] == [
         research_blocker.message,
@@ -215,3 +250,187 @@ def test_chinese_rendering_remains_supported_without_changing_audit_semantics(tm
     assert "证据覆盖有限。" in rendered.reader_text
     assert "原始缺口" not in rendered.reader_text
     assert rendered.limitations_audit["language"] == "Chinese"
+
+
+def _case_draft():
+    return CaseReportDraft(
+        sections=tuple(
+            {
+                "purpose": purpose,
+                "title": purpose.replace("_", " ").title(),
+                "text": (
+                    "Material uncertainty remains. Draft caveat. Funding gap. [filing]"
+                    if purpose == "material_gaps"
+                    else "Concise case analysis."
+                ),
+                "evidence_ids": ("filing", "competitor") if purpose == "material_gaps" else (),
+            }
+            for purpose in SECTION_PURPOSES
+        ),
+        limitations=("Draft caveat.",),
+        investment_view="unrated",
+    )
+
+
+@pytest.mark.parametrize("compact", [False, True])
+@pytest.mark.parametrize("authored", ["[^1]", "[^999]", "[^1]: fabricated source", "[filing] [^1]"])
+def test_reader_rejects_authored_numeric_footnotes(tmp_path, compact, authored):
+    request = _request(tmp_path)
+    snapshot = EvidenceSnapshot(ticker="TEST", cutoff=request.cutoff,
+                                sources=(_source(), _source("competitor")))
+    draft = _case_draft()
+    draft = draft.model_copy(update={"sections": (
+        draft.sections[0].model_copy(update={"text": "Unsupported attribution. " + authored}),
+        *draft.sections[1:],
+    )})
+    with pytest.raises(ValueError, match="authored numeric footnotes"):
+        render_reader(request, draft, snapshot, (), compact=compact)
+
+
+def test_displayed_limitations_escape_source_ordinals_without_rewriting_audit(tmp_path):
+    request = _request(tmp_path)
+    snapshot = EvidenceSnapshot(ticker="TEST", cutoff=request.cutoff, sources=(_source(),))
+    caveat = "Unverified source attribution [^1]"
+    rendered = render_reader(request, _draft(limitations=(caveat,)), snapshot, (
+        ReaderIssue(message=caveat, provenance_id="numeric-test", severity="critical", category="numerical"),
+    ))
+    assert "- Unverified source attribution \\[^1\\]" in rendered.reader_text
+    assert "- " + caveat not in rendered.reader_text
+    assert rendered.limitations_audit["draft_limitations"]["occurrences"][0]["original_text"] == caveat
+    assert rendered.limitations_audit["unresolved_issues"]["occurrences"][0]["original_text"] == caveat
+
+
+def test_compact_reader_is_an_unverified_case_candidate_with_only_explicit_footnotes(tmp_path):
+    request = _request(tmp_path)
+    snapshot = EvidenceSnapshot(
+        ticker="TEST", cutoff=request.cutoff, sources=(_source("filing"), _source("competitor"))
+    )
+    draft = _case_draft()
+    compact = render_reader(request, draft, snapshot, ("Funding gap.",), compact=True)
+
+    assert compact.limitations_audit["reader_compaction"]["active"] is True
+    assert compact.limitations_audit["reader_compaction"]["accepted"] is False
+    assert (
+        compact.limitations_audit["reader_compaction"]
+        ["presentation_only_requires_exact_reader_verification"]
+        is True
+    )
+    assert "## Material limitations" not in compact.reader_text
+    assert "Funding gap." in compact.reader_text and "Draft caveat." in compact.reader_text
+    assert "audit issue `" not in compact.reader_text
+    assert "[^1]: [Synthetic filing]" in compact.reader_text
+    assert "Section sources (not paragraph-level support): [^2]" in compact.reader_text
+    assert "[^2]: [Synthetic competitor]" in compact.reader_text
+    assert compact.limitations_audit["citation_scope"] == "mixed"
+    assert compact.limitations_audit["source_footnotes"][1]["footnote_number"] == 2
+    assert compact.limitations_audit["paragraph_citations"] == [
+        {
+            "section_index": 8,
+            "paragraph_index": 1,
+            "source_ids": ["filing"],
+            "source_footnote_numbers": [1],
+            "citation_scope": "paragraph",
+        }
+    ]
+    assert compact.limitations_audit["section_citations"] == [
+        {
+            "section_index": 8,
+            "citation_scope": "section_only",
+            "source_ids": ["competitor"],
+            "source_footnote_numbers": [2],
+        }
+    ]
+
+
+def test_compact_reader_labels_legacy_section_only_sources_and_flags_uncited_paragraphs(tmp_path):
+    request = _request(tmp_path)
+    snapshot = EvidenceSnapshot(
+        ticker="TEST", cutoff=request.cutoff, sources=(_source("filing"), _source("competitor"))
+    )
+    draft = _case_draft()
+    material_gaps = draft.sections[-1].model_copy(
+        update={"text": "Legacy evidence is declared at the section level only."}
+    )
+    draft = draft.model_copy(update={"sections": (*draft.sections[:-1], material_gaps)})
+
+    rendered = render_reader(request, draft, snapshot, (), compact=True)
+
+    assert "Section sources (not paragraph-level support): [^1][^2]" in rendered.reader_text
+    assert rendered.limitations_audit["citation_scope"] == "section_only"
+    assert rendered.limitations_audit["paragraph_citations"] == [
+        {
+            "section_index": 8,
+            "paragraph_index": 1,
+            "source_ids": [],
+            "source_footnote_numbers": [],
+            "citation_scope": "missing_explicit",
+        }
+    ]
+    assert rendered.limitations_audit["section_citations"] == [
+        {
+            "section_index": 8,
+            "citation_scope": "section_only",
+            "source_ids": ["filing", "competitor"],
+            "source_footnote_numbers": [1, 2],
+        }
+    ]
+
+
+def test_compact_flag_cannot_shorten_a_noncase_reader(tmp_path):
+    request = _request(tmp_path)
+    snapshot = EvidenceSnapshot(ticker="TEST", cutoff=request.cutoff, sources=(_source(),))
+    rendered = render_reader(
+        request,
+        _draft(limitations=("Scope is limited.",), evidence_ids=("filing",)),
+        snapshot,
+        (),
+        compact=True,
+    )
+
+    assert rendered.limitations_audit["reader_compaction"]["active"] is False
+    assert rendered.limitations_audit["reader_compaction"]["reason"] == "authored_material_gaps_section_required"
+    assert "## Material limitations" in rendered.reader_text
+    assert "{{scenario_table}}" in CASE_READER_REQUIREMENTS
+    assert "explicit [source_id] or [fact_id]" in CASE_READER_REQUIREMENTS
+
+
+def test_compact_candidate_keeps_critical_security_and_numerical_warnings(tmp_path):
+    request = _request(tmp_path)
+    snapshot = EvidenceSnapshot(
+        ticker="TEST", cutoff=request.cutoff, sources=(_source(), _source("competitor"))
+    )
+    financial = ReaderIssue(
+        message="Financial bridge remains unresolved.",
+        provenance_id="financial:bridge",
+        severity="critical",
+        category="financial",
+    )
+    security = ReaderIssue(
+        message="Security control evidence is incomplete.",
+        provenance_id="security:control",
+        severity="critical",
+        category="security",
+    )
+    numerical = ReaderIssue(
+        message="Numerical reconciliation failed.",
+        provenance_id="numerical:reconciliation",
+        severity="critical",
+        category="numerical",
+    )
+
+    rendered = render_reader(
+        request, _case_draft(), snapshot, (financial, security, numerical), compact=True
+    )
+
+    assert "Security control evidence is incomplete." in rendered.reader_text
+    assert "Numerical reconciliation failed." in rendered.reader_text
+    assert "Financial bridge remains unresolved." not in rendered.reader_text
+    financial_audit = next(
+        item
+        for item in rendered.limitations_audit["unresolved_issues"]["consolidated_exact_text"]
+        if item["original_text"] == financial.message
+    )
+    assert financial_audit["reader_display"] == "authored_material_gaps_pending_verification"
+    assert financial_audit["issue_id"] in rendered.limitations_audit["unresolved_issues"][
+        "unrepresented_issue_ids"
+    ]

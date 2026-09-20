@@ -79,10 +79,35 @@ class ScenarioFixture(CaseFixture):
             section["text"] = (
                 "Synthetic conditional fiscal-year operating income: "
                 "{{calc:operating_scenario.base.fiscal_total.operating_income}}. "
-                "This is not a target, cash flow or funding assessment."
+                "This is not a target, cash flow or funding assessment. [filing]"
             )
             section["evidence_ids"] = ["filing"]
         return reply
+
+
+def test_generated_scenario_table_retains_sources_without_authored_section_ids(tmp_path):
+    class TableFixture(CaseFixture):
+        def complete(self, role, payload, request):
+            reply = super().complete(role, payload, request)
+            if role == "editor":
+                section = next(s for s in reply.data["sections"] if s["purpose"] == "scenarios")
+                section.update(text="{{scenario_table}}", evidence_ids=[])
+            return reply
+
+    request, snapshot, _ = operating_setup(tmp_path)
+    model = TableFixture()
+    result = run_research(request, ResearchServices(SnapshotEvidenceService(snapshot), model))
+    assert result.stop_reason == "completed_needs_review"
+    reader = (request.output_dir / "reader_report.md").read_text()
+    assert "| Sources |" in reader and "| Base |" in reader
+    assert "[^1]" in reader.split("| Base |", 1)[1].split("\n", 1)[0]
+    assert "[anchor-" not in reader
+    factual = next(payload for _, payload in model.calls if payload["stage"] == "verify_report")
+    citations = factual["research"]["paragraph_citations"]
+    section_index = next(index for index, section in enumerate(
+        factual["research"]["draft"]["sections"], start=1) if section["purpose"] == "scenarios")
+    assert any(item["section_index"] == section_index and item["source_ids"] == ["filing"]
+               for item in citations)
 
 
 def test_reviewed_operating_numbers_flow_through_challenge_reader_and_exact_review(tmp_path):
