@@ -1,6 +1,6 @@
 # Deep Research V2 — current status and delivery roadmap
 
-Reconciled September 18, 2026; updated September 19 for the Stage 3 merge and live continuation.
+Reconciled September 18, 2026; updated September 19 for Stage 3 review and sequential PR delivery.
 This is the current work index and recommended execution order, not new release
 acceptance or authorization for additional live calls. The original M0–M6 gates
 remain in [the implementation plan](DEEP-RESEARCH-PLAN.md).
@@ -218,8 +218,8 @@ authorized continuation and automatic retries up to 3,000,000 combined new token
 90 minutes overall and 600 seconds per call. The first continuation consumed
 308,858 tokens and exposed a local case-editor wire registration failure. Exact
 offline reproduction proved no provider dispatch for that editor. Fix `c2d9dd0`
-is in open PR #14 on `codex/research-case-editor-wire`, targeting the feature
-integration branch, not main. The retry consumed 1,039,397 new tokens, generated
+was delivered through PR #14, merged as `261fe98` into `codex/deep-research-v2`,
+not main. The retry consumed 1,039,397 new tokens, generated
 a full English draft, and completed factual review plus 18 issue-coverage batches.
 Conservative budget admission stopped before repair; final export remains blocked.
 
@@ -232,7 +232,10 @@ is only a diagnostic placeholder. See the [continuation outcome](DEEP-RESEARCH-S
 The user subsequently authorized the five review-system fixes and code review.
 Evidence-backed issue resolution, full proposition context, multiple exact reader
 spans, per-issue validation, final-reader reconciliation and scoped finding
-dispositions are implemented on separate `codex/research-review-lifecycle`.
+dispositions are delivered through PR #15 from `codex/research-review-lifecycle`.
+The user authorized a fresh review and sequential merge of #14 then #15 into the
+feature integration branch. The pre-merge follow-up also corrects audit display
+flags for retired historical notices; it does not alter report acceptance.
 See [the repair design and validation](DEEP-RESEARCH-REVIEW-LIFECYCLE.md).
 Historical NVDA artifacts and financial gates remain unchanged; no new live
 research is authorized by these offline repairs. Efficient finalization planning,

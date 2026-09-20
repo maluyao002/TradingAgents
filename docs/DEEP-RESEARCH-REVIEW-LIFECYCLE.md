@@ -1,9 +1,11 @@
 # Reader-review lifecycle repair
 
 September 19, 2026. Branch: `codex/research-review-lifecycle`, targeting
-`codex/deep-research-v2`, never main. This branch includes the still-open PR #14
-case-editor wire prerequisite. No live research, historical artifact rewriting,
-financial clearance, merge or production activation is part of this repair.
+`codex/deep-research-v2`, never main. The PR #14 case-editor wire prerequisite
+merged as `261fe98` after a fresh independent review and 69 focused tests.
+The user subsequently authorized sequential integration of PRs #14 and #15.
+No live research, historical artifact rewriting, financial clearance or
+production activation is part of this delivery.
 
 ## Five fixes and their boundaries
 
@@ -96,6 +98,22 @@ code-generated review-status notice, with no fuzzy matching or input-schema/hash
 changes. Regressions prove the current Q4 analyst-versus-guidance caveat cannot be
 retired by presenting a valid review hash, and a protected same-text origin wins.
 The hosted-review fix passed 86 directly affected tests plus lint/whitespace checks.
+
+The subsequent pre-merge review checked the lifecycle/coverage/case/schema paths
+and recovery/admission boundaries: 265 focused tests passed. It also reproduced
+an audit-only defect: history-inclusive rendering marked a retired operating
+notice as still displayed in the exported reader. The fix records its final
+reader-bound lifecycle status and `audit_only_retired` display state, retaining
+the original record without counting it as an unresolved coverage omission.
+Only an exported reader with a matching final lifecycle hash can receive this
+classification. The new non-optional regression failed before the fix; negative
+tests also protect unexported readers and mismatched lifecycle hashes.
+Independent Sol/high review additionally found shared nested issue objects
+between the input, remaining coverage packet and lifecycle ledger. Independent
+deep copies now isolate those records; all three mutation directions failed
+before the fix and pass afterward. The combined directly affected lifecycle/
+reader/case/scenario scope passes 83 tests, with lint and whitespace clean.
+Financial gates and actual reader bytes are unchanged by these audit corrections.
 
 ## Remaining delivery work
 

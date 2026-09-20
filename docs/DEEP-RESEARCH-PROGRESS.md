@@ -12,6 +12,26 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+### Sequential PR integration review — September 19, 2026
+
+The user authorized fresh reviews, resolution of findings and sequential merge
+of PRs #14 and #15 into `codex/deep-research-v2`, never main. PR #14 merged as
+`261fe98` after Terra/medium independently found no actionable code findings;
+69 focused wire/model/case-engine tests, lint and hosted checks passed.
+
+PR #15 was reviewed against the updated integration base. Its 265-test focused
+scope passed. Coordinator review reproduced a stale audit display flag after
+successful operating-notice retirement: the original warning was retained in
+audit correctly, but incorrectly labeled as present in the actual reader.
+The correction binds retirement display metadata to the exported reader's final
+lifecycle hash, preserves history and keeps current economic caveats visible.
+Its non-optional regression fails before the fix. Sol/high independently found
+nested mutable aliases between lifecycle input, remaining issues and audit;
+independent deep copies fix this with three-direction mutation regressions.
+All 83 directly affected lifecycle/reader/case/scenario tests pass, including
+negative audit tests for unexported readers and mismatched lifecycle hashes.
+No live research or historical artifact changes are involved.
+
 ### Five reader-review fixes — September 19, 2026
 
 The user authorized implementation and independent code review on separate branch

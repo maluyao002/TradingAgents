@@ -1,8 +1,9 @@
 # Stage 3 — case-backed reader engineering checkpoint
 
 September 19, 2026. PR #13 merged into `codex/deep-research-v2`; the Stage 3
-subbranch was deleted. The case-editor fix is in open PR #14 on
-`codex/research-case-editor-wire`, targeting that integration branch, never `main`.
+subbranch was deleted. The case-editor fix merged through PR #14 as `261fe98`
+into that integration branch, never `main`. PR #15 delivers the subsequent
+[reader-review lifecycle repair](DEEP-RESEARCH-REVIEW-LIFECYCLE.md).
 The authorized continuation produced a substantive English review draft but
 stopped before repair/export; see [the outcome](DEEP-RESEARCH-STAGE3-CONTINUATION.md).
 This is an engineering checkpoint,
