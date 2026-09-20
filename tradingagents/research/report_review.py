@@ -36,6 +36,48 @@ def limitation_packet(gaps):
             for text in dict.fromkeys(gaps)]
 
 
+def nonmandatory_review_finding_texts(findings) -> frozenset[str]:
+    """Return exact structured review findings eligible to remain audit-only."""
+
+    eligible, nonexempt = set(), set()
+    for finding in findings:
+        value = finding if isinstance(finding, dict) else finding.model_dump(mode="json")
+        category, severity = value.get("category"), value.get("severity")
+        text = (
+            f"Independent review finding [{severity}] "
+            f"{value['code']}: {value['message']}"
+        )
+        if (
+            (severity == "info" or category == "operational")
+            and category != "security"
+            and not (category == "numerical" and severity == "critical")
+        ):
+            eligible.add(text)
+            continue
+        nonexempt.add(text)
+    return frozenset(eligible - nonexempt)
+
+
+def requires_reader_coverage(issue, *, financial_prerequisite_texts=()) -> bool:
+    """Select caveats that compact presentation must retain in reader prose.
+
+    Lifecycle protection and reader visibility are separate decisions.  A
+    non-retirable informational or operational record may remain in the audit;
+    deterministic financial prerequisites, security issues, and critical
+    numerical issues may not.
+    """
+
+    if issue.get("text") in frozenset(financial_prerequisite_texts):
+        return True
+    for finding in issue.get("prior_findings", ()):
+        category = finding.get("category")
+        if category == "security":
+            return True
+        if category == "numerical" and finding.get("severity") == "critical":
+            return True
+    return False
+
+
 def _provided_spans(disposition: LimitationDisposition) -> tuple[str, ...]:
     """Return literal spans without joining, normalizing, or inferring any text."""
     legacy = (disposition.reader_excerpt,) if disposition.reader_excerpt else ()
@@ -91,7 +133,9 @@ def _disposition_validation(review: ReaderVerification, issues, reader: str):
             failures.append((issue_id, f"Cannot determine limitation proposition: {issue_id}"))
             continue
         if disposition.decision.startswith("audit_only"):
-            if spans:
+            if issue_by_id[issue_id].get("reader_coverage_required"):
+                failures.append((issue_id, f"Protected limitation requires reader coverage: {issue_id}"))
+            elif spans:
                 failures.append((issue_id, f"Audit-only disposition has reader spans: {issue_id}"))
             else:
                 valid_ids.append(issue_id)

@@ -79,7 +79,7 @@ class ScenarioFixture(CaseFixture):
             section["text"] = (
                 "Synthetic conditional fiscal-year operating income: "
                 "{{calc:operating_scenario.base.fiscal_total.operating_income}}. "
-                "This is not a target, cash flow or funding assessment."
+                "This is not a target, cash flow or funding assessment. [filing]"
             )
             section["evidence_ids"] = ["filing"]
         return reply
