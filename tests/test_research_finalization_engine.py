@@ -174,6 +174,55 @@ def test_compact_author_limitations_get_final_reader_bound_audit_dispositions(tm
     assert all(item["verified_disposition"]["decision"] == "reader_covered" for item in authored)
 
 
+def test_continuation_resume_after_paid_reply_before_stage_save_never_redispatches(tmp_path):
+    from datetime import datetime, timezone
+
+    from tests.test_research_case_engine import CaseFixture
+    from tradingagents.research.engine import run_research
+    from tradingagents.research.finalization_recovery import (
+        FinalizationRecoveryAuthorization,
+        FinalizationRecoveryModelService,
+        authorize_finalization_continuation,
+        prepare_finalization_continuation,
+    )
+    from tradingagents.research.services import ResearchServices
+    from tradingagents.research.storage import CheckpointStore
+
+    class LostStageOutput(CheckpointStore):
+        def save_stage(self, stage, inputs, output):
+            if stage.startswith("verify_report-coverage-"):
+                raise OSError("synthetic interruption after paid reply")
+            return super().save_stage(stage, inputs, output)
+
+    source, services, _, stopped = _budget_stopped_case(tmp_path)
+    destination = source.model_copy(update={
+        "output_dir": tmp_path / "continued",
+        "budget": source.budget.model_copy(update={"total_tokens": 3_000_000}),
+    })
+    plan = prepare_finalization_continuation(source.output_dir, destination)
+    authorization = FinalizationRecoveryAuthorization(
+        authorization_id="offline-crash-fixture", authorized_at=datetime.now(timezone.utc),
+        plan_sha256=plan.plan_sha256, new_request_identity=plan.new_request_identity,
+        incremental_budget=destination.budget, authorize_live_continuation=True,
+    )
+    authorized = authorize_finalization_continuation(plan, authorization)
+    first_provider = CaseFixture()
+    interrupted = run_research(destination, ResearchServices(
+        services.evidence, FinalizationRecoveryModelService(authorized, first_provider),
+        storage=LostStageOutput,
+    ))
+    assert interrupted.stop_reason == "stage_failed"
+    assert len(first_provider.calls) == 1
+    assert interrupted.usage.total_tokens == stopped.usage.total_tokens + 130
+    resumed_provider = CaseFixture()
+    resumed = run_research(destination, ResearchServices(
+        services.evidence, FinalizationRecoveryModelService(authorized, resumed_provider),
+    ))
+    assert resumed.stop_reason == "stage_failed"
+    assert not resumed_provider.calls
+    assert resumed.usage == interrupted.usage
+
+
 def test_compact_protected_prerequisites_cannot_be_moved_to_audit_only(tmp_path):
     from tests.test_research_case_engine import CaseFixture, case_setup
     from tradingagents.research.engine import run_research

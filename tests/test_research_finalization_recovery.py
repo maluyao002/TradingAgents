@@ -387,6 +387,30 @@ def test_valid_restored_live_state_preserves_candidate_boundary(tmp_path):
     assert fresh.candidate_recovery_context == service.candidate_recovery_context
 
 
+@pytest.mark.parametrize("restore", [False, True])
+@pytest.mark.parametrize("changed_payload", [False, True])
+def test_recorded_current_call_never_redispatches_without_cached_output(
+        tmp_path, restore, changed_payload):
+    plan, service, live, payloads = _service(tmp_path)
+    service.complete("verifier", payloads["verify_report"], plan.destination_request)
+    payload = {"stage": "verify_report-coverage-1"}
+    service.complete("verifier", payload, plan.destination_request)
+    recorded = deepcopy(service.candidate_recovery_context)
+    if restore:
+        live = _Live(plan.current_provider_identity)
+        service = FinalizationRecoveryModelService(
+            authorize_finalization_continuation(plan, _authorization(plan)), live)
+        service.validate_request(plan.destination_request, dict(plan.frozen_inputs))
+        service.restore_recovery_context(recorded)
+    before_calls = len(live.calls)
+    if changed_payload:
+        payload = {**payload, "research": {"changed": True}}
+    with pytest.raises(ValueError, match="already dispatched"):
+        service.complete("verifier", payload, plan.destination_request)
+    assert len(live.calls) == before_calls
+    assert service.candidate_recovery_context == recorded
+
+
 def test_plan_writer_does_not_replace_concurrently_created_target(tmp_path, monkeypatch):
     from tradingagents.research import finalization_recovery as recovery
 

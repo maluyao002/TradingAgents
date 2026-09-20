@@ -852,6 +852,10 @@ class FinalizationRecoveryModelService:
         stage = engine_payload.get("stage")
         if not isinstance(stage, str):
             raise ValueError("candidate-recovery call lacks a stage")
+        if any(call["stage"] == stage for call in self._current_calls):
+            # Resources/usage may have been persisted before the stage output.
+            # A missing output cache is not permission to pay for this call again.
+            raise ValueError("candidate-recovery stage already dispatched; output recovery required")
         stages = {item.stage: item for item in self.plan.plan.imported_stages}
         if stage in self._imported_stage_names:
             raise ValueError("candidate-recovery engine repeated an imported stage")
