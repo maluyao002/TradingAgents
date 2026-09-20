@@ -34,6 +34,12 @@ _DRAFT_LIMITATION = (
     "The operating-scenario package lacks a current independent conditional review; "
     "its numerical inputs remain audit-only and cannot be presented as a forecast."
 )
+# Compatibility for the exact code-owned status notice emitted by the original
+# draft-package builder. Attaching a current independent review supersedes this
+# notice, not arbitrary authored caveats. No fuzzy/keyword status classification.
+_LEGACY_REVIEW_STATUS_LIMITATION = (
+    "Draft-only package; an independent hash-bound review must occur after finalization."
+)
 
 
 class ForecastSourceMaterial(Contract):
@@ -513,16 +519,18 @@ def _limitation_origins(
 
     if reviewed:
         for index, text in enumerate(package.limitations):
-            add(text, f"operating.package.limitation.{index}", retirable=True)
+            legacy_status = text == _LEGACY_REVIEW_STATUS_LIMITATION
+            origin_kind = "review_status" if legacy_status else "limitation"
+            add(text, f"operating.package.{origin_kind}.{index}", retirable=legacy_status)
     if review is not None and reviewed:
         for index, text in enumerate(review.limitations):
-            add(text, f"operating.review.limitation.{index}", retirable=True)
+            add(text, f"operating.review.limitation.{index}", retirable=False)
         for index, finding in enumerate(review.findings):
             if finding.severity == "info":
                 add(
                     f"Independent review finding [info] {finding.code}: {finding.message}",
                     f"operating.review.info.{index}",
-                    retirable=True,
+                    retirable=False,
                 )
     for index, text in enumerate(review_errors):
         add(text, f"operating.review.error.{index}", retirable=False)

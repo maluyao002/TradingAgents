@@ -34,8 +34,11 @@ Unresolved financial prerequisites remain protected. An authored inference can b
 explicitly conditional without being a verified fact. Missing historical usage
 still prevents full acceptance and is never changed by reader-review decisions.
 
-Limitation origins distinguish reviewed operating-package/review metadata from
-deterministic financial restrictions. Retirement of the former requires an exact
+Limitation origins distinguish the exact legacy code-owned draft/review-status
+notice from current authored/reviewer caveats and deterministic financial restrictions.
+Only that obsolete status notice is retirable after independent review; arbitrary
+package limitations, reviewer limitations and informational economic findings stay
+protected. Retirement of the status notice requires an exact
 witness containing the current independently reviewed package hash. If identical
 text also comes from any protected origin, it cannot be retired. Unreviewed
 numerical notes are withheld from origin metadata as well as ordinary prompts.
@@ -86,6 +89,13 @@ Final defensive follow-up copies exported provenance/context structures so a
 consumer cannot mutate machine-owned retirement protections through shared nested
 objects. The new mutation regression and 66 directly related tests passed (67 in
 that follow-up scope); both reviewers endorsed the fix without further findings.
+
+Hosted review subsequently identified an overly broad retirement flag on reviewed
+operating-package/reviewer limitations. The fix narrows it to the exact legacy
+code-generated review-status notice, with no fuzzy matching or input-schema/hash
+changes. Regressions prove the current Q4 analyst-versus-guidance caveat cannot be
+retired by presenting a valid review hash, and a protected same-text origin wins.
+The hosted-review fix passed 86 directly affected tests plus lint/whitespace checks.
 
 ## Remaining delivery work
 

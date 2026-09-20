@@ -36,6 +36,11 @@ bytes or clearing financial/acceptance gates.
 Final review hardening prevents exported nested provenance/context objects from
 aliasing machine-owned protection state. Its focused follow-up passed 67 tests,
 including the new mutation regression; both reviewers report no further finding.
+Hosted PR review then found that reviewed operating caveats were too broadly
+retirable. Narrowed eligibility to the exact legacy code-owned draft-status notice;
+all current authored/reviewer economic caveats remain protected even with a valid
+review hash. Added negative economic-caveat and positive legacy-status regressions.
+The hosted-review fix passed 86 directly affected tests, lint and whitespace checks.
 See [review lifecycle repair](DEEP-RESEARCH-REVIEW-LIFECYCLE.md).
 
 ### Stage 3 merged; authorized continuation and comparison — September 19, 2026
