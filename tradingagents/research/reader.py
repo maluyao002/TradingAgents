@@ -132,6 +132,9 @@ def _safe_http_url(value: str) -> str | None:
 
 
 def _bullet(value: str) -> str:
+    # Limitation text is retained verbatim in audit, but cannot author renderer
+    # source ordinals through a displayed bullet either.
+    value = re.sub(r"\[\^\d+\]", lambda match: "\\[" + match[0][1:-1] + "\\]", value)
     lines = value.splitlines() or [""]
     return "- " + "\n  ".join(lines)
 

@@ -287,6 +287,19 @@ def test_reader_rejects_authored_numeric_footnotes(tmp_path, compact, authored):
         render_reader(request, draft, snapshot, (), compact=compact)
 
 
+def test_displayed_limitations_escape_source_ordinals_without_rewriting_audit(tmp_path):
+    request = _request(tmp_path)
+    snapshot = EvidenceSnapshot(ticker="TEST", cutoff=request.cutoff, sources=(_source(),))
+    caveat = "Unverified source attribution [^1]"
+    rendered = render_reader(request, _draft(limitations=(caveat,)), snapshot, (
+        ReaderIssue(message=caveat, provenance_id="numeric-test", severity="critical", category="numerical"),
+    ))
+    assert "- Unverified source attribution \\[^1\\]" in rendered.reader_text
+    assert "- " + caveat not in rendered.reader_text
+    assert rendered.limitations_audit["draft_limitations"]["occurrences"][0]["original_text"] == caveat
+    assert rendered.limitations_audit["unresolved_issues"]["occurrences"][0]["original_text"] == caveat
+
+
 def test_compact_reader_is_an_unverified_case_candidate_with_only_explicit_footnotes(tmp_path):
     request = _request(tmp_path)
     snapshot = EvidenceSnapshot(

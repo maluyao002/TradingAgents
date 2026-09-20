@@ -127,8 +127,7 @@ def test_declared_fraction_and_source_backed_scenario_table_render_safely():
     table = render_calculations("{{scenario_table}}", values)
     assert "| Scenario | Fiscal revenue | Operating income |" in table
     assert "| Base | 399.24 billion USD | 258.38 billion USD |" in table
-    assert "[anchor-revenue]" not in table
-    assert "[anchor-operating-income]" not in table
+    assert "[anchor-revenue] [anchor-operating-income]" in table
 
     unsafe = values[0].model_copy(update={"evidence_ids": ()})
     with pytest.raises(ValueError, match="source-backed"):

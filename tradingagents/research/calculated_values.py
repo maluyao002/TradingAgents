@@ -72,9 +72,8 @@ def _scenario_table(values: tuple[CalculatedValue, ...], language: str) -> str:
     The marker is deliberately narrow: it cannot manufacture a table from a
     valuation catalog. Every row needs reviewed conditional fiscal totals, at
     least one evidence identifier, and the same hash-bound package/result and
-    currency context.  The marker deliberately emits no evidence IDs: only the
-    reader has the frozen snapshot needed to validate fact ancestry, and an
-    unresolved bracket token must never be mistaken for a footnote.
+    currency context. Each row retains its exact calculation evidence IDs;
+    the reader resolves those IDs through frozen fact ancestry to source links.
     """
 
     rows: dict[str, dict[str, CalculatedValue]] = {}
@@ -128,16 +127,18 @@ def _scenario_table(values: tuple[CalculatedValue, ...], language: str) -> str:
         raise ValueError("scenario table requires source-backed reviewed operating totals")
 
     if language == "Chinese":
-        header = "| 情景 | 财年收入 | 营业利润 |"
+        header = "| 情景 | 财年收入 | 营业利润 | 来源 |"
     else:
-        header = "| Scenario | Fiscal revenue | Operating income |"
+        header = "| Scenario | Fiscal revenue | Operating income | Sources |"
 
-    lines = [header, "| --- | ---: | ---: |"]
+    lines = [header, "| --- | ---: | ---: | --- |"]
     for scenario_id, revenue, operating_income in sorted(complete_rows):
         revenue_text = _render_calculated_value(revenue, language)
         income_text = _render_calculated_value(operating_income, language)
         label = scenario_id.replace("_", " ").title()
-        lines.append(f"| {label} | {revenue_text} | {income_text} |")
+        evidence_ids = dict.fromkeys((*revenue.evidence_ids, *operating_income.evidence_ids))
+        references = " ".join(f"[{identifier}]" for identifier in evidence_ids)
+        lines.append(f"| {label} | {revenue_text} | {income_text} | {references} |")
     return "\n".join(lines)
 
 
