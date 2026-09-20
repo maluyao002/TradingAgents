@@ -229,11 +229,15 @@ checkpoint or acceptance gate was rewritten. The draft/comparison are under
 `reports/RESEARCH_STAGE3_20260919/review_handoff_1/`; the engine's failure reader
 is only a diagnostic placeholder. See the [continuation outcome](DEEP-RESEARCH-STAGE3-CONTINUATION.md).
 
-Next engineering priorities are evidence-backed issue resolution, complete claim
-context in coverage checks, scoped admission, efficient bounded finalization and
-reader/audit separation. These are not solved by another identical live attempt.
-The user reviews the actual draft and comparison before further development;
-Stage 4 and production activation have not started.
+The user subsequently authorized the five review-system fixes and code review.
+Evidence-backed issue resolution, full proposition context, multiple exact reader
+spans, per-issue validation, final-reader reconciliation and scoped finding
+dispositions are implemented on separate `codex/research-review-lifecycle`.
+See [the repair design and validation](DEEP-RESEARCH-REVIEW-LIFECYCLE.md).
+Historical NVDA artifacts and financial gates remain unchanged; no new live
+research is authorized by these offline repairs. Efficient finalization planning,
+reader/audit presentation and actual report acceptance remain work. Stage 4 and
+production activation have not started.
 
 Deliverables:
 

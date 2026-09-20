@@ -12,6 +12,29 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+### Five reader-review fixes — September 19, 2026
+
+The user authorized implementation and independent code review on separate branch
+`codex/research-review-lifecycle`. Added evidence-bound, exact-reader issue
+resolution; full claim/finding/question context; separate exact coverage spans;
+per-issue validation; explicit retirement of corrected pre-editor findings; and
+scoped disclosures without changing deterministic financial eligibility.
+Historical findings stay in audit, and unresolved/forged decisions remain blocking.
+
+The final focused **267-test** scope passed, with lint and whitespace clean.
+Independent Sol/high source review found no outstanding actionable findings after
+origin-safe retirement and the adversarial follow-ups; its post-patch scope passed
+38 tests. Offline inspection reconstructs all 205 saved NVDA issues without missing
+proposition context and preserves 112 traceable dispositions, but does not admit
+that historical draft. No new live calls, main changes or merge. Provider wire and
+engine identities are versioned to prevent silently reusing old approvals.
+Reviewed operating-metadata retirement requires its exact current package witness;
+same-text protected origins still block retirement. Unreviewed numerical notes do
+not leak through provenance metadata. The actual frozen reviewed NVDA packet
+passes a synthetic end-to-end metadata-repair fixture without changing its source
+bytes or clearing financial/acceptance gates.
+See [review lifecycle repair](DEEP-RESEARCH-REVIEW-LIFECYCLE.md).
+
 ### Stage 3 merged; authorized continuation and comparison — September 19, 2026
 
 PR #13 merged as `9cc61d7` into `codex/deep-research-v2`; its local and remote
