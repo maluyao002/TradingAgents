@@ -23,6 +23,15 @@ def test_zero_and_precision_are_not_silently_changed():
     assert render_fact(fact("0.123456789"), "Chinese") == "0.123456789 USD"
 
 
+def test_percentages_follow_declared_units_not_value_magnitude():
+    fraction = FinancialFact(id="margin", source_id="filing", metric="margin", value=Decimal("0.74"),
+                             unit="fraction", period_end="2025-12-31", basis="GAAP", location="synthetic")
+    percentage = fraction.model_copy(update={"id": "tax-rate", "value": Decimal("16.5"), "unit": "percent"})
+
+    assert render_fact(fraction, "English") == "74 %"
+    assert render_fact(percentage, "English") == "16.5 %"
+
+
 def test_references_are_resolved_or_rejected():
     assert render_references("收入 {{fact:revenue}}", (fact("1e9"),), "Chinese") == "收入 10亿 USD"
     with pytest.raises(ValueError, match="unknown"):

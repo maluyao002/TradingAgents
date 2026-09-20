@@ -25,6 +25,7 @@ class CalculatedValue(Contract):
 
 
 _REFERENCE = re.compile(r"\{\{calc:([^{}]+)\}\}")
+_SCENARIO_TABLE = re.compile(r"\{\{scenario_table\}\}")
 _TOTAL_AMOUNTS = {
     "explicit_period_present_value", "terminal_value_at_horizon",
     "terminal_value_present_value", "enterprise_value", "net_debt", "equity_value",
@@ -37,6 +38,107 @@ _FORECAST_AMOUNTS = {
     "depreciation_amortization", "capex", "working_capital", "change_in_working_capital",
     "fcff", "equity_cash_flow", "present_value", "net_income_common", "required_capital_retention",
 }
+
+
+def _display_value_and_unit(value: Decimal, unit: str) -> tuple[Decimal, str]:
+    """Apply the calculation catalog's declared ratio convention."""
+
+    if unit.strip().lower() == "fraction":
+        return value * Decimal(100), "%"
+    if unit.strip().lower() in {"%", "percent", "percentage"}:
+        return value, "%"
+    return value, unit
+
+
+def _render_calculated_value(item: CalculatedValue, language: str) -> str:
+    with localcontext() as context:
+        context.prec = 80
+        value, unit = _display_value_and_unit(item.value, item.unit)
+        suffix = ""
+        if item.unit == item.currency:
+            choices = ((Decimal("1e8"), "亿"), (Decimal("1e4"), "万")) if language == "Chinese" else (
+                (Decimal("1e9"), " billion"), (Decimal("1e6"), " million"))
+            for scale, label in choices:
+                if abs(value) >= scale:
+                    value, suffix = value / scale, label
+                    break
+        number = format(value, f".{item.display_decimal_places}f")
+    return f"{number}{suffix} {unit}"
+
+
+def _scenario_table(values: tuple[CalculatedValue, ...], language: str) -> str:
+    """Expand an explicit, source-backed operating-scenario table marker.
+
+    The marker is deliberately narrow: it cannot manufacture a table from a
+    valuation catalog. Every row needs reviewed conditional fiscal totals, at
+    least one evidence identifier, and the same hash-bound package/result and
+    currency context.  The marker deliberately emits no evidence IDs: only the
+    reader has the frozen snapshot needed to validate fact ancestry, and an
+    unresolved bracket token must never be mistaken for a footnote.
+    """
+
+    rows: dict[str, dict[str, CalculatedValue]] = {}
+    prefix = "operating_scenario."
+    suffixes = {
+        ".fiscal_total.revenue": "revenue",
+        ".fiscal_total.operating_income": "operating_income",
+    }
+    for item in values:
+        if item.valuation_method != "operating_scenario" or not item.id.startswith(prefix):
+            continue
+        for suffix, field in suffixes.items():
+            if item.id.endswith(suffix):
+                scenario_id = item.id[len(prefix):-len(suffix)]
+                rows.setdefault(scenario_id, {})[field] = item
+                break
+
+    complete_rows = [
+        (scenario_id, row["revenue"], row["operating_income"])
+        for scenario_id, row in rows.items()
+        if {"revenue", "operating_income"} <= row.keys()
+    ]
+    table_values = tuple(
+        item for _, revenue, operating_income in complete_rows for item in (revenue, operating_income)
+    )
+    # For operating scenarios, ``model_input_sha256`` is the reviewed package
+    # hash, which binds the fiscal/calendar date convention and period basis.
+    contexts = {
+        (
+            item.model_input_sha256,
+            item.model_result_sha256,
+            item.currency,
+            item.unit,
+            item.share_count_basis,
+        )
+        for item in table_values
+    }
+    if (
+        not complete_rows
+        or any({"revenue", "operating_income"} - row.keys() for row in rows.values())
+        or any(
+            not item.evidence_ids
+            or item.classification
+            != "conditional_operating_scenario_calculation_not_reported_fact"
+            or item.currency is None
+            or item.unit != item.currency
+            for item in table_values
+        )
+        or len(contexts) != 1
+    ):
+        raise ValueError("scenario table requires source-backed reviewed operating totals")
+
+    if language == "Chinese":
+        header = "| 情景 | 财年收入 | 营业利润 |"
+    else:
+        header = "| Scenario | Fiscal revenue | Operating income |"
+
+    lines = [header, "| --- | ---: | ---: |"]
+    for scenario_id, revenue, operating_income in sorted(complete_rows):
+        revenue_text = _render_calculated_value(revenue, language)
+        income_text = _render_calculated_value(operating_income, language)
+        label = scenario_id.replace("_", " ").title()
+        lines.append(f"| {label} | {revenue_text} | {income_text} |")
+    return "\n".join(lines)
 
 
 def calculation_catalog(proposal, valuation) -> tuple[CalculatedValue, ...]:
@@ -105,21 +207,12 @@ def render_calculations(text: str, values: tuple[CalculatedValue, ...], language
     def replace(match):
         if match[1] not in by_id:
             raise ValueError("reader references an unknown calculation")
-        item = by_id[match[1]]
-        with localcontext() as context:
-            context.prec = 80
-            value, suffix = item.value, ""
-            if item.unit == item.currency:
-                choices = ((Decimal("1e8"), "亿"), (Decimal("1e4"), "万")) if language == "Chinese" else (
-                    (Decimal("1e9"), " billion"), (Decimal("1e6"), " million"))
-                for scale, label in choices:
-                    if abs(value) >= scale:
-                        value, suffix = value / scale, label
-                        break
-            number = format(value, f".{item.display_decimal_places}f")
-        return f"{number}{suffix} {item.unit}"
+        return _render_calculated_value(by_id[match[1]], language)
 
-    rendered = _REFERENCE.sub(replace, text)
+    rendered = _SCENARIO_TABLE.sub(lambda _: _scenario_table(values, language), text)
+    rendered = _REFERENCE.sub(replace, rendered)
     if "{{calc:" in rendered:
         raise ValueError("malformed calculation reference")
+    if "{{scenario_table" in rendered:
+        raise ValueError("malformed scenario table reference")
     return rendered

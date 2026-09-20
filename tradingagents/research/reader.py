@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypeAlias
 from urllib.parse import quote, urlsplit
 
+from .case_report import CaseReportDraft
 from .contracts import EvidenceSnapshot, ReportLanguage, ResearchRequest, ReviewFinding
 from .stages import ReportDraft
 
@@ -311,24 +312,136 @@ def _draft_limitation_audit(draft: ReportDraft | None) -> dict[str, Any]:
     }
 
 
+def _explicit_evidence_ids(body: str, known_evidence_ids: set[str]) -> tuple[str, ...]:
+    """Return only authored bracket references to known evidence.
+
+    Reader prose can contain ordinary square brackets.  A reference is evidence
+    only when its exact identifier is present in the frozen snapshot; the
+    renderer never infers a source from nearby prose or declared section scope.
+    """
+
+    if not known_evidence_ids:
+        return ()
+    pattern = re.compile(
+        r"\[(" + "|".join(re.escape(identifier) for identifier in sorted(
+            known_evidence_ids, key=len, reverse=True
+        )) + r")\]"
+    )
+    return tuple(dict.fromkeys(match.group(1) for match in pattern.finditer(body)))
+
+
 def _replace_source_references(
-    body: str, source_numbers: dict[str, int]
+    body: str,
+    source_ids_by_evidence: dict[str, tuple[str, ...]],
+    source_numbers: dict[str, int],
 ) -> tuple[str, set[str]]:
-    if not source_numbers:
+    known_evidence_ids = set(source_ids_by_evidence)
+    explicit_ids = _explicit_evidence_ids(body, known_evidence_ids)
+    for identifier in explicit_ids:
+        if set(source_ids_by_evidence[identifier]) - set(source_numbers):
+            raise ValueError("draft explicitly cited ineligible evidence")
+    if not explicit_ids:
         return body, set()
     pattern = re.compile(
         r"\[(" + "|".join(re.escape(identifier) for identifier in sorted(
-            source_numbers, key=len, reverse=True
+            explicit_ids, key=len, reverse=True
         )) + r")\]"
     )
     used: set[str] = set()
 
     def replace(match: re.Match[str]) -> str:
         identifier = match.group(1)
-        used.add(identifier)
-        return f"[^{source_numbers[identifier]}]"
+        source_ids = source_ids_by_evidence[identifier]
+        used.update(source_ids)
+        return "".join(f"[^{source_numbers[source_id]}]" for source_id in source_ids)
 
     return pattern.sub(replace, body), used
+
+
+def _paragraph_citations(
+    body: str,
+    source_numbers: dict[str, int],
+    section_index: int,
+    *,
+    include_missing_explicit: bool = False,
+) -> list[dict[str, Any]]:
+    """Record explicit footnotes, and flag uncited evidence-bearing paragraphs."""
+
+    source_by_number = {number: source_id for source_id, number in source_numbers.items()}
+    citations = []
+    for paragraph_index, block in enumerate(body.split("\n\n"), start=1):
+        numbers = tuple(dict.fromkeys(
+            int(match.group(1)) for match in re.finditer(r"\[\^(\d+)\]", block)
+        ))
+        if not numbers:
+            if include_missing_explicit and block.strip():
+                citations.append(
+                    {
+                        "section_index": section_index,
+                        "paragraph_index": paragraph_index,
+                        "source_ids": [],
+                        "source_footnote_numbers": [],
+                        "citation_scope": "missing_explicit",
+                    }
+                )
+            continue
+        citations.append(
+            {
+                "section_index": section_index,
+                "paragraph_index": paragraph_index,
+                "source_ids": [source_by_number[number] for number in numbers],
+                "source_footnote_numbers": list(numbers),
+                "citation_scope": "paragraph",
+            }
+        )
+    return citations
+
+
+def _compact_state(
+    *,
+    compact: bool,
+    draft: ReportDraft | None,
+) -> dict[str, Any]:
+    """Select a candidate presentation; this never accepts or verifies it."""
+
+    has_authored_material_gaps = isinstance(draft, CaseReportDraft) and any(
+        section.purpose == "material_gaps" and section.text.strip()
+        for section in draft.sections
+    )
+    active = bool(compact and has_authored_material_gaps)
+    if not compact:
+        reason = "not_requested"
+    elif not has_authored_material_gaps:
+        reason = "authored_material_gaps_section_required"
+    else:
+        reason = "candidate_requires_exact_reader_verification"
+    return {
+        "requested": compact,
+        "active": active,
+        "reason": reason,
+        "presentation_only_requires_exact_reader_verification": compact,
+        "accepted": False,
+        "mandatory_coverage_sources": ["draft_limitations", "unresolved_issues"],
+    }
+
+
+def _compact_display_issues(
+    issues: list[dict[str, Any]], compact_active: bool
+) -> list[dict[str, Any]]:
+    """Keep security/numerical blockers literal; defer other coverage to review."""
+
+    if not compact_active:
+        return issues
+    displayed = []
+    for item in issues:
+        copied = dict(item)
+        if copied["reader_display"] != "audit_only" and not {
+            "security", "numerical"
+        }.intersection(copied["categories"]):
+            copied["reader_display"] = "authored_material_gaps_pending_verification"
+            copied["displayed_in_reader"] = False
+        displayed.append(copied)
+    return displayed
 
 
 def _source_audit(
@@ -366,24 +479,69 @@ def render_reader(
     snapshot: EvidenceSnapshot,
     gaps: Iterable[GapInput],
     language: ReportLanguage | None = None,
+    *,
+    compact: bool = False,
 ) -> ReaderRender:
     """Render a reader report and a complete limitations/source audit.
 
     This function performs no I/O and invokes no provider.  Exact duplicate strings
     are consolidated for display, but every original occurrence and provenance ID is
     retained in ``limitations_audit``.  No semantic deduplication is attempted.
+
+    ``compact=True`` selects an unverified candidate format only when a
+    ``CaseReportDraft`` has an authored ``material_gaps`` section.  The caller
+    must perform factual review and mandatory issue coverage against these exact
+    bytes before export; this renderer never turns a later review into a rewrite.
     """
 
     language = language or request.report_language
     chinese = language == "Chinese"
     eligible = _eligible_evidence_ids(snapshot)
     eligible_sources = [source for source in snapshot.sources if source.id in eligible]
-    source_numbers = {source.id: index for index, source in enumerate(eligible_sources, start=1)}
     source_ids_by_evidence = _source_ids_by_evidence(snapshot)
 
     issue_occurrences = _coerce_issues(gaps)
     consolidated_issues = _consolidate_issues(issue_occurrences)
     draft_audit = _draft_limitation_audit(draft)
+    compact_state = _compact_state(
+        compact=compact,
+        draft=draft,
+    )
+    if compact_state["active"]:
+        for item in draft_audit["consolidated_exact_text"]:
+            item["displayed_in_reader"] = False
+            item["reader_display"] = "authored_material_gaps_pending_verification"
+    consolidated_issues = _compact_display_issues(consolidated_issues, compact_state["active"])
+
+    explicit_source_ids: set[str] = set()
+    section_evidence_source_ids: set[str] = set()
+    if compact_state["active"] and draft is not None:
+        eligible_source_ids = {source.id for source in eligible_sources}
+        for section in draft.sections:
+            for identifier in _explicit_evidence_ids(section.text, set(source_ids_by_evidence)):
+                source_ids = source_ids_by_evidence[identifier]
+                if set(source_ids) - eligible_source_ids:
+                    raise ValueError("draft explicitly cited ineligible evidence")
+                explicit_source_ids.update(source_ids)
+            for evidence_id in section.evidence_ids:
+                if evidence_id not in eligible:
+                    raise ValueError("draft invented or used ineligible evidence identifiers")
+                source_ids = source_ids_by_evidence[evidence_id]
+                if set(source_ids) - eligible_source_ids:
+                    raise ValueError("draft used ineligible evidence identifiers")
+                section_evidence_source_ids.update(source_ids)
+    if compact_state["active"]:
+        cited_sources = [
+            source
+            for source in eligible_sources
+            if source.id in explicit_source_ids | section_evidence_source_ids
+        ]
+        source_numbers = {source.id: index for index, source in enumerate(cited_sources, start=1)}
+    else:
+        # Keep the historical broad footnote behavior unless the compact gate is
+        # explicitly and safely active.  Existing saved previews therefore retain
+        # byte-compatible citation semantics.
+        source_numbers = {source.id: index for index, source in enumerate(eligible_sources, start=1)}
 
     title = "深度研究报告" if chinese else "Deep research report"
     status = "需要复核 / 未评级" if chinese else "Needs review / Unrated"
@@ -404,6 +562,8 @@ def render_reader(
     ]
 
     section_mappings: list[dict[str, Any]] = []
+    paragraph_citations: list[dict[str, Any]] = []
+    section_citations: list[dict[str, Any]] = []
     body_citations: dict[str, set[int]] = {}
     if draft is None:
         heading = "仅限诊断 — 无读者报告草稿" if chinese else "Diagnostic only — no reader draft"
@@ -419,7 +579,9 @@ def render_reader(
             unknown = set(section.evidence_ids) - eligible
             if unknown:
                 raise ValueError("draft invented or used ineligible evidence identifiers")
-            body, cited_source_ids = _replace_source_references(section.text, source_numbers)
+            body, cited_source_ids = _replace_source_references(
+                section.text, source_ids_by_evidence, source_numbers
+            )
             required_set = {
                 source_id
                 for evidence_id in section.evidence_ids
@@ -430,11 +592,55 @@ def render_reader(
             )
             if required_set != set(required_source_ids):
                 raise ValueError("eligible evidence has ineligible source ancestry")
-            body, cited_source_ids = _append_missing_footnotes(
-                body, required_source_ids, cited_source_ids, source_numbers
-            )
+            if not compact_state["active"]:
+                body, cited_source_ids = _append_missing_footnotes(
+                    body, required_source_ids, cited_source_ids, source_numbers
+                )
             for source_id in cited_source_ids:
                 body_citations.setdefault(source_id, set()).add(section_index)
+            paragraph_citations.extend(
+                _paragraph_citations(
+                    body,
+                    source_numbers,
+                    section_index,
+                    include_missing_explicit=compact_state["active"] and bool(required_source_ids),
+                )
+            )
+            fallback_source_ids = tuple(
+                source_id for source_id in required_source_ids if source_id not in cited_source_ids
+            )
+            fallback_line = None
+            if compact_state["active"] and fallback_source_ids:
+                fallback_footnotes = "".join(
+                    f"[^{source_numbers[source_id]}]" for source_id in fallback_source_ids
+                )
+                fallback_label = (
+                    "本节来源（非段落级支持）："
+                    if chinese
+                    else "Section sources (not paragraph-level support): "
+                )
+                fallback_line = fallback_label + fallback_footnotes
+                for source_id in fallback_source_ids:
+                    body_citations.setdefault(source_id, set()).add(section_index)
+                section_citations.append(
+                    {
+                        "section_index": section_index,
+                        "citation_scope": "section_only",
+                        "source_ids": list(fallback_source_ids),
+                        "source_footnote_numbers": [
+                            source_numbers[source_id] for source_id in fallback_source_ids
+                        ],
+                    }
+                )
+            elif compact_state["active"] and required_source_ids:
+                section_citations.append(
+                    {
+                        "section_index": section_index,
+                        "citation_scope": "paragraph_only",
+                        "source_ids": [],
+                        "source_footnote_numbers": [],
+                    }
+                )
             for evidence_id in section.evidence_ids:
                 source_ids = source_ids_by_evidence[evidence_id]
                 section_mappings.append(
@@ -451,21 +657,27 @@ def render_reader(
                     }
                 )
             text.extend(["", f"## {_markdown_label(section.title)}", "", body])
+            if fallback_line is not None:
+                text.extend(["", fallback_line])
 
-    limitations_heading = "重要限制 / Material limitations" if chinese else "Material limitations"
-    text.extend(["", f"## {limitations_heading}", ""])
     authored_limitations = draft_audit["consolidated_exact_text"]
-    if authored_limitations:
-        text.extend(_bullet(item["original_text"]) for item in authored_limitations)
-    else:
-        text.append(
-            "- 未提供作者撰写的重要限制；请查阅完整审计记录。"
-            if chinese
-            else "- No authored material limitations were supplied; consult the complete audit."
-        )
+    if not compact_state["active"]:
+        limitations_heading = "重要限制 / Material limitations" if chinese else "Material limitations"
+        text.extend(["", f"## {limitations_heading}", ""])
+        if authored_limitations:
+            text.extend(_bullet(item["original_text"]) for item in authored_limitations)
+        else:
+            text.append(
+                "- 未提供作者撰写的重要限制；请查阅完整审计记录。"
+                if chinese
+                else "- No authored material limitations were supplied; consult the complete audit."
+            )
 
     critical_issues = [
-        item for item in consolidated_issues if item["reader_display"] != "audit_only"
+        item
+        for item in consolidated_issues
+        if item["reader_display"]
+        not in {"audit_only", "authored_material_gaps_pending_verification"}
     ]
     if critical_issues:
         critical_heading = "关键阻碍" if chinese else "Critical blockers"
@@ -480,9 +692,7 @@ def render_reader(
                 )
             else:
                 summary = item["original_text"]
-            text.append(
-                _bullet(f"{summary} (audit issue `{item['issue_id']}`)")
-            )
+            text.append(_bullet(summary))
 
     audit_notice = (
         f"完整的未解决问题记录见 [{LIMITATIONS_AUDIT_FILENAME}]"
@@ -496,8 +706,9 @@ def render_reader(
 
     sources_heading = "来源 / Sources" if chinese else "Sources"
     text.extend(["", f"## {sources_heading}", ""])
-    if eligible_sources:
-        for source in eligible_sources:
+    rendered_sources = [source for source in eligible_sources if source.id in source_numbers]
+    if rendered_sources:
+        for source in rendered_sources:
             number = source_numbers[source.id]
             label = _markdown_label(source.title) or source.id
             publisher = _markdown_label(source.publisher)
@@ -513,8 +724,21 @@ def render_reader(
     source_footnotes = _source_audit(
         snapshot, eligible, source_numbers, section_mappings, body_citations
     )
+    if not compact_state["active"]:
+        citation_scope = "legacy_section_evidence_footnotes"
+    elif any(item["citation_scope"] == "section_only" for item in section_citations):
+        citation_scope = (
+            "mixed"
+            if any(item["citation_scope"] == "paragraph_only" for item in section_citations)
+            or any(item["citation_scope"] == "paragraph" for item in paragraph_citations)
+            else "section_only"
+        )
+    elif section_citations:
+        citation_scope = "paragraph_only"
+    else:
+        citation_scope = "none"
     audit = {
-        "schema_version": 1,
+        "schema_version": 2,
         "artifact": LIMITATIONS_AUDIT_FILENAME,
         "ticker": request.ticker,
         "cutoff": request.cutoff.isoformat(),
@@ -524,10 +748,25 @@ def render_reader(
         "deduplication": "exact_original_text_only",
         "reader_policy": {
             "raw_gaps": "audit_only",
-            "draft_limitations": "reader_and_audit",
-            "structured_critical_nonoperational": "reader_and_audit",
-            "structured_critical_operational": "generic_reader_notice_and_full_audit",
+            "draft_limitations": (
+                "authored_material_gaps_and_full_audit"
+                if compact_state["active"] else "reader_and_audit"
+            ),
+            "structured_critical_nonoperational": (
+                "security_and_numerical_reader_and_audit; other_categories_pending_exact_coverage"
+                if compact_state["active"] else "reader_and_audit"
+            ),
+            "structured_critical_operational": (
+                "authored_material_gaps_pending_exact_coverage_and_full_audit"
+                if compact_state["active"] else "generic_reader_notice_and_full_audit"
+            ),
+            "citations": (
+                "explicit_evidence_links_only; unused_sources_audit_only"
+                if compact_state["active"] else "legacy_section_evidence_footnotes"
+            ),
         },
+        "citation_scope": citation_scope,
+        "reader_compaction": compact_state,
         "draft_limitations": draft_audit,
         "unresolved_issues": {
             "occurrences": issue_occurrences,
@@ -539,6 +778,8 @@ def render_reader(
             ],
         },
         "section_evidence": section_mappings,
+        "paragraph_citations": paragraph_citations,
+        "section_citations": section_citations,
         "source_footnotes": source_footnotes,
     }
     return ReaderRender(reader_text="\n".join(text) + "\n", limitations_audit=audit)

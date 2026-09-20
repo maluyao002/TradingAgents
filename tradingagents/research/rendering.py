@@ -8,10 +8,26 @@ from .contracts import FinancialFact
 _FACT = re.compile(r"\{\{fact:([^{}]+)\}\}")
 
 
+def _display_value_and_unit(value: Decimal, unit: str) -> tuple[Decimal, str]:
+    """Render ratios according to their declared unit, never by magnitude.
+
+    A ``fraction`` is a base-unit ratio (``0.74`` means 74%), while ``%`` and
+    its spelled-out forms are already percentage points.  Treating every value
+    below one as a percentage would silently corrupt small currency amounts and
+    basis-point-like reported values.
+    """
+
+    if unit.strip().lower() == "fraction":
+        return value * Decimal(100), "%"
+    if unit.strip().lower() in {"%", "percent", "percentage"}:
+        return value, "%"
+    return value, unit
+
+
 def render_fact(fact: FinancialFact, language: str) -> str:
     with localcontext() as context:
         context.prec = 40
-        value = fact.normalized_value
+        value, declared_unit = _display_value_and_unit(fact.normalized_value, fact.unit)
         magnitude = abs(value)
         choices = ((Decimal("1e8"), "亿"), (Decimal("1e4"), "万")) if language == "Chinese" else (
             (Decimal("1e9"), " billion"), (Decimal("1e6"), " million"),
@@ -26,7 +42,7 @@ def render_fact(fact: FinancialFact, language: str) -> str:
         number = format(value, "f")
         if "." in number:
             number = number.rstrip("0").rstrip(".")
-        unit = fact.currency or fact.unit
+        unit = fact.currency or declared_unit
         return f"{number}{suffix} {unit}"
 
 
