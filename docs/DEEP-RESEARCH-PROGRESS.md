@@ -39,6 +39,17 @@ No live research calls occurred. See [delivery details](DEEP-RESEARCH-FINALIZATI
 
 ### Sequential PR integration review — September 19, 2026
 
+PR #16's subsequent pre-merge review fixed authored numeric-footnote attribution
+and repeated paid continuation calls after a resources/output-save interruption.
+Fresh independent review also identified scenario-table evidence being dropped
+and the offline preview selecting an initial draft after successful repair.
+The follow-up preserves row-level table sources and selects/hash-checks the actual
+exported reader and its corresponding draft. Displayed limitation bullets cannot
+inject numeric source ordinals; their original text remains unchanged in audit.
+The integrated affected scope passed 112 offline tests. Independent continuation
+review passed 223 targeted tests with no additional actionable findings.
+No live research calls or historical artifact rewrites are part of these fixes.
+
 The user authorized fresh reviews, resolution of findings and sequential merge
 of PRs #14 and #15 into `codex/deep-research-v2`, never main. PR #14 merged as
 `261fe98` after Terra/medium independently found no actionable code findings;

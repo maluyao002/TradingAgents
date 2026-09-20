@@ -88,6 +88,8 @@ uncertainty. Those instructions still require a live model-backed acceptance che
 
 An explicit `{{scenario_table}}` marker renders reviewed operating totals from
 the calculation catalog rather than asking the editor to retype arithmetic.
+Each row carries the catalog's evidence IDs into reader source-footnote mapping,
+even when the editor supplies no section-level evidence list.
 Declared fractions render as percentages; quantities that are not declared
 fractions are not silently rescaled. Operating scenarios remain distinct from
 cash flow, equity value and funding clearance.
@@ -104,6 +106,10 @@ These fixtures validate mechanics, not investment research conclusions.
 presentation comparison from saved NVDA text. Source files are hash-recorded and
 left unchanged. It does not import old verification decisions or turn a shorter
 reader into an admitted report.
+When a reader was exported, the preview selects its recorded verification stage
+and matching editor/repair draft, checking the exported bytes against the candidate
+and attestation. Failed runs retain an explicitly identified initial-candidate
+preview; a repaired export is never silently compared against a withdrawn draft.
 
 The saved NVDA comparison is at
 `reports/RESEARCH_FINALIZATION_OFFLINE_20260919/nvda_reader_preview_2/`.
