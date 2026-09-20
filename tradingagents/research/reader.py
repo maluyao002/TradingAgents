@@ -335,6 +335,10 @@ def _replace_source_references(
     source_ids_by_evidence: dict[str, tuple[str, ...]],
     source_numbers: dict[str, int],
 ) -> tuple[str, set[str]]:
+    # Numeric footnotes belong exclusively to this renderer. Accepting authored
+    # ordinals would invent a source relationship (or index a nonexistent one).
+    if re.search(r"\[\^\d+\]", body):
+        raise ValueError("draft must cite evidence IDs, not authored numeric footnotes")
     known_evidence_ids = set(source_ids_by_evidence)
     explicit_ids = _explicit_evidence_ids(body, known_evidence_ids)
     for identifier in explicit_ids:

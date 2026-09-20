@@ -272,6 +272,21 @@ def _case_draft():
     )
 
 
+@pytest.mark.parametrize("compact", [False, True])
+@pytest.mark.parametrize("authored", ["[^1]", "[^999]", "[^1]: fabricated source", "[filing] [^1]"])
+def test_reader_rejects_authored_numeric_footnotes(tmp_path, compact, authored):
+    request = _request(tmp_path)
+    snapshot = EvidenceSnapshot(ticker="TEST", cutoff=request.cutoff,
+                                sources=(_source(), _source("competitor")))
+    draft = _case_draft()
+    draft = draft.model_copy(update={"sections": (
+        draft.sections[0].model_copy(update={"text": "Unsupported attribution. " + authored}),
+        *draft.sections[1:],
+    )})
+    with pytest.raises(ValueError, match="authored numeric footnotes"):
+        render_reader(request, draft, snapshot, (), compact=compact)
+
+
 def test_compact_reader_is_an_unverified_case_candidate_with_only_explicit_footnotes(tmp_path):
     request = _request(tmp_path)
     snapshot = EvidenceSnapshot(
