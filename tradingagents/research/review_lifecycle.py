@@ -173,7 +173,7 @@ def reconcile_review(review, issues, evidence, reader, scope):
                 retired.add(identifier)
             else:
                 fail("Issue resolution lacks valid evidence/reader witnesses or is protected.", identifier)
-        ledger.append({**issue, "status": state,
+        ledger.append({**deepcopy(issue), "status": state,
                        "decision": decision.model_dump(mode="json") if decision else None})
 
     finding_counts = Counter(item.code for item in review.findings)
@@ -213,7 +213,7 @@ def reconcile_review(review, issues, evidence, reader, scope):
             supported_claim_ids=review.supported_claim_ids,
             contradicted_claim_ids=review.contradicted_claim_ids,
             reviewed_report=review.reviewed_report, findings=tuple(active)),
-        [item for item in issues if item["issue_id"] not in retired],
+        [deepcopy(item) for item in issues if item["issue_id"] not in retired],
         {"reader_sha256": sha256(reader.encode("utf-8")).hexdigest(),
          "issues": ledger, "scoped_findings": scoped,
          "original_review": review.model_dump(mode="json"),

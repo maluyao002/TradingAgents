@@ -1167,9 +1167,24 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             verification = reader_verifications.get(request.report_language, {})
             dispositions = {item["issue_id"]: item for item in verification.get("review", {}).get(
                 "limitation_dispositions", [])} if verification.get("exported") else {}
+            lifecycle = verification.get("issue_lifecycle", {})
+            retired_issues = {item["issue_id"]: item for item in lifecycle.get("issues", [])
+                              if item["status"] in {"resolved", "superseded"}} if (
+                verification.get("exported")
+                and lifecycle.get("reader_sha256") == hashlib.sha256(reader.encode("utf-8")).hexdigest()
+            ) else {}
             for item in final_audit["unresolved_issues"]["consolidated_exact_text"]:
                 disposition_id = "limitation-" + digest(item["original_text"])
                 item["disposition_id"] = disposition_id
+                retired_issue = retired_issues.get(disposition_id)
+                if retired_issue:
+                    # The history-inclusive rendering above is not the exported
+                    # reader. Keep retired records, but do not claim they appear
+                    # in it or remain unresolved coverage obligations.
+                    item["lifecycle_status"] = retired_issue["status"]
+                    item["displayed_in_reader"] = False
+                    item["reader_display"] = "audit_only_retired"
+                    continue
                 disposition = dispositions.get(disposition_id)
                 if disposition:
                     item["verified_disposition"] = disposition
@@ -1178,7 +1193,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                         item["reader_display"] = "verified_editorial_representation"
             final_audit["unresolved_issues"]["unrepresented_issue_ids"] = [
                 item["issue_id"] for item in final_audit["unresolved_issues"]["consolidated_exact_text"]
-                if not item["displayed_in_reader"]]
+                if not item["displayed_in_reader"] and item["reader_display"] != "audit_only_retired"]
             artifacts["reader_limitations.json"] = canonical_json({
                 **final_audit,
                 "exported_reader_sha256": hashlib.sha256(reader.encode("utf-8")).hexdigest(),

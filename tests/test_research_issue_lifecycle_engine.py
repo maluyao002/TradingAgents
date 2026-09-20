@@ -135,6 +135,87 @@ def test_scoped_withheld_conclusions_allow_reader_but_never_model_acceptance(tmp
     assert lifecycle["scoped_findings"][0]["finding"]["severity"] == "critical"
 
 
+@pytest.mark.parametrize("mutation", [None, "not_exported", "wrong_hash"])
+def test_retired_operating_notice_is_audit_only_not_reported_as_reader_content(tmp_path, monkeypatch, mutation):
+    from tests.test_research_case_scenarios import operating_setup
+    from tradingagents.research import engine
+    from tradingagents.research.operating_scenarios import (
+        _LEGACY_REVIEW_STATUS_LIMITATION,
+        operating_scenario_package_sha256,
+    )
+    from tradingagents.research.replay import SnapshotEvidenceService
+    from tradingagents.research.services import ResearchServices
+    from tradingagents.research.storage import canonical_json
+
+    request, snapshot, package = operating_setup(tmp_path)
+    package = package.model_copy(update={
+        "limitations": (*package.limitations, _LEGACY_REVIEW_STATUS_LIMITATION),
+    })
+    package = package.model_copy(update={"review": package.review.model_copy(update={
+        "package_sha256": operating_scenario_package_sha256(package),
+    })})
+    envelope = read_json(request.financial_case_path)
+    envelope["operating_scenarios"] = package.model_dump(mode="json")
+    request.financial_case_path.write_bytes(canonical_json(envelope))
+    if mutation == "wrong_hash":
+        reconcile = engine.reconcile_review
+
+        def wrong_hash(*args):
+            active, remaining, ledger = reconcile(*args)
+            ledger["reader_sha256"] = "0" * 64
+            return active, remaining, ledger
+
+        monkeypatch.setattr(engine, "reconcile_review", wrong_hash)
+
+    class MetadataFixture(CaseFixture):
+        def complete(self, role, payload, request):
+            reply = super().complete(role, payload, request)
+            if role == "editor":
+                reply.data["sections"][0]["text"] = CORRECTED
+            if payload["stage"] in {"verify_report", "verify_repaired_report"}:
+                research = payload["research"]
+                issue = next(i for i in research["inherited_issues"]
+                             if i["text"] == _LEGACY_REVIEW_STATUS_LIMITATION)
+                reply.data["issue_resolutions"] = [{
+                    "issue_id": issue["issue_id"], "status": "superseded",
+                    "rationale": "Current independent review supersedes draft-status metadata.",
+                    "reader_excerpts": [CORRECTED], "witnesses": [{
+                        "reference": "review:operating_scenarios",
+                        "excerpt": research["resolution_evidence"]["review:operating_scenarios"],
+                    }],
+                }]
+                if mutation == "not_exported":
+                    reply.data["findings"] = [{
+                        "code": "terminal_defect", "severity": "critical", "category": "numerical",
+                        "message": "Synthetic numerical defect prevents export.",
+                    }]
+            return reply
+
+    result = run_research(request, ResearchServices(SnapshotEvidenceService(snapshot), MetadataFixture()))
+    assert result.stop_reason == ("verification_failed" if mutation == "not_exported"
+                                  else "completed_needs_review")
+    reader = (request.output_dir / "reader_report.md").read_text()
+    audit = read_json(request.output_dir / "reader_limitations.json")
+    issue = next(i for i in audit["unresolved_issues"]["consolidated_exact_text"]
+                 if i["original_text"] == _LEGACY_REVIEW_STATUS_LIMITATION)
+    if mutation:
+        verification = read_json(request.output_dir / "reader_verification.json")["English"]
+        assert verification["exported"] is (mutation != "not_exported")
+        assert issue["reader_display"] != "audit_only_retired"
+        assert "lifecycle_status" not in issue
+        return
+    assert _LEGACY_REVIEW_STATUS_LIMITATION not in reader
+    assert issue["displayed_in_reader"] is False
+    assert issue["reader_display"] == "audit_only_retired"
+    assert issue["lifecycle_status"] == "superseded"
+    assert issue["issue_id"] not in audit["unresolved_issues"]["unrepresented_issue_ids"]
+    assert audit["exported_reader_sha256"] == sha256(reader.encode()).hexdigest()
+    # Current economic caveats are still present and correctly marked as displayed.
+    current = next(i for i in audit["unresolved_issues"]["consolidated_exact_text"]
+                   if i["original_text"] == package.limitations[0])
+    assert current["displayed_in_reader"] is True and package.limitations[0] in reader
+
+
 def test_saved_nvda_opaque_claims_are_enriched_without_changing_source(tmp_path):
     from tradingagents.research.contracts import ReviewFinding
     from tradingagents.research.report_review import (

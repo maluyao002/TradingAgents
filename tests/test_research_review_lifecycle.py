@@ -698,3 +698,18 @@ def test_reconciliation_preserves_all_mutable_inputs():
     assert evidence == evidence_before
     assert review.model_dump(mode="json") == review_before
     assert scope.model_dump(mode="json") == scope_before
+
+
+@pytest.mark.parametrize("mutated", ["input", "remaining", "ledger"])
+def test_returned_lifecycle_provenance_is_independent_of_inputs_and_coverage(mutated):
+    issues = [_issue("warning", claims=[{"id": "claim", "evidence_ids": ["fact"]}],
+                     origins=[{"retirable": True}], missing_claim_ids=[])]
+    _, remaining, ledger = reconcile_review(
+        LifecycleVerification(reviewed_report=True), issues, {}, "Reader", _scope())
+    copies = {"input": issues, "remaining": remaining, "ledger": ledger["issues"]}
+    copies[mutated][0]["origins"][0]["retirable"] = False
+    copies[mutated][0]["claims"][0]["evidence_ids"].append("forged")
+    for name, records in copies.items():
+        if name != mutated:
+            assert records[0]["origins"][0]["retirable"] is True
+            assert records[0]["claims"][0]["evidence_ids"] == ["fact"]
