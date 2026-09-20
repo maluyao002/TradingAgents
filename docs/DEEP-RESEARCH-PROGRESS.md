@@ -12,6 +12,31 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+### Offline finalization efficiency and reader presentation — September 19, 2026
+
+PRs #14 and #15 merged in sequence into `codex/deep-research-v2` as `261fe98`
+and `664fdf9`; their local/remote subbranches were removed and main stayed unchanged.
+The user then authorized the comparison follow-up's steps 2 and 3. Development
+moved to `codex/research-finalization-reader` for a separate reviewable PR.
+
+Added exact-context grouping and lossless repeated-context compression, current
+coverage plus possible-repair cost plans, hash-bound clean coverage reuse, and
+candidate-level continuation that avoids repeating paid analysis/editor/factual
+review. New authorization, source isolation, settled-usage and exact current-contract
+requirements remain fail closed. Provider spend and estimated cost are distinct.
+
+Reader candidates now use concise authored material gaps with full mandatory
+coverage/audit, explicit paragraph citation metadata and a section-only citation
+repair gate, unused-source cleanup, scenario tables and declared-unit percentages.
+The saved NVDA unverified presentation preview shrinks 45.7% without rewriting
+historical inputs; its missing paragraph citations are not falsely repaired or
+accepted. The integrated targeted scope passed 363 tests with lint/whitespace clean.
+Independent review fixes harden restored continuation proofs, prevent concurrent
+plan-file overwrite/symlink races, and distinguish required reader disclosures
+from lifecycle-protected operational notes. Continuation re-review passed 28 tests;
+the post-fix engine/recovery/reader/lifecycle scope passed 157 tests.
+No live research calls occurred. See [delivery details](DEEP-RESEARCH-FINALIZATION-READER.md).
+
 ### Sequential PR integration review — September 19, 2026
 
 The user authorized fresh reviews, resolution of findings and sequential merge
