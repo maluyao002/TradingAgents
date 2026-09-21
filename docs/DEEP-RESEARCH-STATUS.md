@@ -12,12 +12,21 @@ run then used 2,106,837 tokens in 62.53 minutes, but did not export an accepted
 reader: repaired coverage lacked conservative reserve capacity and factual review
 exposed authoring/rendered-contract and citation issues. Stage 3 remains open.
 
-The [offline interface follow-up](DEEP-RESEARCH-VALIDATION-INTERFACES.md) addresses
+The [offline interface follow-up](DEEP-RESEARCH-VALIDATION-INTERFACES.md), delivered
+through [PR #17](https://github.com/maluyao002/TradingAgents/pull/17), implements
 rendering provenance, exact warning witnesses, calculation attribution, reader/audit
-instructions, lossless context packing and complete repair-path admission on a
-separate subbranch. Code review/PR integration precede a separately budgeted live
-check. Financial-case closure, independent evidence, HOOD generality and user
-acceptance are not included in this engineering checkpoint.
+instructions, lossless context packing and complete repair-path admission. Review
+fixes add full preview recomputation, exact dispatch-component accounting and a
+guard for uncached factual re-review after a cached repair. Independent Sol/high
+and Terra/medium re-reviews found no remaining actionable findings.
+
+The validation report's offline steps 1–3 are implemented and tested; PR review
+and integration are step 4's engineering gate. The next user checkpoint after
+integration is a **separate bounded live-validation allowance**, not acceptance of
+the old draft. The changed version-6 contract cannot silently reuse version-5
+reviews. Inspect the actual newly verified reader before moving to targeted
+financial/independent-evidence gaps and HOOD generality. Financial-case closure,
+Stage 3 reader acceptance and release approval remain open.
 
 ## 1. Executive assessment
 

@@ -41,8 +41,9 @@ complete coverage path before paying for that call.
 The initial integrated targeted scope passed 310 offline tests. The review-fix
 integration passed 232 affected tests; the final title/issue-link follow-up passed
 44 directly affected tests. These are overlapping runs, not additive totals.
-Ruff and whitespace checks pass. Hosted review and normal full CI remain integration
-gates. No live research calls are part of this code change. See
+Ruff and whitespace checks pass. Independent Sol/high and Terra/medium re-reviews
+found no remaining actionable findings. Hosted review and normal full CI remain
+integration gates. No live research calls are part of this code change. See
 [interface delivery details](DEEP-RESEARCH-VALIDATION-INTERFACES.md).
 
 After review/merge, a separate live allowance is still required. Financial closure,
