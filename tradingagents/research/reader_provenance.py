@@ -1,10 +1,13 @@
 """Code-owned authoring-to-rendered bindings; not a semantic verification pass."""
 
 import re
+from dataclasses import asdict
 from hashlib import sha256
-from urllib.parse import quote
+from html import escape, unescape
+from urllib.parse import unquote
 
-from .calculated_values import render_calculations
+from .calculated_values import calculation_anchor_id, render_calculations
+from .reader import ReaderIssue, render_reader
 from .rendering import render_references
 from .storage import digest
 
@@ -21,8 +24,27 @@ RENDERED_READER_POLICY = (
 _MARKER = re.compile(r"\{\{(?:fact:[^{}]+|calc:[^{}]+|scenario_table)\}\}")
 
 
-def reader_provenance(authored, prepared, facts, calculations, language, reader, *, cite=False):
+def _reject_authored_calculation_links(value):
+    """Reserve renderer-owned destinations across all author-controlled fields."""
+    if isinstance(value, dict):
+        for item in value.values():
+            _reject_authored_calculation_links(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            _reject_authored_calculation_links(item)
+    elif isinstance(value, str):
+        decoded = unquote(unescape(re.sub(r"\\(.)", r"\1", value)))
+        if re.search(r"model_appendix\.md(?:\?[^\s#]*)?#calculation-", decoded, re.IGNORECASE):
+            raise ValueError("calculation provenance links must be generated from markers")
+
+
+def reader_provenance(authored, prepared, facts, calculations, language, reader, *, cite=False,
+                      request=None, snapshot=None, issues=()):
     """Recompute every expansion; reject edited prose/metadata or fake calc links."""
+    issues = tuple(issues)
+    _reject_authored_calculation_links(authored.model_dump(mode="json"))
+    for issue in issues:
+        _reject_authored_calculation_links(asdict(issue) if isinstance(issue, ReaderIssue) else issue)
     expected = authored.model_copy(update={"sections": tuple(
         section.model_copy(update={"text": render_calculations(
             render_references(section.text, facts, language), calculations, language, cite=cite
@@ -32,8 +54,6 @@ def reader_provenance(authored, prepared, facts, calculations, language, reader,
         raise ValueError("authored-to-rendered draft binding mismatch")
     records = []
     for index, section in enumerate(authored.sections, 1):
-        if "model_appendix.md#calculation-" in section.text:
-            raise ValueError("calculation provenance links must be generated from markers")
         blocks = []
         for block_index, block in enumerate(section.text.split("\n\n"), 1):
             bindings = []
@@ -55,10 +75,27 @@ def reader_provenance(authored, prepared, facts, calculations, language, reader,
         records.append({"section_index": index, "authored_section_sha256": digest(section),
                         "prepared_section_sha256": digest(prepared.sections[index - 1]),
                         "paragraphs": blocks})
+    if request is None or snapshot is None:
+        raise ValueError("reader binding requires exact rendering context")
+    rerendered = render_reader(request, prepared, snapshot, issues, language, compact=cite)
+    if rerendered.reader_text != reader:
+        raise ValueError("prepared-to-reader binding mismatch")
+    encoded_issues = []
+    for issue in issues:
+        if isinstance(issue, str):
+            encoded_issues.append({"kind": "text", "value": issue})
+        elif isinstance(issue, ReaderIssue):
+            encoded_issues.append({"kind": "reader_issue", "value": asdict(issue)})
+        else:
+            raise ValueError("unsupported provenance rendering issue")
+    rendering_inputs = {"issues": encoded_issues, "snapshot_sha256": digest(snapshot),
+                        "facts_sha256": digest(facts), "language": language, "compact": cite,
+                        "ticker": request.ticker, "cutoff": request.cutoff.isoformat()}
     return {"schema_version": 1, "calculation_citations": cite, "authored_draft_sha256": digest(authored),
             "prepared_draft_sha256": digest(prepared),
             "reader_sha256": sha256(reader.encode()).hexdigest(),
             "calculation_catalog_sha256": digest(calculations),
+            "rendering_inputs": rendering_inputs, "rendering_inputs_sha256": digest(rendering_inputs),
             "binding_kind": "deterministic_expansion_not_semantic_acceptance", "sections": records}
 
 
@@ -66,9 +103,11 @@ def calculation_appendix(calculations, language):
     """Stable local link targets, retaining classification and package bindings."""
     lines = ["\n## Calculation provenance\n",
              "Analyst/model calculations, not new reported facts or financial clearance. "
-             "Exact inputs and source ancestry are in calculated_values.json.\n"]
+             "The hash-bound value catalog is calculated_values.json. Exact inputs are in "
+             "operating_scenario_package.json or valuation_inputs.json as applicable; "
+             "evidence.json supplies source ancestry.\n"]
     for item in calculations:
-        lines.extend([f'<a id="calculation-{quote(item.id, safe="._-")}"></a>',
+        lines.extend([f'<a id="{escape(calculation_anchor_id(item.id), quote=True)}"></a>',
                       f"### {item.id}\n",
                       render_calculations("{{calc:" + item.id + "}}", calculations, language),
                       f"\nClassification: {item.classification}",
@@ -76,3 +115,31 @@ def calculation_appendix(calculations, language):
                       f"\nResult SHA-256: `{item.model_result_sha256}`",
                       "\nEvidence IDs (ancestry, not proof of assumptions): " + ", ".join(item.evidence_ids), ""])
     return "\n".join(lines).encode()
+
+
+def case_model_appendix(calculations, language, *, has_operating_scenarios=False):
+    """The complete code-owned case appendix, shared by export and preview QA."""
+    result = (
+        b"# Financial model appendix\n\n"
+        b"No supported operating valuation, equity target or funding conclusion is exported. "
+        b"Financial schedules are not yet bound to a complete reviewed cash-flow valuation. No unconstrained "
+        b"valuation-model call was dispatched in this case-backed workflow.\n\n"
+        b"See financial_case.json, financial_reconciliation.json and case_context.json "
+        b"for source-bound schedules, conventions, review status and unresolved prerequisites. "
+        b"If case validation failed, those validated artifacts are absent; case_input.json "
+        b"is retained only as the unvalidated input.\n\n"
+        b"Report completion, conditional analytical eligibility and acceptance prerequisites "
+        b"are recorded separately in report_admission.json. Production activation is disabled.\n"
+    )
+    if has_operating_scenarios:
+        result += (
+            b"\n## Fiscal operating scenarios\n\n"
+            b"See operating_scenario_package.json and operating_scenario_context.json for "
+            b"the historical anchors, dated fiscal assumptions, source passages and computed "
+            b"revenue/gross-profit/operating-income bridge. Only independently reviewed "
+            b"packages expose calculated references in the reader; draft or stale reviews "
+            b"withhold these numbers. Operating profit is not cash flow or funding clearance.\n"
+        )
+    if calculations:
+        result += calculation_appendix(calculations, language)
+    return result

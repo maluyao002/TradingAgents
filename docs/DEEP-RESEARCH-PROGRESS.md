@@ -30,12 +30,20 @@ Self-review also protected already-paid repaired-candidate continuation and
 calculation-only paragraph attribution. The engine identity advances to preview-6;
 old candidate reviews cannot silently certify the new contract.
 
-The initial integrated targeted scope passed 310 offline tests; the subsequent
-calculation-only regression passes with its directly affected checks. Ruff and
-whitespace checks pass. Terra/medium independently reviewed lifecycle protection;
-Sol/high reviews the coordinator's integration and resource changes. Hosted review
-and normal full CI remain integration gates. No live research calls are part of
-this code change. See [interface delivery details](DEEP-RESEARCH-VALIDATION-INTERFACES.md).
+Independent Sol/high and Terra/medium reviews plus hosted review drove additional
+fixes: recompute the exact final reader, require version-6 preview provenance and
+verify the complete catalog/appendix, reject equivalent handwritten links across
+all author-controlled fields, align raw anchors with encoded destinations, and
+count the actual trusted instructions and strict wire schema at dispatch. A cached
+repair now still requires admission of any uncached factual re-review and its
+complete coverage path before paying for that call.
+
+The initial integrated targeted scope passed 310 offline tests. The review-fix
+integration passed 232 affected tests; the final title/issue-link follow-up passed
+44 directly affected tests. These are overlapping runs, not additive totals.
+Ruff and whitespace checks pass. Hosted review and normal full CI remain integration
+gates. No live research calls are part of this code change. See
+[interface delivery details](DEEP-RESEARCH-VALIDATION-INTERFACES.md).
 
 After review/merge, a separate live allowance is still required. Financial closure,
 independent evidence, HOOD generality, Stage 3 reader acceptance and release approval

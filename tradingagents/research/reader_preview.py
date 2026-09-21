@@ -7,7 +7,8 @@ from .calculated_values import CalculatedValue, render_calculations
 from .case_report import CaseReportDraft
 from .contracts import EvidenceSnapshot
 from .evidence import validate_snapshot
-from .reader import ReaderIssue, render_reader
+from .reader import ReaderIssue, _eligible_evidence_ids, render_reader
+from .reader_provenance import case_model_appendix, reader_provenance
 from .rendering import render_references
 from .storage import atomic_write, canonical_json, digest, parse_json, read_bytes
 
@@ -81,17 +82,25 @@ def preview_saved_reader(source: Path, request, destination: Path):
         names = (*names, "reader_report.md")
     for name in names:
         contents[name] = _read_source(source, name)
+    contents["run_metadata.json"] = _read_source(source, "run_metadata.json")
+    engine = parse_json(contents["run_metadata.json"]).get("engine")
+    if engine not in {f"research-v2-preview-{n}" for n in range(1, 7)}:
+        raise ValueError("unsupported preview engine revision")
+    requires_provenance = engine == "research-v2-preview-6"
     provenance_name = f"stages/{reader_stage}-rendering-provenance.json"
     cite_calculations = False
     provenance = None
     if (source / provenance_name).is_symlink():
         raise ValueError("preview inputs cannot be symlinks")
+    if requires_provenance and not (source / provenance_name).exists():
+        raise ValueError("current-format preview requires rendering provenance")
     if (source / provenance_name).exists():
         contents[provenance_name] = _read_source(source, provenance_name)
         provenance = _checkpoint_output(parse_json(contents[provenance_name]), "rendering provenance")
         cite_calculations = provenance.get("calculation_citations") is True
         if cite_calculations:
             contents["model_appendix.md"] = _read_source(source, "model_appendix.md")
+            contents["case_context.json"] = _read_source(source, "case_context.json")
     records = {
         name: parse_json(content)
         for name, content in contents.items()
@@ -101,9 +110,11 @@ def preview_saved_reader(source: Path, request, destination: Path):
     draft_output = _checkpoint_output(draft_record, f"{draft_stage} draft")
     snapshot = validate_snapshot(EvidenceSnapshot.model_validate(records["evidence.json"]), request)
     calculations = tuple(CalculatedValue.model_validate(item) for item in records["calculated_values.json"])
-    draft = CaseReportDraft.model_validate(draft_output)
+    authored = CaseReportDraft.model_validate(draft_output)
+    draft = authored
+    eligible_facts = tuple(f for f in snapshot.facts if f.id in _eligible_evidence_ids(snapshot))
     draft = draft.model_copy(update={"sections": tuple(section.model_copy(update={
-        "text": render_calculations(render_references(section.text, snapshot.facts, request.report_language),
+        "text": render_calculations(render_references(section.text, eligible_facts, request.report_language),
                                     calculations, request.report_language, cite=cite_calculations),
     }) for section in draft.sections)})
     issues = []
@@ -116,7 +127,6 @@ def preview_saved_reader(source: Path, request, destination: Path):
                 severity=item["severity"], category=item["category"], code=item.get("code"),
                 affected_ids=tuple(item.get("affected_ids", [])),
             ))
-    preview = render_reader(request, draft, snapshot, issues, request.report_language, compact=True)
     candidate_record = records[f"stages/{reader_stage}-reader-candidate.json"]
     candidate = _checkpoint_output(candidate_record, "reader candidate")
     prior = candidate.get("reader_text") if isinstance(candidate, dict) else None
@@ -125,11 +135,32 @@ def preview_saved_reader(source: Path, request, destination: Path):
         raise ValueError("invalid saved reader candidate")
     if sha256(prior.encode()).hexdigest() != candidate_sha256:
         raise ValueError("saved reader candidate hash mismatch")
-    if provenance is not None and (
-            provenance.get("reader_sha256") != candidate_sha256
-            or provenance.get("authored_draft_sha256") != digest(draft_output)
-            or provenance.get("prepared_draft_sha256") != digest(draft)):
-        raise ValueError("saved rendering provenance binding mismatch")
+    if provenance is not None:
+        if provenance.get("calculation_catalog_sha256") != digest(calculations):
+            raise ValueError("saved calculation catalog hash mismatch")
+        inputs = provenance.get("rendering_inputs", {})
+        if provenance.get("rendering_inputs_sha256") != digest(inputs):
+            raise ValueError("saved rendering inputs hash mismatch")
+        issues = []
+        for issue in inputs.get("issues", []):
+            if issue.get("kind") == "text" and isinstance(issue.get("value"), str):
+                issues.append(issue["value"])
+            elif issue.get("kind") == "reader_issue":
+                issues.append(ReaderIssue(**issue["value"]))
+            else:
+                raise ValueError("invalid saved rendering issue")
+        expected = reader_provenance(authored, draft, eligible_facts, calculations,
+                                     request.report_language, prior, cite=cite_calculations,
+                                     request=request, snapshot=snapshot, issues=issues)
+        if digest(expected) != digest(provenance):
+            raise ValueError("saved rendering provenance binding mismatch")
+        if cite_calculations:
+            expected_appendix = case_model_appendix(calculations, request.report_language,
+                has_operating_scenarios=records["case_context.json"].get("operating_scenarios") is not None)
+            actual_appendix = contents["model_appendix.md"]
+            if actual_appendix != expected_appendix:
+                raise ValueError("saved calculation appendix mismatch")
+    preview = render_reader(request, draft, snapshot, issues, request.report_language, compact=True)
     binding = "initial_candidate"
     if exported_reader_sha256 is not None:
         final_reader = contents["reader_report.md"]

@@ -16,10 +16,10 @@ from pathlib import Path
 from tradingagents.codex.adapter import CodexAdapter
 
 from .contracts import ResearchRequest, Usage
-from .prompt_context import model_prompt
+from .prompt_context import model_boundary
 from .services import ModelReply
 from .storage import digest, parse_json
-from .wire import WIRE_SCHEMA_VERSION, codec_for, system_instruction_suffix
+from .wire import WIRE_SCHEMA_VERSION, codec_for
 
 
 class ModelCallTimeout(TimeoutError):
@@ -108,6 +108,11 @@ class CodexModelService:
         if type(output_limit) is not int or output_limit <= 0:
             raise ValueError("output allowance must be a positive integer")
         codec = codec_for(role, payload.get("response_schema"), valuation_method=request.valuation_method)
+        boundary = model_boundary(
+            role, payload,
+            output_token_envelope=output_limit,
+            valuation_method=request.valuation_method,
+        )
         setting = request.models[role]
         choices = tuple(sorted({(item.model, item.effort) for item in request.models.values()}))
         with _call_deadline(timeout):
@@ -124,15 +129,9 @@ class CodexModelService:
                 for model, effort in choices:
                     self._adapter.preflight(model, effort)
                 self._preflighted = choices
-            instructions = payload["system"] + system_instruction_suffix(role) + (
-                f" Keep the final JSON within the requested {output_limit}-token output allowance."
-            )
-            if request.valuation_method == "equity_fcfe" and role == "valuation":
-                instructions = instructions.replace("typed FCFF model", "typed equity-cash-flow model")
-            prompt = model_prompt(payload).decode()
             completion = self._adapter.complete_with_usage(
-                instructions, prompt, setting.model, setting.effort,
-                output_schema=codec.output_schema)
+                boundary.instructions, boundary.prompt.decode(), setting.model, setting.effort,
+                output_schema=boundary.output_schema)
         usage = Usage(complete=False) if completion.usage is None else Usage(
             input_tokens=completion.usage.input_tokens,
             output_tokens=completion.usage.output_tokens,

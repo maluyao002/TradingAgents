@@ -22,17 +22,22 @@ The rendered verifier receives a different contract from the author. Template
 markers are expected in authored drafts and expected to be absent after rendering.
 Each initial/repaired/translated candidate has a deterministic provenance record:
 authored and prepared hashes, exact marker-bearing paragraphs and expansions,
-calculation IDs, catalog hash and final reader hash. Recomputing the prepared draft
-rejects changed text or metadata. A provenance record does not override a verifier
+calculation IDs, catalog hash and final reader hash. Exact saved rendering inputs
+permit recomputation of both the prepared draft and the final reader, rejecting
+changed text or metadata. A provenance record does not override a verifier
 finding or establish source entailment or economic likelihood.
 
 Bounded case readers use numeric links to stable calculation entries in the model
 appendix. Those entries retain classification, package/result hashes and source
 ancestry. Issuer footnotes remain separate: an issuer is not represented as having
 reported an analyst assumption or calculated fiscal total. Handwritten calculation
-provenance links are rejected; authors must use the calculation/table markers.
-The offline preview preserves and checks these bindings and copies the linked
-appendix, while remaining explicitly unverified.
+provenance links are rejected across draft titles, bodies, limitations and issue
+text, including equivalent encoded/escaped destinations; authors must use the
+calculation/table markers. Raw appendix anchors and encoded links remain matched.
+Version-6 offline previews require provenance, recompute the complete binding,
+verify the full calculation catalog and appendix, and copy the verified appendix
+while remaining explicitly unverified. Missing provenance cannot downgrade a new
+run into the legacy preview path.
 
 ### Evidence-backed warning lifecycle
 
@@ -67,13 +72,20 @@ promote source text into trusted instructions. A strict offline decoder verifies
 round-trip identity; colliding reserved source keys disable packing. Small or
 unprofitable transformations retain the original representation.
 
-The actual adapter and admission planning share the same prompt serializer.
+The actual adapter and admission planning share the complete model boundary:
+trusted instructions and role suffix, packed prompt and strict provider wire schema.
+Both include the same output-allowance instruction; domain schemas are not used as
+a substitute for the actual dispatch schema when counting bytes.
 Conservative input-byte reserves and full output envelopes remain in force;
 heuristic token estimates are not substituted for them. Before a repair dispatch,
 the engine checks its exact payload plus the estimated factual re-review and
 coverage path. Insufficient capacity stops as `repair_path_budget_insufficient`
 before paying for the repair. Future reader growth is explicitly estimated and
-post-repair exact coverage admission still runs. No provider-enforced hard cap or
+post-repair exact coverage admission still runs. A cached repair does not bypass
+admission of an uncached factual re-review plus its entire current coverage path;
+an insufficient continuation stops as `reverification_path_budget_insufficient`
+before paying for that re-review. Exact cached replies are not charged again.
+No provider-enforced hard cap or
 guarantee of finalization is claimed, and unknown usage still prevents retries.
 
 ## Verification and limitations
@@ -83,6 +95,13 @@ appendix/preview integrity, exact witness namespaces, removal versus question
 resolution, protected mixed issues, lossless context packing and corruption,
 adapter/planner equivalence, whole repair-path refusal, recovery and financial
 gate preservation. Hosted CI retains the repository's normal full checks.
+
+The initial integrated scope passed 310 tests. After independent and hosted review
+fixes, 232 affected tests passed; the final title/issue-link follow-up passed 44
+directly affected tests. These overlapping counts are separate runs, not additive.
+Ruff and whitespace checks pass. Independent reviews cover lifecycle protections,
+complete model-boundary accounting, preview recomputation and partial-cache
+admission. All verification described here is offline.
 
 An offline replay of saved NVDA outputs measured lossless prompt-byte reductions
 of roughly 7–12% in several large analysis/factual/editor calls. This is not a

@@ -2,6 +2,7 @@ from hashlib import sha256
 
 import pytest
 
+from tradingagents.research.calculated_values import calculation_anchor_href
 from tradingagents.research.case_report import (
     CASE_READER_REQUIREMENTS,
     SECTION_PURPOSES,
@@ -430,14 +431,16 @@ def test_calculation_provenance_is_not_classified_as_issuer_support(tmp_path):
     snapshot = EvidenceSnapshot(
         ticker="TEST", cutoff=request.cutoff, sources=(_source(), _source("competitor"))
     )
+    calculation_id = "operating_scenario.分析/情景:Q4-revenue"
+    calculation_href = calculation_anchor_href(calculation_id)
     draft = _case_draft()
     scenarios = draft.sections[4].model_copy(update={
         "text": (
             "Base operating case: [113.40 billion USD]"
-            "(model_appendix.md#calculation-operating_scenario.base.q4.revenue%2Fusd)\n\n"
+            f"({calculation_href})\n\n"
             "The reported revenue input [filing] translates to the analyst scenario "
             "[113.40 billion USD]"
-            "(model_appendix.md#calculation-operating_scenario.base.q4.revenue%2Fusd)."
+            f"({calculation_href})."
         ),
     })
     draft = draft.model_copy(update={"sections": (*draft.sections[:4], scenarios, *draft.sections[5:])})
@@ -451,7 +454,7 @@ def test_calculation_provenance_is_not_classified_as_issuer_support(tmp_path):
             "source_ids": [],
             "source_footnote_numbers": [],
             "citation_scope": "calculation_only",
-            "calculation_ids": ["operating_scenario.base.q4.revenue/usd"],
+            "calculation_ids": [calculation_id],
         },
         {
             "section_index": 5,
@@ -459,7 +462,7 @@ def test_calculation_provenance_is_not_classified_as_issuer_support(tmp_path):
             "source_ids": ["filing"],
             "source_footnote_numbers": [1],
             "citation_scope": "paragraph_with_calculations",
-            "calculation_ids": ["operating_scenario.base.q4.revenue/usd"],
+            "calculation_ids": [calculation_id],
         },
         {
             "section_index": 8,

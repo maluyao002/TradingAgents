@@ -1,5 +1,6 @@
 from dataclasses import asdict, replace
 from decimal import Decimal, localcontext
+from urllib.parse import unquote, urlsplit
 
 import pytest
 
@@ -7,6 +8,8 @@ from tests.test_research_equity_valuation import _model as equity_model
 from tests.test_research_valuation import _model
 from tradingagents.research.calculated_values import (
     CalculatedValue,
+    calculation_anchor_href,
+    calculation_anchor_id,
     calculation_catalog,
     render_calculations,
 )
@@ -62,6 +65,30 @@ def test_unavailable_model_cannot_leak_a_target_and_unknown_reference_fails():
     assert calculation_catalog(ValuationProposal(), {"status": "unavailable"}) == ()
     with pytest.raises(ValueError, match="unknown calculation"):
         render_calculations("{{calc:valuation.equity_value}}", ())
+
+
+def test_calculation_anchor_round_trips_odd_valid_identifier_to_raw_html_id():
+    identifier = "valuation.收益/情景:Q4-revenue"
+    value = CalculatedValue(
+        id=identifier,
+        value=Decimal("1"),
+        unit="USD",
+        currency="USD",
+        valuation_method="fcff",
+        share_count_basis="not_applicable",
+        model_input_sha256="a" * 64,
+        model_result_sha256="b" * 64,
+        evidence_ids=("filing",),
+    )
+
+    anchor_id = calculation_anchor_id(identifier)
+    href = calculation_anchor_href(identifier)
+    rendered = render_calculations("Value {{calc:" + identifier + "}}", (value,), cite=True)
+
+    assert anchor_id == "calculation-valuation.收益/情景:Q4-revenue"
+    assert "%2F" in href and "%3A" in href and "%E6%94%B6" in href
+    assert unquote(urlsplit(href).fragment) == anchor_id
+    assert f"]({href})" in rendered
 
 
 def test_nonfinite_calculation_is_rejected():

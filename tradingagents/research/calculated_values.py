@@ -67,9 +67,27 @@ def _render_calculated_value(item: CalculatedValue, language: str) -> str:
     return f"{number}{suffix} {unit}"
 
 
+def calculation_anchor_id(identifier: str) -> str:
+    """Return the raw HTML anchor ID for a validated calculation identifier.
+
+    ``Identifier`` permits Unicode, ``/`` and ``:``, all of which are valid in
+    an HTML ``id`` but must be percent-encoded in an href fragment. Appendix
+    emitters should place this exact value in ``id=``; callers should use
+    :func:`calculation_anchor_href` for links.
+    """
+
+    return f"calculation-{identifier}"
+
+
+def calculation_anchor_href(identifier: str) -> str:
+    """Return the canonical percent-encoded appendix href for ``identifier``."""
+
+    return "model_appendix.md#" + quote(calculation_anchor_id(identifier), safe="._-")
+
+
 def _calculation_link(item, language):
     return (f"[{_render_calculated_value(item, language)}]"
-            f"(model_appendix.md#calculation-{quote(item.id, safe='._-')})")
+            f"({calculation_anchor_href(item.id)})")
 
 
 def _scenario_table(values: tuple[CalculatedValue, ...], language: str, *, cite=False) -> str:
