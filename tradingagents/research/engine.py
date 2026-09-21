@@ -866,6 +866,15 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     calculated_values, language, rendered.reader_text,
                     cite=case_context is not None,
                 )
+                bound_calculations = {
+                    section["section_index"]: {
+                        identifier for paragraph in section["paragraphs"]
+                        for binding in paragraph["bindings"] for identifier in binding["calculation_ids"]
+                    } for section in provenance["sections"]
+                }
+                for citation in rendered.limitations_audit.get("paragraph_citations", []):
+                    if set(citation.get("calculation_ids", ())) - bound_calculations[citation["section_index"]]:
+                        raise ValueError("reader calculation citation lacks authored provenance")
                 factual_data["rendering_provenance"] = provenance
                 factual_data["rendered_reader_policy"] = RENDERED_READER_POLICY
                 store.save_stage(f"{stage}-rendering-provenance",
@@ -887,7 +896,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 )
                 if rendered.limitations_audit.get("reader_compaction", {}).get("active"):
                     cited_sections = {item["section_index"] for item in rendered.limitations_audit.get(
-                        "paragraph_citations", []) if item["source_ids"]}
+                        "paragraph_citations", []) if item["source_ids"] or item.get("calculation_ids")}
                     section_only = {item["section_index"] for item in rendered.limitations_audit.get(
                         "section_citations", []) if item["source_ids"]} - cited_sections
                     if section_only:
