@@ -8,6 +8,7 @@ from math import isfinite
 
 from .budget import BudgetExhausted
 from .contracts import ReviewFinding
+from .prompt_context import model_input_bytes
 from .report_review import ReaderVerification, check_dispositions
 from .storage import canonical_json
 
@@ -253,13 +254,18 @@ class FinalizationCallPlan:
     timeout_seconds: float
     cache_hit: bool = False
     reader_bytes: int = 0
+    role: str | None = None
+    valuation_method: str | None = None
 
 
 def finalization_workload(calls, *, hard_provider_spend_cap_tokens=None):
     """Measure an explicit initial/repair call path without claiming actual spend.
 
     ``payload`` must be the complete payload that would be serialized for the
-    provider; consequently factual and coverage reader bytes are counted exactly.
+    provider. Real model payloads require ``role`` and ``valuation_method`` so the
+    exact trusted instructions and strict wire schema can also be counted. Generic
+    byte payloads and non-model dictionaries retain direct serialized-byte
+    accounting. Consequently factual and coverage reader bytes are counted exactly.
     ``reader_bytes`` is reporting metadata and is not added a second time. Calls
     known to be cache hits remain visible but consume no dispatch reserve or time.
 
@@ -291,8 +297,23 @@ def finalization_workload(calls, *, hard_provider_spend_cap_tokens=None):
             raise ValueError("cache-hit flags must be booleans")
         if type(call.reader_bytes) is not int or call.reader_bytes < 0:
             raise ValueError("reader byte counts must be nonnegative integers")
+        if (call.role is None) != (call.valuation_method is None):
+            raise ValueError("model call plans require role and valuation method together")
         serialized = call.payload if isinstance(call.payload, bytes) else canonical_json(call.payload)
-        input_bytes = len(serialized)
+        if isinstance(call.payload, bytes):
+            input_bytes = len(serialized)
+        elif call.role is not None:
+            input_bytes = model_input_bytes(
+                call.payload,
+                role=call.role,
+                output_token_envelope=call.output_token_envelope,
+                valuation_method=call.valuation_method,
+            )
+        elif isinstance(call.payload, dict) and (
+                "system" in call.payload or "response_schema" in call.payload):
+            raise ValueError("model payload plans require role and valuation method")
+        else:
+            input_bytes = len(serialized)
         if call.reader_bytes > input_bytes:
             raise ValueError("reader bytes cannot exceed the complete serialized payload")
         estimated_input_tokens = (input_bytes + 3) // 4

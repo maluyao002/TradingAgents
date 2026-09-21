@@ -12,6 +12,51 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+### Fresh NVDA validation and offline interface repair — September 20, 2026
+
+After PR #16 merged as `c397176`, the separately authorized fresh English NVDA
+run spent 2,106,837 measured tokens in 62.53 minutes. It completed one repair and
+the repaired factual review, but stopped before repaired coverage when the
+893,980-token conservative reserve exceeded the remaining 893,163 tokens.
+Rendering-contract and paragraph-citation findings remained; no report was
+accepted or exported. Historical inputs and the diagnostic candidate are preserved.
+
+The user approved the validation report's next sequence. PR #17, based on
+`codex/deep-research-v2`, implements authored/rendered calculation bindings,
+generated calculation provenance links, strict lifecycle witness contracts and
+reader-bound claim supersession, concise reader/audit instructions, adjacent
+footnote cleanup, lossless repeated-context packing and whole repair-path admission.
+Self-review also protected already-paid repaired-candidate continuation and
+calculation-only paragraph attribution. The engine identity advances to preview-6;
+old candidate reviews cannot silently certify the new contract.
+
+Independent Sol/high and Terra/medium reviews plus hosted review drove additional
+fixes: recompute the exact final reader, require version-6 preview provenance and
+verify the complete catalog/appendix, reject equivalent handwritten links across
+all author-controlled fields, align raw anchors with encoded destinations, and
+count the actual trusted instructions and strict wire schema at dispatch. A cached
+repair now still requires admission of any uncached factual re-review and its
+complete coverage path before paying for that call.
+
+The initial integrated targeted scope passed 310 offline tests. The review-fix
+integration passed 232 affected tests; the final title/issue-link follow-up passed
+44 directly affected tests. These are overlapping runs, not additive totals.
+Ruff and whitespace checks pass. Independent Sol/high and Terra/medium re-reviews
+found no remaining actionable findings. Hosted review and normal full CI remain
+integration gates. No live research calls are part of this code change. See
+[interface delivery details](DEEP-RESEARCH-VALIDATION-INTERFACES.md).
+
+The hosted re-review of `5eee046` found no major issues and its PR CI matrix
+passed. A duplicate CI run exposed an existing interrupt-test fixture race: the
+grandchild PID could be published before the worker's child PID record. The test
+now waits for both complete JSON records before injecting its interruption;
+production supervisor behavior and cleanup assertions are unchanged. All 53
+supervisor tests passed with process-inspection access, with lint/whitespace clean.
+
+After review/merge, a separate live allowance is still required. Financial closure,
+independent evidence, HOOD generality, Stage 3 reader acceptance and release approval
+are not declared complete by these offline tests.
+
 ### Offline finalization efficiency and reader presentation — September 19, 2026
 
 PRs #14 and #15 merged in sequence into `codex/deep-research-v2` as `261fe98`

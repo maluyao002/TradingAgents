@@ -246,7 +246,10 @@ def test_saved_nvda_opaque_claims_are_enriched_without_changing_source(tmp_path)
     assert len(packet) == len(required) == 205
     assert all(not item["missing_claim_ids"] for item in packet)
     assert sum(bool(item["claims"]) for item in packet) == 20
-    assert len(coverage_batches(packet)) == 18
+    batches = coverage_batches(packet)
+    # Enriched lifecycle fields can change byte-bound packing, not obligations.
+    assert [item for batch in batches for item in batch] == packet
+    assert all(len(batch) <= 12 for batch in batches)
     reader = read_json(directory / "stages/verify_report-reader-candidate.json")["output"]["reader_text"]
     assert len(validated_disposition_ids(ReaderVerification.model_validate(data["review"]), packet, reader)) == 112
     # This diagnoses deterministic traceability, not a new factual review or an

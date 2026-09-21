@@ -3,6 +3,7 @@ from copy import deepcopy
 import pytest
 
 from tradingagents.research.budget import BudgetExhausted
+from tradingagents.research.prompt_context import model_boundary
 from tradingagents.research.report_review import ReaderVerification
 from tradingagents.research.review_batches import (
     FinalizationCallPlan,
@@ -14,6 +15,7 @@ from tradingagents.research.review_batches import (
     finalization_workload,
     group_equivalent_issues,
 )
+from tradingagents.research.stages import AnalysisOutput
 from tradingagents.research.storage import canonical_json
 
 
@@ -233,3 +235,27 @@ def test_cached_payload_cost_is_reported_but_skipped_and_provider_cap_stays_dist
     assert plan["is_hard_spend_guarantee"] is False
     cached_detail = next(item for item in plan["calls"] if item["cache_hit"])
     assert cached_detail["serialized_input_bytes"] == len(canonical_json(cached.payload))
+
+
+def test_workload_counts_the_complete_model_boundary_and_requires_its_parameters():
+    payload = {
+        "system": "Trusted business instructions.",
+        "response_schema": AnalysisOutput.model_json_schema(),
+        "research": {"repeated": "x" * 1200},
+        "evidence": {"repeated": "x" * 1200},
+    }
+    boundary = model_boundary(
+        "business", payload, output_token_envelope=16_000, valuation_method="fcff")
+    call = FinalizationCallPlan(
+        "business", "first_pass", payload, 16_000, 300,
+        role="business", valuation_method="fcff",
+    )
+
+    plan = finalization_workload((call,))
+
+    assert plan["serialized_input_bytes"] == boundary.input_bytes
+    assert plan["calls"][0]["serialized_input_bytes"] == boundary.input_bytes
+    assert plan["conservative_reserve_tokens"] == boundary.input_bytes + 16_000
+    with pytest.raises(ValueError, match="require role and valuation method"):
+        finalization_workload((FinalizationCallPlan(
+            "missing-context", "first_pass", payload, 16_000, 300),))

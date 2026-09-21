@@ -36,7 +36,9 @@ from .equity_valuation import EquityDCFModelInput, EquityForecastPeriod, equity_
 from .evidence import validate_snapshot
 from .investigation import collect_tasks, make_ledger
 from .investigation_review import InvestigationReview
+from .prompt_context import model_input_bytes
 from .reader import ReaderIssue, render_reader
+from .reader_provenance import RENDERED_READER_POLICY, case_model_appendix, reader_provenance
 from .rendering import render_references
 from .report_review import (
     ReaderVerification,
@@ -66,6 +68,7 @@ from .review_lifecycle import (
     enrich_issues,
     evidence_catalog,
     reconcile_review,
+    resolution_witness_contract,
 )
 from .services import ModelReply, ResearchServices
 from .stages import AnalysisOutput, ReportDraft, ValuationProposal, VerificationOutput, instruction
@@ -514,16 +517,19 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                               "material limitations into concise authored prose; retain all "
                               "financially consequential uncertainty. Operational logs belong "
                               "in the audit, not the reader. Do not hide missing valuation. "
-                              "Use {{calc:ID}} for supplied code-calculated values, never "
-                              "retype or recompute them. They are illustrative assumptions-based "
-                              "calculations, not reported facts; display is rounded to two decimals.",
+                              "For authoring, use {{calc:ID}} for supplied code-calculated values, "
+                              "never retype or recompute them. For rendered-reader verification, "
+                              "those markers have already been expanded by code: inspect the "
+                              "rendering_provenance bindings instead of demanding visible markers. "
+                              "Calculations are assumptions-based, not reported facts.",
                     "verification": "When rendered_reader is supplied, review that exact "
                                     "export, not only the intermediate draft. Repair only with "
                                     "supplied evidence; no new facts or unsupported calculations.",
                 }
             if case_context is not None and not coverage_only and stage not in {"planner", "independent_challenge"}:
                 payload["financial_case"] = case_context.model_context()
-                payload["case_reader_requirements"] = CASE_READER_REQUIREMENTS
+                payload["case_reader_requirements"] = (
+                    RENDERED_READER_POLICY if "rendered_reader" in data else CASE_READER_REQUIREMENTS)
                 if record_delivery:
                     case_material_delivery[stage] = {
                         "case_context_sha256": digest(payload["financial_case"]),
@@ -603,7 +609,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 return output
             # UTF-8 bytes are a conservative input bound, plus an output envelope.
             output_envelope = 6_000 if coverage_only else 16_000
-            envelope = len(canonical_json(payload)) + output_envelope
+            envelope = model_input_bytes(payload, role=role, output_token_envelope=output_envelope,
+                                         valuation_method=request.valuation_method) + output_envelope
             origin = "current_live"
             origin_resolver = getattr(services.models, "call_origin", None)
             if recovery is not None and origin_resolver is None:
@@ -687,7 +694,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                    if fact.id in _known_ids(snapshot))
             return candidate.model_copy(update={"sections": tuple(
                 section.model_copy(update={"text": render_calculations(render_references(
-                    section.text, eligible_facts, language), calculated_values, language)
+                    section.text, eligible_facts, language), calculated_values, language,
+                    cite=bounded_review and case_context is not None)
                     if evidence_led else render_references(section.text, eligible_facts, language)})
                 for section in candidate.sections)})
 
@@ -753,7 +761,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             )
             return list(dict.fromkeys((*gaps, *ledger_texts)))
 
-        def verify_reader(candidate, language, stage, extra=None):
+        def verify_reader(candidate, language, stage, extra=None, *, authored=None):
             nonlocal finalization_candidate, candidate_review_stage
             rendered = render_reader(request, candidate, snapshot, reader_inputs(), language,
                                      compact=bounded_review and case_context is not None)
@@ -834,21 +842,102 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 if key not in {"limitation_review", "limitation_policy"}}
                 resolution_evidence = evidence_catalog(
                     snapshot, calculated_values, eligible_ids=_known_ids(snapshot), case_context=case_context,
+                    issues=limitations, reader=rendered.reader_text,
                 )
                 factual_data.update(
                     inherited_issues=limitations, resolution_evidence=resolution_evidence,
+                    resolution_witness_contract=resolution_witness_contract(
+                        resolution_evidence, rendered.reader_text),
                     issue_resolution_policy=LIFECYCLE_POLICY,
                     conclusion_scope=case_context.scope.model_dump(mode="json") if case_context else None,
                     paragraph_citations=rendered.limitations_audit.get("paragraph_citations", []),
                     citation_policy="Assess citation scope at each factual paragraph or table. "
                         "A section evidence list is not paragraph support. Flag unsupported material "
                         "claims and missing or misleading paragraph citations for repair; do not "
-                        "invent sources for an uncited inference or infer support from an ID alone.",
+                        "invent sources for an uncited inference or infer support from an ID alone. "
+                        "Code-generated model_appendix calculation links are local calculation "
+                        "provenance, not issuer evidence; inspect rendering_provenance and the "
+                        "calculation catalog. Do not demand an issuer citation for an explicitly "
+                        "analyst-selected assumption, but verify its classification and rationale.",
                 )
+                if authored is None:
+                    raise ValueError("bounded reader review requires the exact authored draft")
+                provenance = reader_provenance(
+                    authored, candidate, tuple(f for f in snapshot.facts if f.id in _known_ids(snapshot)),
+                    calculated_values, language, rendered.reader_text,
+                    cite=case_context is not None, request=request, snapshot=snapshot, issues=reader_inputs(),
+                )
+                bound_calculations = {
+                    section["section_index"]: {
+                        identifier for paragraph in section["paragraphs"]
+                        for binding in paragraph["bindings"] for identifier in binding["calculation_ids"]
+                    } for section in provenance["sections"]
+                }
+                for citation in rendered.limitations_audit.get("paragraph_citations", []):
+                    if set(citation.get("calculation_ids", ())) - bound_calculations[citation["section_index"]]:
+                        raise ValueError("reader calculation citation lacks authored provenance")
+                factual_data["rendering_provenance"] = {
+                    key: value for key, value in provenance.items() if key != "rendering_inputs"
+                }
+                factual_data["rendered_reader_policy"] = RENDERED_READER_POLICY
+                store.save_stage(f"{stage}-rendering-provenance",
+                                 {"reader_sha256": rendered_hash}, provenance)
                 factual_data["review_scope"] = (
                     "Verify the exact full report's factual, numerical and causal claims. "
                     "Do not return limitation dispositions here; complete per-issue material "
                     "caveat coverage is checked in separate mandatory batches against these same bytes.")
+
+                def coverage_data(items):
+                    groups = group_equivalent_issues(items)
+                    return {
+                        "rendered_reader": rendered.reader_text,
+                        "rendered_reader_sha256": rendered_hash,
+                        **compact_coverage_context(compact_issue_groups(groups)),
+                        "limitation_policy": review_data["limitation_policy"],
+                        "review_scope": "Underlying claims and prior findings are supplied as "
+                            "context, not proof. Missing claim context must remain unresolved. "
+                            "Only assess each supplied issue's materiality and "
+                            "coverage in the exact rendered text. Do not adjudicate factual "
+                            "claim IDs or imply source verification. Set reviewed_report only "
+                            "if you performed this coverage review. Each distinct issue needs "
+                            "its own justified disposition; shared prose does not automatically "
+                            "cover every issue. Unknown materiality must remain unresolved. "
+                            "shared_issue_context_ref refers to the exact field-bound value in "
+                            "shared_issue_context; read it as part of that issue, not as evidence "
+                            "of resolution. equivalent_issue_ids are code-checked identical obligations "
+                            "and context; return one disposition for the supplied issue_id, which "
+                            "will be mapped back to every original obligation without dropping any.",
+                    }
+
+                if stage == "verify_repaired_report":
+                    factual_payload = model_payload(stage, "verifier", factual_data, LifecycleVerification, language)
+                    factual_cached = (store.load_stage(stage, factual_payload) is not None
+                        or getattr(services.models, "has_saved_reply", lambda *_: False)(stage, factual_payload))
+                    # A saved repair does not make the factual recheck free.
+                    # Before a paid recheck, reserve its full exact candidate
+                    # coverage path, without assuming any future issue retirement.
+                    if not factual_cached:
+                        precheck_calls = [FinalizationCallPlan(stage, "repaired_factual_review", factual_payload,
+                            16_000, request.budget.call_timeout_seconds, role="verifier",
+                            valuation_method=request.valuation_method)]
+                        for index, items in enumerate(coverage_batches(limitations)):
+                            batch_stage = f"{stage}-coverage-{index}"
+                            payload = model_payload(batch_stage, "verifier", coverage_data(items), ReaderVerification,
+                                language, True, role_call_index=role_indices["verifier"] + 1 + index)
+                            cached = (store.load_stage(batch_stage, payload) is not None
+                                or getattr(services.models, "has_saved_reply", lambda *_: False)(batch_stage, payload))
+                            precheck_calls.append(FinalizationCallPlan(batch_stage, "repaired_coverage", payload,
+                                6_000, request.budget.call_timeout_seconds, cache_hit=cached,
+                                role="verifier", valuation_method=request.valuation_method))
+                        workload = finalization_workload(precheck_calls)
+                        remaining = request.budget.total_tokens - tracker.usage.total_tokens
+                        precheck = {"reader_sha256": rendered_hash, "remaining_tokens": remaining,
+                            "remaining_path": workload, "assumes_no_future_issue_retirement": True,
+                            "fits_reserve": workload["conservative_reserve_tokens"] < remaining}
+                        finalization_plans["reverification_admission"] = precheck
+                        store.save_stage("reverification-admission", {}, precheck)
+                        if not precheck["fits_reserve"]:
+                            raise BudgetExhausted("reverification_path_budget_insufficient")
                 factual_review = call(stage, "verifier", factual_data, LifecycleVerification,
                                       True, language=language)
                 if factual_review.reviewed_report and language == request.report_language:
@@ -862,7 +951,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 )
                 if rendered.limitations_audit.get("reader_compaction", {}).get("active"):
                     cited_sections = {item["section_index"] for item in rendered.limitations_audit.get(
-                        "paragraph_citations", []) if item["source_ids"]}
+                        "paragraph_citations", []) if item["source_ids"] or item.get("calculation_ids")}
                     section_only = {item["section_index"] for item in rendered.limitations_audit.get(
                         "section_citations", []) if item["source_ids"]} - cited_sections
                     if section_only:
@@ -892,28 +981,6 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 batches = coverage_batches(limitations)
                 batch_results = []
 
-                def coverage_data(items):
-                    groups = group_equivalent_issues(items)
-                    return {
-                        "rendered_reader": rendered.reader_text,
-                        "rendered_reader_sha256": rendered_hash,
-                        **compact_coverage_context(compact_issue_groups(groups)),
-                        "limitation_policy": review_data["limitation_policy"],
-                        "review_scope": "Underlying claims and prior findings are supplied as "
-                            "context, not proof. Missing claim context must remain unresolved. "
-                            "Only assess each supplied issue's materiality and "
-                            "coverage in the exact rendered text. Do not adjudicate factual "
-                            "claim IDs or imply source verification. Set reviewed_report only "
-                            "if you performed this coverage review. Each distinct issue needs "
-                            "its own justified disposition; shared prose does not automatically "
-                            "cover every issue. Unknown materiality must remain unresolved. "
-                            "shared_issue_context_ref refers to the exact field-bound value in "
-                            "shared_issue_context; read it as part of that issue, not as evidence "
-                            "of resolution. equivalent_issue_ids are code-checked identical obligations "
-                            "and context; return one disposition for the supplied issue_id, which "
-                            "will be mapped back to every original obligation without dropping any.",
-                    }
-
                 planned_calls = []
                 reader_bytes = len(rendered.reader_text.encode("utf-8"))
                 for index, items in enumerate(batches):
@@ -927,7 +994,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                               or getattr(services.models, "has_saved_reply", lambda *_: False)(batch_stage, payload))
                     planned_calls.append(FinalizationCallPlan(
                         batch_stage, "current_coverage", payload, 6_000,
-                        request.budget.call_timeout_seconds, cache_hit=cached, reader_bytes=reader_bytes))
+                        request.budget.call_timeout_seconds, cache_hit=cached, reader_bytes=reader_bytes,
+                        role="verifier", valuation_method=request.valuation_method))
                 current_workload = finalization_workload(planned_calls)
                 # Future output sizes are explicit assumptions, not fabricated
                 # exact prompts or a promise of a provider-enforced spend cap.
@@ -937,20 +1005,24 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     repair_payload = model_payload("repair_report", "editor", repair_data, draft_schema, language)
                     finding_growth = len(batches) * 6_000 * 4
                     planned_calls.append(FinalizationCallPlan(
-                        "repair_report", "possible_repair", canonical_json(repair_payload) + b" " * finding_growth,
+                        "repair_report", "possible_repair", b" " * (model_input_bytes(
+                            repair_payload, role="editor", output_token_envelope=16_000,
+                            valuation_method=request.valuation_method) + finding_growth),
                         16_000, request.budget.call_timeout_seconds))
                     factual_payload = model_payload("verify_repaired_report", "verifier", factual_data,
                                                     LifecycleVerification, language)
                     planned_calls.append(FinalizationCallPlan(
                         "verify_repaired_report", "possible_repair_review",
-                        canonical_json(factual_payload) + b" " * reader_bytes,
+                        b" " * (model_input_bytes(factual_payload, role="verifier", output_token_envelope=16_000,
+                                                 valuation_method=request.valuation_method) + reader_bytes),
                         16_000, request.budget.call_timeout_seconds, reader_bytes=2 * reader_bytes))
                     for index, items in enumerate(batches):
                         payload = model_payload(f"verify_repaired_report-coverage-{index}", "verifier",
                                                 coverage_data(items), ReaderVerification, language, True)
                         planned_calls.append(FinalizationCallPlan(
                             f"verify_repaired_report-coverage-{index}", "possible_repair_coverage",
-                            canonical_json(payload) + b" " * reader_bytes, 6_000,
+                            b" " * (model_input_bytes(payload, role="verifier", output_token_envelope=6_000,
+                                                     valuation_method=request.valuation_method) + reader_bytes), 6_000,
                             request.budget.call_timeout_seconds, reader_bytes=2 * reader_bytes))
                 remaining_tokens = request.budget.total_tokens - tracker.usage.total_tokens
                 plan = {
@@ -1231,14 +1303,15 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 language=request.report_language)
             draft = prepare_draft(source_draft, request.report_language)
             if evidence_led:
-                final_review, rendered = verify_reader(draft, request.report_language, "verify_report")
+                final_review, rendered = verify_reader(draft, request.report_language, "verify_report",
+                                                      authored=source_draft)
                 if (not final_review.reviewed_report or any(
                         item.severity in {"warning", "critical"} for item in final_review.findings)):
                     reviews.extend(final_review.findings)
                     # Reader defects are repair instructions and audit history,
                     # not new eternal financial limitations to echo in the reader.
                     # One repair only, admitted from the existing finalization reserve.
-                    source_draft = call("repair_report", "editor", {
+                    repair_data = {
                         **editor_data,
                         "limitations": [text for text in gaps if text not in retired_reader_texts],
                         "issue_lifecycle": reader_verifications[request.report_language].get("issue_lifecycle"),
@@ -1248,10 +1321,44 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                          "evidence only. Do not remove material limitations. "
                                          "Remove historical warnings explicitly retired with "
                                          "evidence in issue_lifecycle; retain their audit history.",
-                    }, draft_schema, True, language=request.report_language)
+                    }
+                    if bounded_review:
+                        # Do not buy a repair when the known remaining review path
+                        # already cannot fit. Future candidate growth stays an
+                        # explicit estimate; exact post-repair admission still runs.
+                        repair_payload = model_payload("repair_report", "editor", repair_data,
+                                                       draft_schema, request.report_language)
+                        repair_cached = (
+                            store.load_stage("repair_report", repair_payload) is not None
+                            or getattr(services.models, "has_saved_reply", lambda *_: False)(
+                                "repair_report", repair_payload)
+                        )
+                        estimated_calls = finalization_plans["verify_report"]["remaining_workload"]["calls"]
+                        repair_path = finalization_workload([
+                            FinalizationCallPlan(
+                                item["call_id"], item["phase"],
+                                repair_payload if item["phase"] == "possible_repair" else
+                                b" " * item["serialized_input_bytes"],
+                                item["output_token_envelope"], item["timeout_seconds"],
+                                cache_hit=item["cache_hit"], reader_bytes=item["reader_bytes"],
+                                role="editor" if item["phase"] == "possible_repair" else "verifier",
+                                valuation_method=request.valuation_method,
+                            ) for item in estimated_calls if item["phase"] != "current_coverage"
+                        ])
+                        remaining = request.budget.total_tokens - tracker.usage.total_tokens
+                        repair_plan = {"remaining_tokens": remaining, "repair_path": repair_path,
+                                       "fits_reserve": repair_path["conservative_reserve_tokens"] < remaining,
+                                       "repair_cached": repair_cached,
+                                       "future_candidate_sizes_are_estimates": True}
+                        finalization_plans["repair_admission"] = repair_plan
+                        store.save_stage("repair-admission", {}, repair_plan)
+                        if not repair_cached and not repair_plan["fits_reserve"]:
+                            raise BudgetExhausted("repair_path_budget_insufficient")
+                    source_draft = call("repair_report", "editor", repair_data,
+                                        draft_schema, True, language=request.report_language)
                     draft = prepare_draft(source_draft, request.report_language)
                     final_review, rendered = verify_reader(
-                        draft, request.report_language, "verify_repaired_report")
+                        draft, request.report_language, "verify_repaired_report", authored=source_draft)
             else:
                 final_review = call("verify_report", "verifier",
                                     {"draft": draft.model_dump(mode="json"), "analyses": outputs,
@@ -1294,6 +1401,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     translated = call(f"editor-{language.lower()}", "editor", translation_data,
                                       draft_schema, True, language=language)
                     validate_translation(draft, translated)
+                    translated_authored = translated
                     translated = prepare_draft(translated, language)
                     translation_review_data = {
                         "source_verified_draft": draft.model_dump(mode="json"),
@@ -1303,7 +1411,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     if evidence_led:
                         translated_review, translated_render = verify_reader(
                             translated, language, f"verify-report-{language.lower()}",
-                            translation_review_data)
+                            translation_review_data, authored=translated_authored)
                     else:
                         translated_review = call(
                         f"verify-report-{language.lower()}", "verifier",
@@ -1458,27 +1566,10 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             })
             if case_context is not None:
                 artifacts.update(case_context.artifacts)
-            artifacts["model_appendix.md"] = (
-                b"# Financial model appendix\n\n"
-                b"No supported operating valuation, equity target or funding conclusion is exported. "
-                b"Financial schedules are not yet bound to a complete reviewed cash-flow valuation. No unconstrained "
-                b"valuation-model call was dispatched in this case-backed workflow.\n\n"
-                b"See financial_case.json, financial_reconciliation.json and case_context.json "
-                b"for source-bound schedules, conventions, review status and unresolved prerequisites. "
-                b"If case validation failed, those validated artifacts are absent; case_input.json "
-                b"is retained only as the unvalidated input.\n\n"
-                b"Report completion, conditional analytical eligibility and acceptance prerequisites "
-                b"are recorded separately in report_admission.json. Production activation is disabled.\n"
+            artifacts["model_appendix.md"] = case_model_appendix(
+                calculated_values, request.report_language,
+                has_operating_scenarios=case_context is not None and case_context.operating_scenarios is not None,
             )
-            if case_context is not None and case_context.operating_scenarios is not None:
-                artifacts["model_appendix.md"] += (
-                    b"\n## Fiscal operating scenarios\n\n"
-                    b"See operating_scenario_package.json and operating_scenario_context.json for "
-                    b"the historical anchors, dated fiscal assumptions, source passages and computed "
-                    b"revenue/gross-profit/operating-income bridge. Only independently reviewed "
-                    b"packages expose calculated references in the reader; draft or stale reviews "
-                    b"withhold these numbers. Operating profit is not cash flow or funding clearance.\n"
-                )
         if recovery is not None:
             recovery_provenance = {
                 **current_recovery_context(),

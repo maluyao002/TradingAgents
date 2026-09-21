@@ -10,9 +10,11 @@ from tradingagents.research.contracts import FinancialFact, ReviewFinding
 from tradingagents.research.result_scope import ComponentEligibility, ModelResultScope
 from tradingagents.research.review_lifecycle import (
     LifecycleVerification,
+    claim_change_evidence,
     enrich_issues,
     evidence_catalog,
     reconcile_review,
+    resolution_witness_contract,
 )
 from tradingagents.research.storage import digest, parse_json
 
@@ -91,9 +93,13 @@ def test_enrich_issues_replaces_opaque_claim_label_with_claim_context_and_missin
     assert enriched[0]["claims"] == [{"stage": "business", **outputs["business"]["claims"][0]}]
     assert enriched[0]["related_records"] == []
     assert enriched[0]["missing_claim_ids"] == []
+    assert enriched[0]["lifecycle_subject"] == "historical_claim_defect"
+    assert enriched[0]["resolution_protected"] is False
     assert [claim["id"] for claim in enriched[1]["claims"]] == ["business.claim-1"]
     assert enriched[1]["related_records"] == []
     assert enriched[1]["missing_claim_ids"] == ["missing.claim"]
+    assert enriched[1]["lifecycle_subject"] == "mixed"
+    assert enriched[1]["resolution_protected"] is True
     assert enriched[1]["prior_findings"] == [findings[0].model_dump(mode="json")]
     assert issues == original_issues
     assert outputs == original_outputs
@@ -140,6 +146,8 @@ def test_enrich_issues_delivers_affected_finding_and_question_context_without_fa
         {"stage": "business", "kind": "findings", **finding},
     ]
     assert enriched[0]["missing_claim_ids"] == []
+    assert enriched[0]["lifecycle_subject"] == "research_question"
+    assert enriched[0]["resolution_protected"] is False
     assert outputs == outputs_before
 
 
@@ -345,13 +353,14 @@ def test_known_original_claim_absent_from_reader_can_be_explicitly_superseded():
     )
     assert issues[0]["claims"] == [{"stage": "business", **claim}]
     assert issues[0]["missing_claim_ids"] == []
-    evidence = {"fact:current": '{"metric":"revenue","value":42}'}
     replacement = "Current audited revenue is 42, superseding the earlier statement."
+    evidence = claim_change_evidence(issues, replacement)
+    reference, record = next(iter(evidence.items()))
     review = LifecycleVerification(
         reviewed_report=True,
         issue_resolutions=[_resolution(
             "stale", status="superseded", reader_excerpt=replacement,
-            evidence_excerpt='"metric":"revenue","value":42',
+            reference=reference, evidence_excerpt=record,
         )],
     )
 
@@ -366,6 +375,228 @@ def test_known_original_claim_absent_from_reader_can_be_explicitly_superseded():
     assert ledger["issues"][0]["status"] == "superseded"
     assert ledger["reader_sha256"] == sha256(replacement.encode("utf-8")).hexdigest()
     assert ledger["evidence_sha256"] == digest(evidence)
+
+
+def test_claim_change_catalog_is_deterministic_exact_and_reader_bound():
+    claim = {
+        "id": "business.old-claim",
+        "text": "The old unsupported assertion.",
+        "source_ids": [],
+        "kind": "reported",
+        "verification": "unverified",
+        "material": True,
+    }
+    issues = enrich_issues(
+        [_issue("stale", f"Unverified claim: {claim['id']}")],
+        {"business": {"claims": [claim]}},
+        (),
+    )
+    reader = "The replacement remains explicitly uncertain."
+
+    direct = claim_change_evidence(issues, reader)
+    catalog = evidence_catalog(
+        SimpleNamespace(facts=()), (), issues=issues, reader=reader
+    )
+
+    assert catalog == direct
+    reference, literal = next(iter(catalog.items()))
+    assert reference.startswith("claim_change:")
+    record = parse_json(literal.encode("utf-8"))
+    assert record["contract"] == "reader_bound_claim_change_v1"
+    assert record["issue_id"] == "stale"
+    assert record["observation"] == "all_original_claim_literals_absent"
+    assert record["reader_sha256"] == sha256(reader.encode("utf-8")).hexdigest()
+    assert record["claim_fingerprints"][0]["claim_id"] == claim["id"]
+    assert record["claim_fingerprints"][0]["claim_text_sha256"] == sha256(
+        claim["text"].encode("utf-8")
+    ).hexdigest()
+    assert claim_change_evidence(issues, reader) == direct
+    assert claim_change_evidence(issues, reader + " More context.") != direct
+    assert claim_change_evidence(issues, reader + " " + claim["text"]) == {}
+
+    contract = resolution_witness_contract(catalog, reader)
+    assert contract["contract"] == "resolution_witness_v1"
+    assert contract["catalog_keys"] == (reference,)
+    assert contract["reader_sha256"] == record["reader_sha256"]
+    assert contract["evidence_excerpt_match"] == "exact_literal_substring_of_catalog_value"
+    assert contract["claim_change"] == {
+        "allowed_issue_subject": "historical_claim_defect",
+        "decision_status": "superseded",
+        "does_not_resolve": "underlying_research_question",
+        "ineligible_when": "original_claim_literal_present",
+        "required_excerpt_literal": "reader_sha256",
+    }
+
+
+def test_resolution_witness_contract_rejects_non_catalog_keys():
+    with pytest.raises(ValueError, match="non-catalog references"):
+        resolution_witness_contract({"rendered_reader": "Reader"}, "Reader")
+
+
+def test_claim_change_witness_from_different_reader_cannot_retire_issue():
+    claim = {
+        "id": "business.old-claim",
+        "text": "Unsupported customer concentration was 40%.",
+        "source_ids": [],
+        "kind": "reported",
+        "verification": "unverified",
+        "material": True,
+    }
+    issues = enrich_issues(
+        [_issue("stale", f"Unverified claim: {claim['id']}")],
+        {"business": {"claims": [claim]}},
+        (),
+    )
+    old_reader = "Customer concentration remains uncertain."
+    current_reader = old_reader + " No percentage is asserted."
+    evidence = claim_change_evidence(issues, old_reader)
+    reference, literal = next(iter(evidence.items()))
+    review = LifecycleVerification(
+        reviewed_report=True,
+        issue_resolutions=[_resolution(
+            "stale", status="superseded", reference=reference,
+            evidence_excerpt=literal, reader_excerpt=current_reader,
+        )],
+    )
+
+    active, remaining, ledger = reconcile_review(
+        review, issues, evidence, current_reader, _scope()
+    )
+
+    assert [item["issue_id"] for item in remaining] == ["stale"]
+    assert ledger["retired_issue_ids"] == []
+    assert [finding.affected_ids for finding in _lifecycle_findings(active)] == [("stale",)]
+
+
+@pytest.mark.parametrize("mutation", ["resolved_status", "missing_hash_excerpt", "ordinary_fact"])
+def test_known_claim_retirement_requires_superseded_reader_hash_witness(mutation):
+    claim = {
+        "id": "business.old-claim",
+        "text": "The unsupported assertion was certain.",
+        "source_ids": [],
+        "kind": "reported",
+        "verification": "unverified",
+        "material": True,
+    }
+    issues = enrich_issues(
+        [_issue("stale", f"Unverified claim: {claim['id']}")],
+        {"business": {"claims": [claim]}},
+        (),
+    )
+    reader = "The replacement is explicitly uncertain."
+    evidence = claim_change_evidence(issues, reader)
+    reference, literal = next(iter(evidence.items()))
+    status = "superseded"
+    excerpt = literal
+    if mutation == "resolved_status":
+        status = "resolved"
+    elif mutation == "missing_hash_excerpt":
+        excerpt = '"contract":"reader_bound_claim_change_v1"'
+    else:
+        evidence = {"fact:current": '{"value":42}'}
+        reference, excerpt = "fact:current", '"value":42'
+    review = LifecycleVerification(
+        reviewed_report=True,
+        issue_resolutions=[_resolution(
+            "stale", status=status, reference=reference,
+            evidence_excerpt=excerpt, reader_excerpt=reader,
+        )],
+    )
+
+    active, remaining, ledger = reconcile_review(
+        review, issues, evidence, reader, _scope()
+    )
+
+    assert [item["issue_id"] for item in remaining] == ["stale"]
+    assert ledger["retired_issue_ids"] == []
+    assert [finding.affected_ids for finding in _lifecycle_findings(active)] == [("stale",)]
+
+
+@pytest.mark.parametrize("reference", ["rendered_reader", "nvda-q2-call"])
+def test_reader_alias_and_bare_source_id_are_never_resolution_evidence(reference):
+    reader = "The stale statement has been corrected."
+    evidence = {reference: reader}
+    review = LifecycleVerification(
+        reviewed_report=True,
+        issue_resolutions=[_resolution(
+            "warning", reference=reference, evidence_excerpt=reader,
+        )],
+    )
+
+    active, remaining, ledger = reconcile_review(
+        review, [_issue("warning")], evidence, reader, _scope()
+    )
+
+    assert [item["issue_id"] for item in remaining] == ["warning"]
+    assert ledger["retired_issue_ids"] == []
+    assert [finding.affected_ids for finding in _lifecycle_findings(active)] == [("warning",)]
+
+
+def test_research_question_can_resolve_with_evidence_but_mixed_issue_stays_protected():
+    claim = {
+        "id": "business.margin-claim",
+        "text": "Margins return to 75%.",
+        "source_ids": [],
+        "kind": "inference",
+        "verification": "unverified",
+        "material": True,
+    }
+    question = {
+        "id": "planner.margin-question",
+        "question": "Can margins sustainably return to 75%?",
+        "consequence": "Long-run economics depend on it.",
+        "resolvability": "medium",
+        "status": "open",
+    }
+    outputs = {
+        "planner": {"questions": [question]},
+        "business": {"claims": [claim]},
+    }
+    question_finding = ReviewFinding(
+        code="margin_question",
+        severity="warning",
+        category="research",
+        message="Long-run margin durability remains unresolved.",
+        affected_ids=(question["id"],),
+    )
+    mixed_finding = ReviewFinding(
+        code="mixed_margin_issue",
+        severity="warning",
+        category="research",
+        message="The claim is unsupported and the question remains open.",
+        affected_ids=(claim["id"], question["id"]),
+    )
+    issues = enrich_issues(
+        [_issue("question", question_finding.message), _issue("mixed", mixed_finding.message)],
+        outputs,
+        (question_finding, mixed_finding),
+    )
+
+    assert [item["lifecycle_subject"] for item in issues] == ["research_question", "mixed"]
+    assert [item["resolution_protected"] for item in issues] == [False, True]
+    assert claim_change_evidence(issues, "Margins remain uncertain.") == {}
+
+    reader = "Evidence now answers the long-run margin question."
+    evidence = {"passage:nvda-call:10:60": "Management supplied a durable margin bridge."}
+    review = LifecycleVerification(
+        reviewed_report=True,
+        issue_resolutions=[
+            _resolution(
+                "question", status="resolved", reference="passage:nvda-call:10:60",
+                evidence_excerpt="durable margin bridge", reader_excerpt=reader,
+            ),
+            _resolution(
+                "mixed", status="resolved", reference="passage:nvda-call:10:60",
+                evidence_excerpt="durable margin bridge", reader_excerpt=reader,
+            ),
+        ],
+    )
+
+    active, remaining, ledger = reconcile_review(review, issues, evidence, reader, _scope())
+
+    assert [item["issue_id"] for item in remaining] == ["mixed"]
+    assert ledger["retired_issue_ids"] == ["question"]
+    assert [finding.affected_ids for finding in _lifecycle_findings(active)] == [("mixed",)]
 
 
 def test_unknown_and_duplicate_resolution_ids_fail_closed_without_blocking_valid_peer():
@@ -574,6 +805,29 @@ def test_research_uncertainty_scope_accepts_research_findings_but_not_data_defec
     ]
     assert [finding.affected_ids for finding in _lifecycle_findings(active)] == [
         ("missing_datum",)
+    ]
+
+
+def test_research_uncertainty_cannot_be_mixed_with_deterministic_conclusion_scope():
+    reader = "Demand durability remains uncertain and valuation is withheld."
+    review = LifecycleVerification(
+        reviewed_report=True,
+        findings=[_finding("mixed_uncertainty", category="research")],
+        finding_dispositions=[{
+            "finding_code": "mixed_uncertainty",
+            "disposition": "disclosed_limitation",
+            "rationale": "One disclosure cannot clear mixed research and valuation concerns.",
+            "reader_excerpts": [reader],
+            "conclusion_scopes": ["research_uncertainty", "equity_per_share_value"],
+        }],
+    )
+
+    active, _, ledger = reconcile_review(review, [], {}, reader, _scope())
+
+    assert "mixed_uncertainty" in {finding.code for finding in active.findings}
+    assert ledger["scoped_findings"] == []
+    assert [finding.affected_ids for finding in _lifecycle_findings(active)] == [
+        ("mixed_uncertainty",)
     ]
 
 

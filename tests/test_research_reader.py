@@ -2,6 +2,7 @@ from hashlib import sha256
 
 import pytest
 
+from tradingagents.research.calculated_values import calculation_anchor_href
 from tradingagents.research.case_report import (
     CASE_READER_REQUIREMENTS,
     SECTION_PURPOSES,
@@ -376,6 +377,103 @@ def test_compact_reader_labels_legacy_section_only_sources_and_flags_uncited_par
     ]
 
 
+def test_repaired_reader_collapses_repeated_sources_per_paragraph_and_table_row(tmp_path):
+    request = _request(tmp_path)
+    source = _source("filing")
+    reported = FinancialFact(
+        id="reported-revenue", source_id="filing", metric="revenue", value=1,
+        unit="USD", currency="USD", period_end="2026-06-30", basis="GAAP",
+        location="synthetic",
+    )
+    derived = FinancialFact(
+        id="derived-revenue", source_id="filing", metric="revenue", value=1,
+        unit="USD", currency="USD", period_end="2026-06-30", basis="GAAP",
+        location="synthetic", inputs=("reported-revenue",), formula="reported-revenue",
+    )
+    independent = FinancialFact(
+        id="independent-revenue", source_id="competitor", metric="revenue", value=1,
+        unit="USD", currency="USD", period_end="2026-06-30", basis="GAAP",
+        location="synthetic",
+    )
+    snapshot = EvidenceSnapshot(
+        ticker="TEST", cutoff=request.cutoff,
+        sources=(source, _source("competitor")), facts=(reported, derived, independent),
+    )
+    draft = _case_draft()
+    repaired_material_gaps = draft.sections[-1].model_copy(update={
+        "text": (
+            "| Gap | Evidence |\n| --- | --- |\n"
+            "| Funding visibility | [reported-revenue] [derived-revenue] [independent-revenue] |\n\n"
+            "Fact A is supported by both evidence records [reported-revenue] [derived-revenue]. "
+            "Different claim retains local support [reported-revenue].\n\n"
+            "A separate paragraph retains its own local support. [reported-revenue]"
+        ),
+        "evidence_ids": ("reported-revenue", "derived-revenue", "independent-revenue"),
+    })
+    draft = draft.model_copy(update={"sections": (*draft.sections[:-1], repaired_material_gaps)})
+
+    rendered = render_reader(request, draft, snapshot, (), compact=True)
+
+    assert "| Funding visibility | [^1][^2] |" in rendered.reader_text
+    assert "Fact A is supported by both evidence records [^1]. Different claim retains local support [^1]." in rendered.reader_text
+    assert rendered.reader_text.count("[^1]") == 5  # four reader placements plus one definition
+    assert rendered.reader_text.count("[^2]") == 2  # table placement plus one definition
+    assert [item["evidence_id"] for item in rendered.limitations_audit["section_evidence"][-3:]] == [
+        "reported-revenue", "derived-revenue", "independent-revenue"
+    ]
+    assert [item["source_ids"] for item in rendered.limitations_audit["section_evidence"][-3:]] == [
+        ["filing"], ["filing"], ["competitor"]
+    ]
+
+
+def test_calculation_provenance_is_not_classified_as_issuer_support(tmp_path):
+    request = _request(tmp_path)
+    snapshot = EvidenceSnapshot(
+        ticker="TEST", cutoff=request.cutoff, sources=(_source(), _source("competitor"))
+    )
+    calculation_id = "operating_scenario.分析/情景:Q4-revenue"
+    calculation_href = calculation_anchor_href(calculation_id)
+    draft = _case_draft()
+    scenarios = draft.sections[4].model_copy(update={
+        "text": (
+            "Base operating case: [113.40 billion USD]"
+            f"({calculation_href})\n\n"
+            "The reported revenue input [filing] translates to the analyst scenario "
+            "[113.40 billion USD]"
+            f"({calculation_href})."
+        ),
+    })
+    draft = draft.model_copy(update={"sections": (*draft.sections[:4], scenarios, *draft.sections[5:])})
+
+    rendered = render_reader(request, draft, snapshot, (), compact=True)
+
+    assert rendered.limitations_audit["paragraph_citations"] == [
+        {
+            "section_index": 5,
+            "paragraph_index": 1,
+            "source_ids": [],
+            "source_footnote_numbers": [],
+            "citation_scope": "calculation_only",
+            "calculation_ids": [calculation_id],
+        },
+        {
+            "section_index": 5,
+            "paragraph_index": 2,
+            "source_ids": ["filing"],
+            "source_footnote_numbers": [1],
+            "citation_scope": "paragraph_with_calculations",
+            "calculation_ids": [calculation_id],
+        },
+        {
+            "section_index": 8,
+            "paragraph_index": 1,
+            "source_ids": ["filing"],
+            "source_footnote_numbers": [1],
+            "citation_scope": "paragraph",
+        },
+    ]
+
+
 def test_compact_flag_cannot_shorten_a_noncase_reader(tmp_path):
     request = _request(tmp_path)
     snapshot = EvidenceSnapshot(ticker="TEST", cutoff=request.cutoff, sources=(_source(),))
@@ -392,6 +490,7 @@ def test_compact_flag_cannot_shorten_a_noncase_reader(tmp_path):
     assert "## Material limitations" in rendered.reader_text
     assert "{{scenario_table}}" in CASE_READER_REQUIREMENTS
     assert "explicit [source_id] or [fact_id]" in CASE_READER_REQUIREMENTS
+    assert "never handwrite a model-appendix provenance link" in CASE_READER_REQUIREMENTS
 
 
 def test_compact_candidate_keeps_critical_security_and_numerical_warnings(tmp_path):
