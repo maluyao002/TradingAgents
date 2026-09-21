@@ -191,7 +191,16 @@ def test_parent_interrupt_cleans_its_tree(tmp_path, monkeypatch):
     def interrupt_after_tracking(timeout_seconds=None):
         nonlocal interrupted
         table = original(timeout_seconds)
-        if (request(tmp_path).output_dir / "grandchild.json").exists() and not interrupted:
+        # The intermediate process can publish its grandchild before the worker
+        # atomically records children.json. Interrupt only after both PID records
+        # are complete, so fixture setup cannot be killed before its assertions.
+        output = request(tmp_path).output_dir
+        try:
+            json.loads((output / "children.json").read_bytes())
+            json.loads((output / "grandchild.json").read_bytes())
+        except (FileNotFoundError, json.JSONDecodeError):
+            return table
+        if not interrupted:
             interrupted = True
             raise KeyboardInterrupt
         return table

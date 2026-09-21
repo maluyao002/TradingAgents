@@ -46,6 +46,13 @@ found no remaining actionable findings. Hosted review and normal full CI remain
 integration gates. No live research calls are part of this code change. See
 [interface delivery details](DEEP-RESEARCH-VALIDATION-INTERFACES.md).
 
+The hosted re-review of `5eee046` found no major issues and its PR CI matrix
+passed. A duplicate CI run exposed an existing interrupt-test fixture race: the
+grandchild PID could be published before the worker's child PID record. The test
+now waits for both complete JSON records before injecting its interruption;
+production supervisor behavior and cleanup assertions are unchanged. All 53
+supervisor tests passed with process-inspection access, with lint/whitespace clean.
+
 After review/merge, a separate live allowance is still required. Financial closure,
 independent evidence, HOOD generality, Stage 3 reader acceptance and release approval
 are not declared complete by these offline tests.
