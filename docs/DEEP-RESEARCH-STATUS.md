@@ -1,9 +1,23 @@
 # Deep Research V2 — current status and delivery roadmap
 
-Reconciled September 18, 2026; updated September 19 for Stage 3 review and sequential PR delivery.
+Reconciled September 18, 2026; updated September 20 for bounded validation follow-up.
 This is the current work index and recommended execution order, not new release
 acceptance or authorization for additional live calls. The original M0–M6 gates
 remain in [the implementation plan](DEEP-RESEARCH-PLAN.md).
+
+### Latest checkpoint — September 20
+
+PR #16 merged into `codex/deep-research-v2`. A separately authorized fresh NVDA
+run then used 2,106,837 tokens in 62.53 minutes, but did not export an accepted
+reader: repaired coverage lacked conservative reserve capacity and factual review
+exposed authoring/rendered-contract and citation issues. Stage 3 remains open.
+
+The [offline interface follow-up](DEEP-RESEARCH-VALIDATION-INTERFACES.md) addresses
+rendering provenance, exact warning witnesses, calculation attribution, reader/audit
+instructions, lossless context packing and complete repair-path admission on a
+separate subbranch. Code review/PR integration precede a separately budgeted live
+check. Financial-case closure, independent evidence, HOOD generality and user
+acceptance are not included in this engineering checkpoint.
 
 ## 1. Executive assessment
 

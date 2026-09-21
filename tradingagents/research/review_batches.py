@@ -8,6 +8,7 @@ from math import isfinite
 
 from .budget import BudgetExhausted
 from .contracts import ReviewFinding
+from .prompt_context import model_input_bytes
 from .report_review import ReaderVerification, check_dispositions
 from .storage import canonical_json
 
@@ -292,7 +293,8 @@ def finalization_workload(calls, *, hard_provider_spend_cap_tokens=None):
         if type(call.reader_bytes) is not int or call.reader_bytes < 0:
             raise ValueError("reader byte counts must be nonnegative integers")
         serialized = call.payload if isinstance(call.payload, bytes) else canonical_json(call.payload)
-        input_bytes = len(serialized)
+        input_bytes = (len(serialized) if isinstance(call.payload, bytes)
+                       else model_input_bytes(call.payload))
         if call.reader_bytes > input_bytes:
             raise ValueError("reader bytes cannot exceed the complete serialized payload")
         estimated_input_tokens = (input_bytes + 3) // 4

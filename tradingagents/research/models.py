@@ -16,8 +16,9 @@ from pathlib import Path
 from tradingagents.codex.adapter import CodexAdapter
 
 from .contracts import ResearchRequest, Usage
+from .prompt_context import model_prompt
 from .services import ModelReply
-from .storage import canonical_json, digest, parse_json
+from .storage import digest, parse_json
 from .wire import WIRE_SCHEMA_VERSION, codec_for, system_instruction_suffix
 
 
@@ -128,8 +129,7 @@ class CodexModelService:
             )
             if request.valuation_method == "equity_fcfe" and role == "valuation":
                 instructions = instructions.replace("typed FCFF model", "typed equity-cash-flow model")
-            prompt = canonical_json({key: value for key, value in payload.items()
-                                     if key not in {"system", "response_schema", "timeout_seconds"}}).decode()
+            prompt = model_prompt(payload).decode()
             completion = self._adapter.complete_with_usage(
                 instructions, prompt, setting.model, setting.effort,
                 output_schema=codec.output_schema)

@@ -12,7 +12,7 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Literal, TypeAlias
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 from .case_report import CaseReportDraft
 from .contracts import EvidenceSnapshot, ReportLanguage, ResearchRequest, ReviewFinding
@@ -365,6 +365,38 @@ def _replace_source_references(
     return pattern.sub(replace, body), used
 
 
+_RENDERED_FOOTNOTE = re.compile(r"\[\^(\d+)\]")
+_FOOTNOTE_CLUSTER = re.compile(r"(?:\[\^\d+\](?:[ \t]*(?=\[\^))?){2,}")
+_CALCULATION_PROVENANCE_LINK = re.compile(
+    r"\[[^\]]+\]\(model_appendix\.md#calculation-([^\s)]+)\)"
+)
+
+
+def _collapse_repeated_footnotes(body: str) -> str:
+    """Collapse duplicate source footnotes only within consecutive clusters.
+
+    Multiple fact IDs can resolve to the same frozen source. They remain in the
+    evidence audit, but a consecutive cluster such as ``[^1] [^1] [^4]`` adds
+    noise without coverage. Do not deduplicate a later citation after claim
+    text: it may be the only local attribution for that distinct claim.
+    """
+
+    def collapse_cluster(cluster: re.Match[str]) -> str:
+        matches = tuple(_RENDERED_FOOTNOTE.finditer(cluster.group(0)))
+        seen: set[str] = set()
+        footnotes = []
+        for match in matches:
+            number = match.group(1)
+            if number not in seen:
+                seen.add(number)
+                footnotes.append(match.group(0))
+        if len(footnotes) == len(matches):
+            return cluster.group(0)
+        return "".join(footnotes)
+
+    return _FOOTNOTE_CLUSTER.sub(collapse_cluster, body)
+
+
 def _paragraph_citations(
     body: str,
     source_numbers: dict[str, int],
@@ -378,9 +410,12 @@ def _paragraph_citations(
     citations = []
     for paragraph_index, block in enumerate(body.split("\n\n"), start=1):
         numbers = tuple(dict.fromkeys(
-            int(match.group(1)) for match in re.finditer(r"\[\^(\d+)\]", block)
+            int(match.group(1)) for match in _RENDERED_FOOTNOTE.finditer(block)
         ))
-        if not numbers:
+        calculation_ids = tuple(dict.fromkeys(
+            unquote(match.group(1)) for match in _CALCULATION_PROVENANCE_LINK.finditer(block)
+        ))
+        if not numbers and not calculation_ids:
             if include_missing_explicit and block.strip():
                 citations.append(
                     {
@@ -392,15 +427,22 @@ def _paragraph_citations(
                     }
                 )
             continue
-        citations.append(
-            {
-                "section_index": section_index,
-                "paragraph_index": paragraph_index,
-                "source_ids": [source_by_number[number] for number in numbers],
-                "source_footnote_numbers": list(numbers),
-                "citation_scope": "paragraph",
-            }
-        )
+        citation: dict[str, Any] = {
+            "section_index": section_index,
+            "paragraph_index": paragraph_index,
+            "source_ids": [source_by_number[number] for number in numbers],
+            "source_footnote_numbers": list(numbers),
+            "citation_scope": (
+                "paragraph_with_calculations" if numbers and calculation_ids
+                else "paragraph" if numbers
+                else "calculation_only"
+            ),
+        }
+        if calculation_ids:
+            # This identifies a code-owned calculation link, not issuer support.
+            # Root's binding manifest/checker decides whether the link is valid.
+            citation["calculation_ids"] = list(calculation_ids)
+        citations.append(citation)
     return citations
 
 
@@ -603,6 +645,7 @@ def render_reader(
                 body, cited_source_ids = _append_missing_footnotes(
                     body, required_source_ids, cited_source_ids, source_numbers
                 )
+            body = _collapse_repeated_footnotes(body)
             for source_id in cited_source_ids:
                 body_citations.setdefault(source_id, set()).add(section_index)
             paragraph_citations.extend(

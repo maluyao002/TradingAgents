@@ -3,6 +3,7 @@
 import re
 from decimal import Decimal, localcontext
 from typing import Literal
+from urllib.parse import quote
 
 from pydantic import Field
 
@@ -66,7 +67,12 @@ def _render_calculated_value(item: CalculatedValue, language: str) -> str:
     return f"{number}{suffix} {unit}"
 
 
-def _scenario_table(values: tuple[CalculatedValue, ...], language: str) -> str:
+def _calculation_link(item, language):
+    return (f"[{_render_calculated_value(item, language)}]"
+            f"(model_appendix.md#calculation-{quote(item.id, safe='._-')})")
+
+
+def _scenario_table(values: tuple[CalculatedValue, ...], language: str, *, cite=False) -> str:
     """Expand an explicit, source-backed operating-scenario table marker.
 
     The marker is deliberately narrow: it cannot manufacture a table from a
@@ -133,8 +139,9 @@ def _scenario_table(values: tuple[CalculatedValue, ...], language: str) -> str:
 
     lines = [header, "| --- | ---: | ---: | --- |"]
     for scenario_id, revenue, operating_income in sorted(complete_rows):
-        revenue_text = _render_calculated_value(revenue, language)
-        income_text = _render_calculated_value(operating_income, language)
+        render = _calculation_link if cite else _render_calculated_value
+        revenue_text = render(revenue, language)
+        income_text = render(operating_income, language)
         label = scenario_id.replace("_", " ").title()
         evidence_ids = dict.fromkeys((*revenue.evidence_ids, *operating_income.evidence_ids))
         references = " ".join(f"[{identifier}]" for identifier in evidence_ids)
@@ -200,7 +207,7 @@ def calculation_catalog(proposal, valuation) -> tuple[CalculatedValue, ...]:
     return tuple(values)
 
 
-def render_calculations(text: str, values: tuple[CalculatedValue, ...], language="English") -> str:
+def render_calculations(text: str, values: tuple[CalculatedValue, ...], language="English", *, cite=False) -> str:
     by_id = {value.id: value for value in values}
     if len(by_id) != len(values):
         raise ValueError("ambiguous calculation identifiers")
@@ -208,9 +215,10 @@ def render_calculations(text: str, values: tuple[CalculatedValue, ...], language
     def replace(match):
         if match[1] not in by_id:
             raise ValueError("reader references an unknown calculation")
-        return _render_calculated_value(by_id[match[1]], language)
+        render = _calculation_link if cite else _render_calculated_value
+        return render(by_id[match[1]], language)
 
-    rendered = _SCENARIO_TABLE.sub(lambda _: _scenario_table(values, language), text)
+    rendered = _SCENARIO_TABLE.sub(lambda _: _scenario_table(values, language, cite=cite), text)
     rendered = _REFERENCE.sub(replace, rendered)
     if "{{calc:" in rendered:
         raise ValueError("malformed calculation reference")

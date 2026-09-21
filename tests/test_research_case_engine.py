@@ -14,7 +14,13 @@ from tradingagents.research.contracts import ResearchRequest
 from tradingagents.research.engine import run_research
 from tradingagents.research.replay import SnapshotEvidenceService
 from tradingagents.research.services import ModelReply, ResearchServices
-from tradingagents.research.storage import canonical_json, digest, read_json, request_identity
+from tradingagents.research.storage import (
+    ENGINE_VERSION,
+    canonical_json,
+    digest,
+    read_json,
+    request_identity,
+)
 
 
 class CaseFixture:
@@ -192,7 +198,7 @@ def test_opt_in_does_not_change_legacy_request_identity(tmp_path):
                                                      "quality_revision", "valuation_method", "share_count_basis"})
     settings["evidence_path"] = sha256(legacy.evidence_path.read_bytes()).hexdigest()
     settings["prior_dossier_path"] = None
-    assert request_identity(legacy) == digest({"engine": "research-v2-preview-5", "settings": settings})
+    assert request_identity(legacy) == digest({"engine": ENGINE_VERSION, "settings": settings})
     assert request_identity(legacy) != request_identity(request)
 
 

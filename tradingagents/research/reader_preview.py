@@ -81,6 +81,17 @@ def preview_saved_reader(source: Path, request, destination: Path):
         names = (*names, "reader_report.md")
     for name in names:
         contents[name] = _read_source(source, name)
+    provenance_name = f"stages/{reader_stage}-rendering-provenance.json"
+    cite_calculations = False
+    provenance = None
+    if (source / provenance_name).is_symlink():
+        raise ValueError("preview inputs cannot be symlinks")
+    if (source / provenance_name).exists():
+        contents[provenance_name] = _read_source(source, provenance_name)
+        provenance = _checkpoint_output(parse_json(contents[provenance_name]), "rendering provenance")
+        cite_calculations = provenance.get("calculation_citations") is True
+        if cite_calculations:
+            contents["model_appendix.md"] = _read_source(source, "model_appendix.md")
     records = {
         name: parse_json(content)
         for name, content in contents.items()
@@ -93,7 +104,7 @@ def preview_saved_reader(source: Path, request, destination: Path):
     draft = CaseReportDraft.model_validate(draft_output)
     draft = draft.model_copy(update={"sections": tuple(section.model_copy(update={
         "text": render_calculations(render_references(section.text, snapshot.facts, request.report_language),
-                                    calculations, request.report_language),
+                                    calculations, request.report_language, cite=cite_calculations),
     }) for section in draft.sections)})
     issues = []
     for item in records["reader_limitations.json"]["unresolved_issues"]["occurrences"]:
@@ -114,6 +125,11 @@ def preview_saved_reader(source: Path, request, destination: Path):
         raise ValueError("invalid saved reader candidate")
     if sha256(prior.encode()).hexdigest() != candidate_sha256:
         raise ValueError("saved reader candidate hash mismatch")
+    if provenance is not None and (
+            provenance.get("reader_sha256") != candidate_sha256
+            or provenance.get("authored_draft_sha256") != digest(draft_output)
+            or provenance.get("prepared_draft_sha256") != digest(draft)):
+        raise ValueError("saved rendering provenance binding mismatch")
     binding = "initial_candidate"
     if exported_reader_sha256 is not None:
         final_reader = contents["reader_report.md"]
@@ -144,6 +160,8 @@ def preview_saved_reader(source: Path, request, destination: Path):
     atomic_write(destination / "reader_preview.md", text.encode())
     atomic_write(destination / "reader_limitations.json", canonical_json(preview.limitations_audit))
     atomic_write(destination / "comparison.json", canonical_json(metrics))
+    if cite_calculations:
+        atomic_write(destination / "model_appendix.md", contents["model_appendix.md"])
     if any(read_bytes(source / name) != content for name, content in contents.items()):
         raise ValueError("historical source changed during preview")
     return metrics
