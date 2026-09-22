@@ -7,13 +7,14 @@ from html import escape, unescape
 from urllib.parse import unquote
 
 from .calculated_values import calculation_anchor_id, render_calculations
+from .case_report import case_reader_delivery
 from .reader import ReaderIssue, render_reader
 from .rendering import render_references
 from .storage import digest
 
 RENDERED_READER_POLICY = (
     "This is a rendered-reader review, not an authoring task. Fact/calculation markers "
-    "and the standalone scenario_table marker are authoring syntax, expanded by code "
+    "and standalone scenario_table/scenario_assumptions_table markers are authoring syntax, expanded by code "
     "before you receive the draft/reader. Their absence in rendered prose is expected, "
     "not evidence of manual numerical entry. Inspect rendering_provenance for exact "
     "authored markers, expansion text, calculation IDs and hashes. Links to the model "
@@ -21,7 +22,7 @@ RENDERED_READER_POLICY = (
     "assumptions. Check numerical correctness, causal support, source/assumption scope, "
     "and local citations independently. These bindings do not clear financial gates."
 )
-_MARKER = re.compile(r"\{\{(?:fact:[^{}]+|calc:[^{}]+|scenario_table)\}\}")
+_MARKER = re.compile(r"\{\{(?:fact:[^{}]+|calc:[^{}]+|scenario_table|scenario_assumptions_table)\}\}")
 
 
 def _reject_authored_calculation_links(value):
@@ -39,15 +40,17 @@ def _reject_authored_calculation_links(value):
 
 
 def reader_provenance(authored, prepared, facts, calculations, language, reader, *, cite=False,
-                      request=None, snapshot=None, issues=()):
+                      request=None, snapshot=None, issues=(), case_context=None):
     """Recompute every expansion; reject edited prose/metadata or fake calc links."""
     issues = tuple(issues)
+    delivery = case_reader_delivery(case_context) if case_context is not None else None
     _reject_authored_calculation_links(authored.model_dump(mode="json"))
     for issue in issues:
         _reject_authored_calculation_links(asdict(issue) if isinstance(issue, ReaderIssue) else issue)
     expected = authored.model_copy(update={"sections": tuple(
         section.model_copy(update={"text": render_calculations(
-            render_references(section.text, facts, language), calculations, language, cite=cite
+            render_references(section.text, facts, language), calculations, language, cite=cite,
+            scenario_delivery=delivery,
         )}) for section in authored.sections
     )})
     if expected != prepared:
@@ -59,10 +62,10 @@ def reader_provenance(authored, prepared, facts, calculations, language, reader,
             bindings = []
             for match in _MARKER.finditer(block):
                 marker = match.group()
-                if marker == "{{scenario_table}}" and block.strip() != marker:
+                if marker in {"{{scenario_table}}", "{{scenario_assumptions_table}}"} and block.strip() != marker:
                     raise ValueError("scenario table marker must occupy its own paragraph")
                 expansion = render_calculations(render_references(marker, facts, language),
-                                                calculations, language, cite=cite)
+                                                calculations, language, cite=cite, scenario_delivery=delivery)
                 ids = ([marker[len("{{calc:"):-2]] if marker.startswith("{{calc:") else
                        [item.id for item in calculations if item.valuation_method == "operating_scenario"
                         and re.fullmatch(r"operating_scenario\..+\.fiscal_total\.(revenue|operating_income)",
@@ -91,6 +94,9 @@ def reader_provenance(authored, prepared, facts, calculations, language, reader,
     rendering_inputs = {"issues": encoded_issues, "snapshot_sha256": digest(snapshot),
                         "facts_sha256": digest(facts), "language": language, "compact": cite,
                         "ticker": request.ticker, "cutoff": request.cutoff.isoformat()}
+    if delivery is not None:
+        rendering_inputs.update(case_context_sha256=digest(case_context.model_context()),
+                                case_reader_delivery_sha256=digest(delivery))
     return {"schema_version": 1, "calculation_citations": cite, "authored_draft_sha256": digest(authored),
             "prepared_draft_sha256": digest(prepared),
             "reader_sha256": sha256(reader.encode()).hexdigest(),

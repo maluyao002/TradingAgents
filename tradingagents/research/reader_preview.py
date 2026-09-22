@@ -4,7 +4,8 @@ from hashlib import sha256
 from pathlib import Path
 
 from .calculated_values import CalculatedValue, render_calculations
-from .case_report import CaseReportDraft
+from .case_context import load_case_context
+from .case_report import CaseReportDraft, case_reader_delivery
 from .contracts import EvidenceSnapshot
 from .evidence import validate_snapshot
 from .reader import ReaderIssue, _eligible_evidence_ids, render_reader
@@ -84,9 +85,9 @@ def preview_saved_reader(source: Path, request, destination: Path):
         contents[name] = _read_source(source, name)
     contents["run_metadata.json"] = _read_source(source, "run_metadata.json")
     engine = parse_json(contents["run_metadata.json"]).get("engine")
-    if engine not in {f"research-v2-preview-{n}" for n in range(1, 7)}:
+    if engine not in {f"research-v2-preview-{n}" for n in range(1, 8)}:
         raise ValueError("unsupported preview engine revision")
-    requires_provenance = engine == "research-v2-preview-6"
+    requires_provenance = engine in {"research-v2-preview-6", "research-v2-preview-7"}
     provenance_name = f"stages/{reader_stage}-rendering-provenance.json"
     cite_calculations = False
     provenance = None
@@ -101,6 +102,9 @@ def preview_saved_reader(source: Path, request, destination: Path):
         if cite_calculations:
             contents["model_appendix.md"] = _read_source(source, "model_appendix.md")
             contents["case_context.json"] = _read_source(source, "case_context.json")
+    if engine == "research-v2-preview-7":
+        contents["case_input.json"] = _read_source(source, "case_input.json")
+        contents["case_context.json"] = _read_source(source, "case_context.json")
     records = {
         name: parse_json(content)
         for name, content in contents.items()
@@ -110,12 +114,23 @@ def preview_saved_reader(source: Path, request, destination: Path):
     draft_output = _checkpoint_output(draft_record, f"{draft_stage} draft")
     snapshot = validate_snapshot(EvidenceSnapshot.model_validate(records["evidence.json"]), request)
     calculations = tuple(CalculatedValue.model_validate(item) for item in records["calculated_values.json"])
+    case_context = None
+    if engine == "research-v2-preview-7":
+        case_context = load_case_context(contents["case_input.json"], request, snapshot)
+        if digest(case_context.model_context()) != digest(records["case_context.json"]):
+            raise ValueError("saved case context differs from validated frozen inputs")
+        expected_calculations = (case_context.operating_scenarios.calculated_values
+                                 if case_context.operating_scenarios is not None else ())
+        if calculations != expected_calculations:
+            raise ValueError("saved calculation catalog differs from validated frozen case")
+    delivery = case_reader_delivery(case_context) if case_context is not None else None
     authored = CaseReportDraft.model_validate(draft_output)
     draft = authored
     eligible_facts = tuple(f for f in snapshot.facts if f.id in _eligible_evidence_ids(snapshot))
     draft = draft.model_copy(update={"sections": tuple(section.model_copy(update={
         "text": render_calculations(render_references(section.text, eligible_facts, request.report_language),
-                                    calculations, request.report_language, cite=cite_calculations),
+                                    calculations, request.report_language, cite=cite_calculations,
+                                    scenario_delivery=delivery),
     }) for section in draft.sections)})
     issues = []
     for item in records["reader_limitations.json"]["unresolved_issues"]["occurrences"]:
@@ -151,7 +166,7 @@ def preview_saved_reader(source: Path, request, destination: Path):
                 raise ValueError("invalid saved rendering issue")
         expected = reader_provenance(authored, draft, eligible_facts, calculations,
                                      request.report_language, prior, cite=cite_calculations,
-                                     request=request, snapshot=snapshot, issues=issues)
+                                     request=request, snapshot=snapshot, issues=issues, case_context=case_context)
         if digest(expected) != digest(provenance):
             raise ValueError("saved rendering provenance binding mismatch")
         if cite_calculations:

@@ -27,6 +27,7 @@ from .contracts import Budget, Contract, EvidenceSnapshot, ResearchRequest, Usag
 from .engine import run_research
 from .models import CodexModelService
 from .replay import SnapshotEvidenceService
+from .resource_diagnostics import valid_source_resource_shape
 from .services import ModelReply, ResearchServices
 from .storage import atomic_write, canonical_json, digest, parse_json, request_identity
 from .wire import WIRE_SCHEMA_VERSION
@@ -408,12 +409,7 @@ def prepare_case_recovery(
             expected_inputs_hash=digest({}),
         )
         resources = resource_record["output"]
-        if not isinstance(resources, dict) or set(resources) != {
-            "usage",
-            "elapsed_seconds",
-            "dispatched",
-            "by_stage",
-        }:
+        if not valid_source_resource_shape(resources):
             raise ValueError("source resource checkpoint shape is invalid")
         known_usage = Usage.model_validate(resources["usage"])
         elapsed = resources["elapsed_seconds"]

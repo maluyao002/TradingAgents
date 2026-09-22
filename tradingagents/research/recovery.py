@@ -24,6 +24,7 @@ from pydantic import TypeAdapter
 from .contracts import EvidenceSnapshot, ResearchRequest, Usage
 from .engine import _calculate, _prompt_evidence, _validate_analysis
 from .evidence import validate_snapshot
+from .resource_diagnostics import valid_source_resource_shape
 from .services import ModelReply
 from .stages import AnalysisOutput, ValuationProposal, instruction
 from .storage import canonical_json, digest, load_request_inputs, parse_json, request_identity
@@ -373,12 +374,7 @@ def validate_recovery_source(
             known_claims[claim.id] = serialized
 
     resources = _checkpoint_output(source_run, "resources", expected_identity, {})
-    if not isinstance(resources, dict) or set(resources) != {
-        "usage",
-        "elapsed_seconds",
-        "dispatched",
-        "by_stage",
-    }:
+    if not valid_source_resource_shape(resources):
         raise ValueError("source resources checkpoint shape is invalid")
     source_usage = Usage.model_validate(resources["usage"])
     elapsed = resources["elapsed_seconds"]

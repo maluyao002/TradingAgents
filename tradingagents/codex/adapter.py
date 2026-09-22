@@ -21,9 +21,70 @@ from tradingagents.codex.transport import (
     TransportTimeout,
 )
 
+CODEX_FAILURE_REASONS = frozenset({
+    "unknown",
+    "provider_error",
+    "provider_schema_rejected",
+    "provider_usage_limited",
+    "provider_unauthorized",
+    "provider_transient",
+    "provider_model_rerouted",
+    "provider_incomplete_turn",
+    "transport_timeout",
+    "transport_closed",
+    "transport_error",
+    "protocol_invalid_turn",
+    "protocol_invalid_notification",
+    "protocol_invalid_stream",
+    "protocol_stream_event_limit",
+    "protocol_stream_char_limit",
+    "protocol_notification_limit",
+    "protocol_invalid_warning",
+    "protocol_invalid_settings",
+    "protocol_unknown_thread",
+    "protocol_unknown_turn",
+    "protocol_unexpected_notification",
+    "protocol_invalid_item",
+    "protocol_unexpected_item",
+    "protocol_duplicate_item",
+    "protocol_invalid_message",
+    "protocol_output_limit",
+    "cleanup_failed",
+    "cleanup_interrupt",
+    "cleanup_unsubscribe",
+    "missing_output",
+})
+"""Finite, safe machine-readable reasons for Codex inference failures."""
+
+
+def _allowlisted_failure_reason(reason: object) -> str:
+    """Return a bounded reason code without preserving untrusted input."""
+    return reason if type(reason) is str and reason in CODEX_FAILURE_REASONS else "unknown"
+
+
+def codex_failure_reason(error: BaseException) -> str:
+    """Return the allowlisted failure reason for any exception, else ``unknown``.
+
+    This is the engine-facing API. It deliberately ignores arbitrary exception
+    attributes and never derives a reason from an exception message.
+    """
+    if not isinstance(error, CodexAdapterError):
+        return "unknown"
+    # Do not invoke an arbitrary property while handling another failure.
+    return _allowlisted_failure_reason(object.__getattribute__(error, "__dict__").get("_reason"))
+
 
 class CodexAdapterError(RuntimeError):
     """A safe-to-display adapter, authentication, or protocol failure."""
+
+    def __init__(self, *args: object, reason: object = "unknown") -> None:
+        super().__init__(*args)
+        self._reason = _allowlisted_failure_reason(reason)
+
+    @property
+    def reason(self) -> str:
+        """The bounded reason code; never a raw provider detail."""
+        return _allowlisted_failure_reason(getattr(self, "_reason", None))
 
 
 class CodexAuthenticationError(CodexAdapterError):
@@ -59,15 +120,27 @@ def _turn_error(error: object) -> CodexAdapterError:
         "invalid schema for response_format", "invalid schema for response format",
         "invalid schema for text.format", "invalid_json_schema",
     )):
-        return CodexStructuredOutputError("Codex rejected the structured-output schema; details redacted")
+        return CodexStructuredOutputError(
+            "Codex rejected the structured-output schema; details redacted",
+            reason="provider_schema_rejected",
+        )
     info = error.get("codexErrorInfo") if isinstance(error, dict) else None
     if isinstance(info, str):
         if info in {"usageLimitExceeded", "sessionBudgetExceeded"}:
-            return CodexUsageLimitError("Codex usage limit reached; resume when capacity is available")
+            return CodexUsageLimitError(
+                "Codex usage limit reached; resume when capacity is available",
+                reason="provider_usage_limited",
+            )
         if info == "unauthorized":
-            return CodexAuthenticationError("Codex authentication is unavailable; sign in again")
+            return CodexAuthenticationError(
+                "Codex authentication is unavailable; sign in again",
+                reason="provider_unauthorized",
+            )
         if info in {"rateLimitExceeded", "serverOverloaded", "internalServerError"}:
-            return CodexTransientError("Codex temporarily unavailable; details redacted")
+            return CodexTransientError(
+                "Codex temporarily unavailable; details redacted",
+                reason="provider_transient",
+            )
     elif isinstance(info, dict) and len(info) == 1:
         for name in (
             "httpConnectionFailed", "responseStreamConnectionFailed",
@@ -78,10 +151,16 @@ def _turn_error(error: object) -> CodexAdapterError:
                 continue
             status = details.get("httpStatusCode")
             if type(status) is int and status in {401, 403}:
-                return CodexAuthenticationError("Codex authentication or access is unavailable")
+                return CodexAuthenticationError(
+                    "Codex authentication or access is unavailable",
+                    reason="provider_unauthorized",
+                )
             if status is None or type(status) is int and (status in {408, 429} or 500 <= status <= 599):
-                return CodexTransientError("Codex connection temporarily unavailable; details redacted")
-    return CodexInferenceError("Codex reported a turn error; details redacted")
+                return CodexTransientError(
+                    "Codex connection temporarily unavailable; details redacted",
+                    reason="provider_transient",
+                )
+    return CodexInferenceError("Codex reported a turn error; details redacted", reason="provider_error")
 
 
 @dataclass(frozen=True, slots=True)
@@ -841,7 +920,7 @@ class CodexAdapter:
                 output_schema=normalized_schema,
             )
             if not turn_is_valid:
-                raise CodexInferenceError("turn/start returned an invalid active turn")
+                raise CodexInferenceError("turn/start returned an invalid active turn", reason="protocol_invalid_turn")
             timings["turn_start_seconds"] = time.perf_counter() - phase_start
             phase_start = time.perf_counter()
             result = self._wait_for_turn(thread_id, turn_id, deadline, model=model, effort=effort)
@@ -868,19 +947,19 @@ class CodexAdapter:
             if isinstance(failure, CodexAdapterError):
                 raise failure
             if isinstance(failure, TransportTimeout):
-                raise CodexTransientError("Codex inference did not complete before its deadline") from None
+                raise CodexTransientError("Codex inference did not complete before its deadline", reason="transport_timeout") from None
             if isinstance(failure, TransportClosed):
-                raise CodexTransientError("Codex connection closed before inference completed") from None
+                raise CodexTransientError("Codex connection closed before inference completed", reason="transport_closed") from None
             if isinstance(failure, TransportError):
-                raise CodexInferenceError(str(failure)) from None
+                raise CodexInferenceError(str(failure), reason="transport_error") from None
             raise failure
         if cleanup_error is not None:
             self._invalidate()
             if isinstance(cleanup_error, CodexAdapterError):
                 raise cleanup_error
-            raise CodexInferenceError("Codex thread cleanup failed") from None
+            raise CodexInferenceError("Codex thread cleanup failed", reason="cleanup_failed") from None
         if result is None:  # Defensive; successful turns always set a result.
-            raise CodexInferenceError("Codex completed without a final text response")
+            raise CodexInferenceError("Codex completed without a final text response", reason="missing_output")
         return CodexCompletion(result.text, result.usage, timings)
 
     def _start_thread(self, instructions: str, model: str, deadline: float) -> str:
@@ -958,7 +1037,7 @@ class CodexAdapter:
         turn = result.get("turn") if isinstance(result, dict) else None
         turn_id = _safe_identifier(turn.get("id")) if isinstance(turn, dict) else None
         if turn_id is None:
-            raise CodexInferenceError("turn/start returned an invalid active turn")
+            raise CodexInferenceError("turn/start returned an invalid active turn", reason="protocol_invalid_turn")
         is_valid = turn.get("status") == "inProgress" and isinstance(
             turn.get("items"), list
         )
@@ -989,7 +1068,7 @@ class CodexAdapter:
             method = notification.get("method")
             params = notification.get("params")
             if not isinstance(method, str) or not isinstance(params, dict):
-                raise CodexInferenceError("Codex emitted an invalid turn notification")
+                raise CodexInferenceError("Codex emitted an invalid turn notification", reason="protocol_invalid_notification")
             event_thread = params.get("threadId")
             if (method == "item/agentMessage/delta" and event_thread == thread_id
                     and params.get("turnId") == turn_id):
@@ -997,21 +1076,21 @@ class CodexAdapter:
                 delta = params.get("delta")
                 if (not turn_started or item_types.get(item_id) != "agentMessage"
                         or item_id in completed_items or not isinstance(delta, str)):
-                    raise CodexInferenceError("Codex emitted an invalid agent message delta")
+                    raise CodexInferenceError("Codex emitted an invalid agent message delta", reason="protocol_invalid_stream")
                 if delta:
                     stream_events += 1
                     stream_chars += len(delta)
                     if stream_events > _MAX_STREAM_EVENTS:
-                        raise CodexInferenceError("Codex turn exceeded the streaming event safety limit")
+                        raise CodexInferenceError("Codex turn exceeded the streaming event safety limit", reason="protocol_stream_event_limit")
                     if stream_chars > _MAX_STREAM_CHARS:
-                        raise CodexInferenceError("Codex streamed output exceeded the adapter safety limit")
+                        raise CodexInferenceError("Codex streamed output exceeded the adapter safety limit", reason="protocol_stream_char_limit")
                     continue
             # Empty chunks, retired/unrelated traffic and other notifications
             # still consume the control budget; none can keep this loop alive
             # indefinitely. Every read also uses the original absolute deadline.
             control_events += 1
             if control_events > _MAX_TURN_EVENTS:
-                raise CodexInferenceError("Codex turn exceeded the notification safety limit")
+                raise CodexInferenceError("Codex turn exceeded the notification safety limit", reason="protocol_notification_limit")
             # Official warning notifications are advisory thread metadata, not
             # turn lifecycle events or permission to execute tools. Do not echo
             # their free-form text: it may contain private runtime details.
@@ -1019,16 +1098,16 @@ class CodexAdapter:
                 if not isinstance(params.get("message"), str) or (
                     event_thread is not None and not isinstance(event_thread, str)
                 ):
-                    raise CodexInferenceError("Codex emitted an invalid warning notification")
+                    raise CodexInferenceError("Codex emitted an invalid warning notification", reason="protocol_invalid_warning")
                 if event_thread not in (None, thread_id) and event_thread not in self._retired_threads:
-                    raise CodexInferenceError("Codex emitted a warning for an unknown thread")
+                    raise CodexInferenceError("Codex emitted a warning for an unknown thread", reason="protocol_unknown_thread")
                 continue
             if method == "thread/settings/updated":
                 if isinstance(event_thread, str) and event_thread in self._retired_threads:
                     continue
                 settings = params.get("threadSettings")
                 if event_thread != thread_id or not isinstance(settings, dict):
-                    raise CodexInferenceError("Codex emitted an invalid thread settings notification")
+                    raise CodexInferenceError("Codex emitted an invalid thread settings notification", reason="protocol_invalid_settings")
                 expected = {
                     "model": model, "effort": effort, "modelProvider": "openai",
                     "cwd": str(self._workspace), "approvalPolicy": "never",
@@ -1037,16 +1116,16 @@ class CodexAdapter:
                 sandbox = settings.get("sandboxPolicy")
                 if (any(settings.get(key) != value for key, value in expected.items())
                         or not isinstance(sandbox, dict) or sandbox.get("type") != "readOnly"):
-                    raise CodexInferenceError("Codex thread settings differ from the requested isolated configuration")
+                    raise CodexInferenceError("Codex thread settings differ from the requested isolated configuration", reason="protocol_invalid_settings")
                 continue
             if method == "thread/tokenUsage/updated":
                 if isinstance(event_thread, str) and event_thread in self._retired_threads:
                     continue
                 event_turn = params.get("turnId")
                 if event_thread != thread_id:
-                    raise CodexInferenceError("Codex emitted an event for an unknown thread")
+                    raise CodexInferenceError("Codex emitted an event for an unknown thread", reason="protocol_unknown_thread")
                 if event_turn != turn_id:
-                    raise CodexInferenceError("Codex emitted an event for an unknown turn")
+                    raise CodexInferenceError("Codex emitted an event for an unknown turn", reason="protocol_unknown_turn")
                 updated_usage = _thread_token_usage(params.get("tokenUsage"))
                 if (
                     updated_usage is None
@@ -1066,24 +1145,24 @@ class CodexAdapter:
                 if event_thread in self._retired_threads:
                     continue
                 if event_thread != thread_id:
-                    raise CodexInferenceError("Codex emitted an event for an unknown thread")
+                    raise CodexInferenceError("Codex emitted an event for an unknown thread", reason="protocol_unknown_thread")
                 continue
             if event_thread in self._retired_threads:
                 continue
             if method not in _TURN_EVENT_METHODS:
                 if event_thread == thread_id or params.get("turnId") == turn_id:
                     label = method if method in _PROTOCOL_NOTIFICATION_NAMES else "unrecognized method"
-                    raise CodexInferenceError(f"Codex emitted an unexpected active-turn notification ({label})")
+                    raise CodexInferenceError(f"Codex emitted an unexpected active-turn notification ({label})", reason="protocol_unexpected_notification")
                 continue
             event_turn = params.get("turnId")
             if event_thread != thread_id:
-                raise CodexInferenceError("Codex emitted a turn event for an unknown thread")
+                raise CodexInferenceError("Codex emitted a turn event for an unknown thread", reason="protocol_unknown_thread")
             if method.startswith("turn/"):
                 embedded_turn = params.get("turn")
                 if isinstance(embedded_turn, dict):
                     event_turn = embedded_turn.get("id")
             if event_turn != turn_id:
-                raise CodexInferenceError("Codex emitted an event for an unknown turn")
+                raise CodexInferenceError("Codex emitted an event for an unknown turn", reason="protocol_unknown_turn")
 
             if method == "turn/started":
                 turn = params.get("turn")
@@ -1092,25 +1171,25 @@ class CodexAdapter:
                     or not isinstance(turn, dict)
                     or turn.get("status") != "inProgress"
                 ):
-                    raise CodexInferenceError("Codex emitted an invalid turn start event")
+                    raise CodexInferenceError("Codex emitted an invalid turn start event", reason="protocol_invalid_turn")
                 turn_started = True
             elif method in {"item/started", "item/completed"}:
                 item = params.get("item")
                 if not isinstance(item, dict):
-                    raise CodexInferenceError("Codex emitted an invalid item event")
+                    raise CodexInferenceError("Codex emitted an invalid item event", reason="protocol_invalid_item")
                 item_id = _safe_identifier(item.get("id"))
                 item_type = item.get("type")
                 if item_id is None or item_type not in _PASSIVE_ITEM_TYPES:
-                    raise CodexInferenceError("Codex attempted an unexpected tool or item")
+                    raise CodexInferenceError("Codex attempted an unexpected tool or item", reason="protocol_unexpected_item")
                 if method == "item/started":
                     if item_id in started_items:
-                        raise CodexInferenceError("Codex emitted a duplicate item start event")
+                        raise CodexInferenceError("Codex emitted a duplicate item start event", reason="protocol_duplicate_item")
                     started_items.add(item_id)
                     item_types[item_id] = item_type
                 else:
                     if (item_id not in started_items or item_id in completed_items
                             or item_types[item_id] != item_type):
-                        raise CodexInferenceError("Codex emitted an invalid item completion event")
+                        raise CodexInferenceError("Codex emitted an invalid item completion event", reason="protocol_invalid_item")
                     completed_items.add(item_id)
                     if item_type == "agentMessage":
                         text = item.get("text")
@@ -1120,37 +1199,37 @@ class CodexAdapter:
                             "commentary",
                             "final_answer",
                         }:
-                            raise CodexInferenceError("Codex emitted an invalid agent message")
+                            raise CodexInferenceError("Codex emitted an invalid agent message", reason="protocol_invalid_message")
                         if phase == "final_answer":
                             final_messages.append(text)
                         elif phase is None:
                             unphased_messages.append(text)
                         output_chars += len(text)
                         if output_chars > _MAX_OUTPUT_CHARS:
-                            raise CodexInferenceError("Codex output exceeded the adapter safety limit")
+                            raise CodexInferenceError("Codex output exceeded the adapter safety limit", reason="protocol_output_limit")
             elif method == "item/agentMessage/delta":
                 if (
                     _safe_identifier(params.get("itemId")) not in started_items
                     or not isinstance(params.get("delta"), str)
                 ):
-                    raise CodexInferenceError("Codex emitted an invalid agent message delta")
+                    raise CodexInferenceError("Codex emitted an invalid agent message delta", reason="protocol_invalid_stream")
             elif method == "model/rerouted":
-                raise CodexInferenceError("Codex rerouted the requested model")
+                raise CodexInferenceError("Codex rerouted the requested model", reason="provider_model_rerouted")
             elif method == "error":
                 raise _turn_error(params.get("error"))
             elif method == "turn/completed":
                 turn = params.get("turn")
                 if not turn_started or not isinstance(turn, dict):
-                    raise CodexInferenceError("Codex emitted an invalid turn completion event")
+                    raise CodexInferenceError("Codex emitted an invalid turn completion event", reason="protocol_invalid_turn")
                 if turn.get("status") != "completed":
                     if turn.get("error") is not None:
                         raise _turn_error(turn["error"])
-                    raise CodexInferenceError("Codex turn did not complete successfully")
+                    raise CodexInferenceError("Codex turn did not complete successfully", reason="provider_incomplete_turn")
                 if started_items != completed_items:
-                    raise CodexInferenceError("Codex completed with unfinished output items")
+                    raise CodexInferenceError("Codex completed with unfinished output items", reason="protocol_invalid_item")
                 messages = final_messages or unphased_messages
                 if not messages or not any(message.strip() for message in messages):
-                    raise CodexInferenceError("Codex completed without a final text response")
+                    raise CodexInferenceError("Codex completed without a final text response", reason="missing_output")
                 return CodexCompletion("\n".join(messages), usage)
 
     def _cleanup_thread(
@@ -1162,7 +1241,7 @@ class CodexAdapter:
             return None
         transport = self._transport
         if transport is None:
-            return CodexInferenceError("Codex thread cleanup failed")
+            return CodexInferenceError("Codex thread cleanup failed", reason="cleanup_failed")
         cleanup_timeout = min(1.0, self.timeout)
         error: BaseException | None = None
         if active_turn_id is not None:
@@ -1173,7 +1252,7 @@ class CodexAdapter:
                     timeout=cleanup_timeout,
                 )
                 if not isinstance(interrupted, dict):
-                    raise CodexInferenceError("turn/interrupt returned an invalid result")
+                    raise CodexInferenceError("turn/interrupt returned an invalid result", reason="cleanup_interrupt")
             except (TransportError, CodexAdapterError) as exc:
                 error = exc
         try:
@@ -1187,7 +1266,7 @@ class CodexAdapter:
                 "notSubscribed",
                 "unsubscribed",
             }:
-                raise CodexInferenceError("thread/unsubscribe returned an invalid result")
+                raise CodexInferenceError("thread/unsubscribe returned an invalid result", reason="cleanup_unsubscribe")
         except (TransportError, CodexAdapterError) as exc:
             error = error or exc
         self._retired_threads.add(thread_id)

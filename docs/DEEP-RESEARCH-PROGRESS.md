@@ -12,6 +12,55 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+### September 21 validation and offline closure follow-up
+
+PR #17 merged as `ec56392`. The next authorized NVDA validation produced a
+2,832-word initial reader and a clean factual pass, then failed during coverage
+batch 13 of 16 after 81.86 minutes. Known usage is 1,395,072 tokens over 22 completed
+calls; failed-call usage is unknown. The generic retained exception does not prove
+quota, streaming guard, provider or timeout as the cause. No accepted report was
+exported and no retry was authorized from the expired allowance.
+
+The approved next sequence is developed on
+`codex/research-offline-finalization-closure`, targeting `codex/deep-research-v2`.
+It adds allowlisted adapter failure reasons and failed-stage/duration telemetry;
+observed-latency current-pass and repair-path planning; explicit financial-draft
+versus operating-review disclosure requirements; a new source/assumption/weekly-
+comparison table with frozen-case provenance; and conservative compound-obligation
+handling. Original evidence, reports and usage flags remain unchanged.
+
+The old preview-6 NVDA candidate was recomputed offline under the updated preview
+code into a separate temporary destination; its original binding still passes.
+The new preview-7 contract cannot silently reuse old verification attestations.
+Concurrency remains deferred because safe isolated cancellation and aggregate
+resource accounting need separate design; no speedup is claimed from an untested
+concurrent implementation. See [the delivery note](DEEP-RESEARCH-OFFLINE-CLOSURE.md)
+for timing assumptions, preserved gates and the next authorization boundary.
+
+The integrated affected-engine scope passes **344 offline tests**. The separate
+adapter/model/wire boundary group passes **204 tests**. Targeted lint and whitespace
+checks pass. Independent review identified two issues and drove fixes: recovery
+readers now validate the additive diagnostics shape, and timing observations require
+accepted stages rather than merely replies with known counters. A separate Terra
+review found no actionable compound-lifecycle findings. New regression fixtures
+check exact component fan-in, failure privacy, unknown usage, timing stops, table
+provenance, ambiguous guidance and unchanged historical rendering. The legacy
+real-packet lifecycle fixture uses an explicit larger *synthetic* budget because
+its purpose is lifecycle behavior, not the historical live allowance; tight-budget
+admission tests remain unchanged.
+
+Further Sol review found a guidance-prefix extraction bug that could drop period
+qualifiers, plus a metric-routing bug that could attach gross-margin text to an
+expense input. The automatic range assignment was removed. Full exact source
+context is now retained only for explicitly supported retrieval metrics, without
+claiming a typed period/range match. Tests cover trailing exclusions, headings,
+malformed raw range text and unsupported expense routing. Guidance interpretation
+remains part of substantive writer/verifier review, not deterministic acceptance.
+The final guidance fix passed 78 affected reader/preview tests, and independent
+Sol re-review found no remaining actionable findings. Hosted review then caught
+a contradictory marker allowlist in the writer instructions; the required new
+assumptions-table marker is now explicitly permitted, with a prompt regression.
+
 ### Fresh NVDA validation and offline interface repair — September 20, 2026
 
 After PR #16 merged as `c397176`, the separately authorized fresh English NVDA

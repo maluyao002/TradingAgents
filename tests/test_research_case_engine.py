@@ -54,6 +54,11 @@ class CaseFixture:
                              for purpose in SECTION_PURPOSES],
                 "limitations": payload["research"]["limitations"], "investment_view": "unrated",
             }
+            for issue in payload.get("compound_obligation_guidance", ()):
+                active = [component["text"] for component in issue["compound_obligation"]["components"]
+                          if component["reader_treatment"] == "reader_required"]
+                for section in data["sections"]:
+                    section["text"] = section["text"].replace(issue["text"], "\n\n".join(active))
             if self.missing_section:
                 data["sections"].pop()
             if self.forbidden_calculation:
@@ -70,6 +75,12 @@ class CaseFixture:
                     "rationale": "Synthetic case limitations are explicitly retained.",
                     "reader_excerpt": issue["text"],
                 } for issue in payload["research"]["limitation_review"] if issue["text"] in reader]
+                data["limitation_dispositions"].extend({
+                    "issue_id": issue["issue_id"], "decision": "audit_only_operational",
+                    "rationale": "Synthetic explicit procedural component remains in the audit.",
+                } for issue in payload["research"]["limitation_review"]
+                    if issue.get("coverage_component", {}).get("reader_treatment") == "audit_only_procedural"
+                    and issue["text"] not in reader)
         return ModelReply(data=data, usage={"input_tokens": 100, "output_tokens": 30})
 
 
