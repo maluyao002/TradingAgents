@@ -26,11 +26,13 @@ working-capital metric-pairing error. Targeted fixes cover paired metrics,
 decimal reproducibility, captured-source provenance, pinned triage lifecycle
 inputs and complete prospective delivery in optional-work cost estimates.
 Coordinator review also removed post-hoc source-capture provenance repair.
-The targeted verification set contains 195 distinct passing tests; lint and
+The targeted verification set contains 203 distinct passing tests; lint and
 whitespace checks passed. These are engineering checks, not financial/report
 acceptance. No new live research/model run was performed.
 
-The actual cash-flow case remains an explicitly unreviewed conditional draft.
+The actual cash-flow case retains its original unreviewed draft files; a separate
+independent case-3 source/arithmetic finding is recorded without changing reader
+eligibility or claiming economic approval.
 Source review now includes current proxy evidence, three guidance/actual pairs,
 CoreWeave concentration/financing and external competitive deployment. Full-text
 acquisition saved three documents; four SEC filings require the user's contact

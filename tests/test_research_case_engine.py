@@ -251,7 +251,7 @@ def test_duplicate_case_section_purpose_is_rejected():
 def test_new_followup_evidence_stops_before_using_stale_case(tmp_path):
     request, services = case_setup(tmp_path)
     request = request.model_copy(update={"budget": request.budget.model_copy(update={
-        "followup_cycles": 1, "wall_seconds": 30000, "total_tokens": 30000000})})
+        "followup_cycles": 1, "wall_seconds": 30000, "total_tokens": 100000000})})
 
     class NewEvidence(SnapshotEvidenceService):
         def followup(self, request, snapshot, questions):
@@ -274,6 +274,10 @@ def test_followup_reserve_counts_complete_case_delivery_and_decision_policy(tmp_
         return read_json(request.output_dir / "stages/finalization-plan-0.json")["output"]
 
     baseline = planned("base")
+    assert baseline["future_output_growth_bytes_planning_allowance"] == 8 * 16000 * 16
+    assert baseline["reader_bytes_planning_assumption"] == 16000 * 16
+    assert baseline["provider_output_cap_is_hard"] is False
+    assert baseline["per_call_admission_remains_mandatory"] is True
     original = engine.case_reader_delivery
 
     def larger_delivery(context):
@@ -286,6 +290,7 @@ def test_followup_reserve_counts_complete_case_delivery_and_decision_policy(tmp_
         assert extended["prospective_context_bytes"][role] > baseline["prospective_context_bytes"][role] + 200000
     assert extended["estimated_tokens"] > baseline["estimated_tokens"]
     assert extended["optional_cycle_token_envelope"] > baseline["optional_cycle_token_envelope"]
+    assert extended["future_output_growth_bytes_planning_allowance"] == baseline["future_output_growth_bytes_planning_allowance"]
 
 
 def test_historical_prefix_import_is_not_a_case_recovery_path(tmp_path):

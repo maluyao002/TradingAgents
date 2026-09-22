@@ -72,6 +72,14 @@ payload, calculation catalog, exact-reader verification, appendix, preview and
 separate cash-flow admission status. They still cannot clear valuation, equity
 value or funding by implication.
 
+The independent reviewer subsequently verified case 3's frozen-source bindings,
+periods and arithmetic. Its narrow finding is preserved separately at
+`reports/RESEARCH_SUBSTANTIVE_20260922/nvda_cashflow_case_3_review/REVIEW.md`.
+It does not economically endorse the assumptions. The original draft still has
+`review=None` and its original unreviewed-status limitation; no historical file
+or reader-eligibility flag was silently changed. Current package/review bindings
+must be regenerated with the next assembled case before numeric reader delivery.
+
 The historical proxy bridge retains an unexplained reconciliation residual.
 The scenario grid is an explicitly authored sensitivity, not a calibrated
 forecast or a claim that the middle case is most likely. The equity investments
@@ -156,7 +164,21 @@ Independent Sol/high review found five defects, all assigned targeted fixes:
 Coordinator review also removed unsafe post-hoc provenance repair from the new
 source-capture utility; see the evidence follow-up for the prototype boundary.
 
-Validation covered **195 distinct targeted tests**, including the affected
+The re-review also caught source-ID/URL substitution and invalid cutoff/retrieval
+timestamps in injected capture results. Exact normalized requested-URL matching,
+HTTPS redirect/final-URL checks and aware post-cutoff timestamps now precede
+caching. The follow-up growth allowance is independent of current fixture sizes:
+eight future calls × 16,000 advisory output tokens × a generous 16-byte heuristic,
+plus a 256,000-byte reader planning allowance. These are explicit planning
+assumptions, not mathematical tokenizer bounds or hard provider spending caps;
+every actual dispatch still requires admission.
+
+Final independent Sol/high re-review closed all remaining code findings and found
+no new actionable defect in the last fix diff; 18 focused reviewer regressions,
+lint and whitespace checks passed. This disposition does not extend the separate
+cash-flow source/arithmetic review or confer financial/report acceptance.
+
+Validation covered **203 distinct targeted tests**, including the affected
 financial, case, admission, finalization, lifecycle, renderer/preview and capture
 boundaries. Ruff and whitespace checks passed. The full suite was not repeated
 locally; existing hosted CI requirements remain unchanged.
@@ -166,7 +188,7 @@ locally; existing hosted CI requirements remain unchanged.
 | Approved priority | Delivered in this increment | Still required |
 | --- | --- | --- |
 | Actionable unknowns | Nine lossless work packages, ownership, completion criteria and search boundaries | Execute the substantive work; grouping itself closes no issue |
-| Financial model | Dated conditional cash-flow calculator and engine-to-reader integration | Independent actual-package review, residual attribution, longer-horizon valuation, equity/funding closure |
+| Financial model | Dated conditional cash-flow calculator, engine-to-reader integration and narrow case-3 source/arithmetic review | Current bound review in the newly assembled case, residual attribution, longer-horizon valuation, equity/funding closure |
 | Independent evidence | New targeted source review, three guidance/actual pairs, bounded full-text capture | SEC contact identifier, remaining full texts, new eligible packet and targeted unresolved operating evidence |
 | Judgment-led writing | Shared analyst/writer/verifier contract and separate cash-flow scope disclosure | Validate the actual enriched English reader, not merely prompt compliance |
 | Integrated verification | Targeted synthetic end-to-end mechanics and regression checks | Fresh bounded NVDA validation, actual-reader acceptance, then HOOD generality |

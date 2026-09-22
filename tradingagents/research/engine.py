@@ -1213,10 +1213,15 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     prospective_sizes = {name: model_input_bytes(payload, role=role, output_token_envelope=16_000,
                                                                  valuation_method=request.valuation_method)
                                          for name, (role, payload) in prospective_payloads.items()}
-                    growth_allowance = len(canonical_json(outputs))
+                    # Generous, explicit heuristics, not a mathematical token/byte
+                    # maximum or a guarantee against an advisory provider overrun.
+                    future_output_calls, advisory_output_tokens, bytes_per_token = 8, 16_000, 16
+                    reader_bytes_allowance = advisory_output_tokens * bytes_per_token
+                    growth_allowance = future_output_calls * reader_bytes_allowance
                     context_bytes = max(prospective_sizes.values()) + growth_allowance
                     allowance = finalization_allowance(
                         inventory, context_bytes=context_bytes,
+                        reader_bytes=reader_bytes_allowance,
                         coverage_batch_policy=request.coverage_batch_policy,
                         call_timeout_seconds=request.budget.call_timeout_seconds,
                         language_count=1 + len(request.additional_report_languages),
@@ -1235,7 +1240,13 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                         "issue_ids": [item["issue_id"] for item in inventory],
                     }, {**allowance, "optional_cycle_skipped": skip,
                         "prospective_context_bytes": prospective_sizes,
-                        "future_analysis_growth_bytes_planning_assumption": growth_allowance,
+                        "future_output_growth_bytes_planning_allowance": growth_allowance,
+                        "future_output_growth_assumptions": {
+                            "calls": future_output_calls, "advisory_output_tokens_per_call": advisory_output_tokens,
+                            "bytes_per_token_heuristic": bytes_per_token,
+                        },
+                        "provider_output_cap_is_hard": False,
+                        "per_call_admission_remains_mandatory": True,
                         "context_bytes_planning_assumption": context_bytes,
                         "optional_cycle_token_envelope": next_cycle_token_envelope,
                         "optional_cycle_call_seconds": next_cycle_call_seconds,

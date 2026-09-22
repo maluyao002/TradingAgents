@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from datetime import datetime, timezone
 
 import pytest
@@ -201,3 +202,33 @@ def test_capture_retains_original_input_if_source_manifest_changes(tmp_path):
                              source_manifest_path=manifest_path)
     assert packet["admission"]["status"] == "source_manifest_changed_during_capture"
     assert (destination / "source_manifest.json").read_bytes() == original
+
+
+@pytest.mark.parametrize("changes", [
+    {"requested_url": "https://example.com/different"},
+    {"final_url": "http://example.com/insecure"},
+    {"redirects": ("https://127.0.0.1/private",)},
+    {"retrieved_at": datetime(2026, 9, 22)},
+    {"retrieved_at": datetime(2026, 9, 18, tzinfo=UTC)},
+])
+def test_wrong_url_or_time_never_becomes_a_captured_source(tmp_path, changes):
+    url = "https://example.com/one"
+    manifest = _manifest({"id": "one", "source_url": url})
+    destination = tmp_path / "evidence_capture_test"
+    packet = capture_sources(manifest, destination,
+                             fetcher=StubFetcher({url: replace(_fetched(url), **changes)}),
+                             source_manifest_path=_write_manifest(tmp_path, manifest))
+    assert packet["counts"]["captured"] == 0
+    assert not (destination / "source-cache").exists()
+
+
+@pytest.mark.parametrize("cutoff", ["invalid", "2026-09-19", "2099-01-01T00:00:00Z"])
+def test_invalid_or_future_cutoff_fails_before_side_effects(tmp_path, cutoff):
+    manifest = _manifest({"id": "one", "source_url": "https://example.com/one"})
+    manifest["case_cutoff"] = cutoff
+    destination = tmp_path / "evidence_capture_test"
+    fetcher = StubFetcher({})
+    with pytest.raises(ValueError):
+        capture_sources(manifest, destination, fetcher=fetcher,
+                        source_manifest_path=_write_manifest(tmp_path, manifest))
+    assert not destination.exists() and not fetcher.calls

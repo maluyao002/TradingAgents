@@ -20,6 +20,7 @@ from tradingagents.research.sources import (
     FileSourceCache,
     PublicSourceFetcher,
     SourceAccessError,
+    normalize_public_https_url,
 )
 from tradingagents.research.storage import (
     atomic_write,
@@ -108,12 +109,18 @@ def capture_sources(
     if canonical_json(parse_json(content)) != canonical_json(manifest):
         raise ValueError("provided manifest differs from captured source bytes")
     cutoff = manifest.get("case_cutoff")
-    if not isinstance(cutoff, str) or not cutoff:
-        raise ValueError("manifest case_cutoff is required")
+    try:
+        cutoff_time = datetime.fromisoformat(cutoff.replace("Z", "+00:00"))
+        if cutoff_time.tzinfo is None or cutoff_time.utcoffset() is None:
+            raise ValueError
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError("manifest case_cutoff must be an aware datetime") from exc
     selected_urls = _urls(manifest)
     captured_at = captured_at or datetime.now(timezone.utc)
     if captured_at.tzinfo is None or captured_at.utcoffset() is None:
         raise ValueError("captured_at must be timezone-aware")
+    if captured_at <= cutoff_time:
+        raise ValueError("capture must occur after the frozen case cutoff")
     _new_destination(destination)
     atomic_write(destination / "source_manifest.json", content)
     cache = FileSourceCache(destination / "source-cache")
@@ -122,6 +129,13 @@ def capture_sources(
     for source_id, url in selected_urls:
         try:
             fetched = fetcher.fetch(url, use_cache=False)
+            if fetched.requested_url != normalize_public_https_url(url):
+                raise SourceAccessError("capture_url_mismatch", "returned source differs from requested manifest URL")
+            for returned_url in (fetched.final_url, *fetched.redirects):
+                normalize_public_https_url(returned_url)
+            if (fetched.retrieved_at.tzinfo is None or fetched.retrieved_at.utcoffset() is None
+                    or fetched.retrieved_at <= cutoff_time):
+                raise SourceAccessError("capture_time_mismatch", "retrieval must be aware and after the frozen cutoff")
             cache.put(fetched)
         except SourceAccessError as exc:
             records.append(
