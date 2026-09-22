@@ -35,8 +35,14 @@ independent case-3 source/arithmetic finding is recorded without changing reader
 eligibility or claiming economic approval.
 Source review now includes current proxy evidence, three guidance/actual pairs,
 CoreWeave concentration/financing and external competitive deployment. Full-text
-acquisition saved three documents; four SEC filings require the user's contact
-identifier. Prototype capture metadata limitations are recorded, not hidden.
+acquisition initially saved three documents while four SEC filings required the
+user's contact identifier. That input is now supplied and was used process-locally:
+fresh captures 3/4 saved all seven intended documents plus Meta's filing index.
+The incorrect Meta document URL was corrected from the official filing index in
+a separate manifest; earlier inputs and failures remain intact. All eight
+successful raw/text bindings and exact input bytes passed read-back checks, and
+all 17 capture regressions passed again. All six hosted CI checks passed on code
+commit `3d14249`. Prototype capture metadata limitations are recorded, not hidden.
 New evidence must enter a fresh eligible packet and dependent analyses must be
 refreshed before the next bounded NVDA run. HOOD and actual-reader acceptance
 remain open. No main-branch, schedule, provider or historical report was changed.

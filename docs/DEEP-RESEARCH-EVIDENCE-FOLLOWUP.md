@@ -118,20 +118,53 @@ Still required before any substantive durability or funding conclusion:
 
 These open items are not silently converted into negative conclusions.
 
-## Full-text delivery and the remaining user input
+## Full-text delivery — contact blocker resolved September 22
 
-The public-source downloader saved three complete documents (DOE deployment,
-NVIDIA Q2 FY2026 release and Q2 FY2027 release). Four SEC documents are still
-blocked by `sec_identity_required`: Meta's filing, two NVIDIA proxies and the
-CoreWeave filing. They were inspected through web retrieval, but their complete
-text is not yet stored for engine delivery. No configured SEC contact identifier
-was found in the process environment or workspace `.env`; only presence checks
-were printed, not environment contents.
+The user supplied a SEC contact identifier. It was used only in the capture
+process environment, not saved to configuration or committed. The corrected
+capture utility now stores all seven intended documents across two fresh,
+immutable captures, plus the Meta filing index:
 
-The requested user input is a name/organization and contact email to identify
-public-filing requests to the SEC. Do not invent it, commit it, or silently use
-another account. After it is supplied, collect into a fresh directory, assemble
-an eligible new packet and refresh dependent analyses/reviews.
+- `evidence_capture_3`: six of seven URLs captured. Both NVIDIA proxies and the
+  CoreWeave filing succeeded; the original Meta URL returned `http_unavailable`.
+- `evidence_capture_4`: two of two URLs captured, using
+  `meta_corrected_manifest.json`: the Meta filing index and its listed primary
+  document, `meta-20251231.htm`. The original manifest incorrectly named
+  `meta-12312025x10kars.htm`. The correction preserves the accession, issuer and
+  fiscal period and records the original URL and predecessor-manifest hash.
+
+The [official filing index](https://www.sec.gov/Archives/edgar/data/1326801/000162828026003942/0001628280-26-003942-index.htm)
+identifies sequence 1 as the FY2025 10-K. The saved corrected document contains
+the previously noted $69.69 billion property-and-equipment purchases passage;
+this does not retrospectively authenticate review against the old, unavailable URL.
+
+Cache read-back verified all eight successful raw/text bindings, requested/final
+URL identity, HTTP status, retrieval timestamps, text lengths and exact input
+manifest bytes. The corrected manifest's predecessor hash also matches. Capture
+manifest SHA-256 identities:
+
+- Capture 3: `f5df3e8833205c1df0b67af8fe8cb33ce2abff29d523a5a4bbf962193e485458`.
+- Capture 4: `7806f3b2db68444ff4fcde67401876f69e855cc9055ed7a85bcf0b3464a0371e`.
+
+All acquisitions remain post-cutoff and explicitly **not admissible to the frozen
+case**. No old capture, report or evidence manifest was rewritten. Download
+completion is not claim acceptance: assemble an eligible packet, extract and
+review exact passages, and refresh dependent analyses. The additional releases
+referenced only by the guidance/actual table are not all included in these seven
+documents. No further contact input is needed for this acquisition step.
+
+### Historical acquisition attempts (preserved)
+
+Before the identifier was supplied, the public-source downloader saved three
+complete documents (DOE deployment, NVIDIA Q2 FY2026 release and Q2 FY2027 release).
+Four SEC documents were blocked by `sec_identity_required`: Meta's filing, two
+NVIDIA proxies and the CoreWeave filing. No configured SEC contact identifier was
+found in the process environment or workspace `.env`; only presence checks were
+printed, not environment contents.
+
+The requested name/organization and contact email have now been supplied and used
+for the fresh captures above. The identifier must not be committed or replaced
+with another account.
 
 The acquisition prototype produced `evidence_capture_1` and `evidence_capture_2`
 under the follow-up directory, each with three successful captures and four

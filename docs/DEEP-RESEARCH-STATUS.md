@@ -16,6 +16,12 @@ maps all 185 original records to nine questions; it retires no issue. Financial
 acceptance, the enriched exact-reader check and HOOD generality remain separate
 gates. Newly acquired sources require a fresh eligible packet and dependent reviews.
 
+The SEC contact blocker is resolved: all seven intended follow-up documents are
+now captured with checked raw/text bindings (plus Meta's filing index). The Meta
+URL correction and historical failures are preserved in the
+[evidence follow-up](DEEP-RESEARCH-EVIDENCE-FOLLOWUP.md). Next is eligible-packet
+assembly and exact-passage review, not automatic acceptance of the old reader.
+
 The requested [retrospective PR review and bound-disclosure increment](DEEP-RESEARCH-REVIEW-DISCLOSURES.md)
 found five defects missed by the earlier independent reviews of PRs #20/#21.
 Repairs tighten diagnostic execution binding, pre-dispatch accounting and synthetic

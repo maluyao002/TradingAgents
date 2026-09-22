@@ -189,10 +189,20 @@ locally; existing hosted CI requirements remain unchanged.
 | --- | --- | --- |
 | Actionable unknowns | Nine lossless work packages, ownership, completion criteria and search boundaries | Execute the substantive work; grouping itself closes no issue |
 | Financial model | Dated conditional cash-flow calculator, engine-to-reader integration and narrow case-3 source/arithmetic review | Current bound review in the newly assembled case, residual attribution, longer-horizon valuation, equity/funding closure |
-| Independent evidence | New targeted source review, three guidance/actual pairs, bounded full-text capture | SEC contact identifier, remaining full texts, new eligible packet and targeted unresolved operating evidence |
+| Independent evidence | Targeted source review, three guidance/actual pairs; all seven intended documents captured, plus Meta filing index, with verified raw/text bindings | New eligible packet, exact-passage review, additional guidance-series source texts and targeted unresolved operating evidence |
 | Judgment-led writing | Shared analyst/writer/verifier contract and separate cash-flow scope disclosure | Validate the actual enriched English reader, not merely prompt compliance |
 | Integrated verification | Targeted synthetic end-to-end mechanics and regression checks | Fresh bounded NVDA validation, actual-reader acceptance, then HOOD generality |
 
-**User input needed now:** SEC contact identifier for the downloader. Report
-acceptance comes after the new report exists. The remaining financial and engine
-work is not being recast as a request for the user to approve missing evidence.
+**SEC contact input is resolved.** The supplied identifier was used process-locally
+without committing it. Captures 3/4 complete the seven-document acquisition;
+the Meta URL correction and preserved failures are recorded in the
+[evidence follow-up](DEEP-RESEARCH-EVIDENCE-FOLLOWUP.md). All new material remains
+post-cutoff and needs a fresh eligible packet before engine delivery.
+
+All six hosted CI checks passed on code commit `3d14249` (Python 3.10–3.13,
+locked install, container privacy/import). The acquisition follow-up reran all
+17 capture regressions successfully; no code change or live model run was needed.
+
+No further user input is needed for the source-acquisition step. Report acceptance
+comes after the new report exists. Remaining financial and engine work is not
+being recast as a request for the user to approve missing evidence.
