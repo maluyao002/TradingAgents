@@ -449,17 +449,26 @@ def block_reader_contradictions(review):
 
 
 def finalization_allowance(issues, *, call_timeout_seconds, reader_bytes=24_000,
-                           context_bytes=48_000, language_count=1):
+                           context_bytes=48_000, language_count=1, coverage_batch_policy="legacy-12"):
     """Conservative planning signal for optional work, not a spend guarantee.
 
     Include two complete passes (initial plus one repair), with an editor and a
     global factual review in each. Actual prompts still require normal admission;
     a future reader can be larger than this declared planning assumption.
     """
-    batches = coverage_batches(issues)
+    from .coverage_policy import (
+        coverage_batches_for_policy,
+        coverage_output_envelope,
+        packed_issue_context,
+    )
+
+    batches = coverage_batches_for_policy(issues, coverage_batch_policy)
     if min(context_bytes, reader_bytes, language_count, call_timeout_seconds) <= 0:
         raise ValueError("finalization planning inputs must be positive")
-    coverage = sum(reader_bytes + len(canonical_json(items)) + 10_096 for items in batches)
+    output_envelope = coverage_output_envelope(coverage_batch_policy)
+    coverage = sum(reader_bytes + len(canonical_json(
+        items if coverage_batch_policy == "legacy-12" else packed_issue_context(items)
+    )) + 4_096 + output_envelope for items in batches)
     # Still outstanding before editing: challenge reconciliation and claim review.
     pre_editor = 2 * (context_bytes + 16_000)
     editor = context_bytes + len(canonical_json(issues)) + 16_000

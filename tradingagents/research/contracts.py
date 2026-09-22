@@ -98,6 +98,7 @@ class ResearchRequest(Contract):
     internal_language: ReportLanguage = "English"
     report_language: ReportLanguage = "Chinese"
     quality_revision: Literal["foundation", "evidence-led", "evidence-led-bounded"] = "foundation"
+    coverage_batch_policy: Literal["legacy-12", "packed-24"] = "legacy-12"
     valuation_method: Literal["fcff", "equity_fcfe"] = "fcff"
     share_count_basis: Literal["point_in_time_diluted", "latest_quarter_diluted_proxy"] = "point_in_time_diluted"
     additional_report_languages: tuple[ReportLanguage, ...] = ()
@@ -121,6 +122,8 @@ class ResearchRequest(Contract):
 
     @model_validator(mode="after")
     def required_roles(self):
+        if self.coverage_batch_policy != "legacy-12" and self.quality_revision != "evidence-led-bounded":
+            raise ValueError("packed coverage requires the bounded evidence-led workflow")
         if self.financial_case_path is not None and (
             self.quality_revision != "evidence-led-bounded" or self.valuation_method != "fcff"
         ):

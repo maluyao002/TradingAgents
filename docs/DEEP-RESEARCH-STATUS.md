@@ -7,6 +7,17 @@ remain in [the implementation plan](DEEP-RESEARCH-PLAN.md).
 
 ### Latest checkpoint — September 21
 
+**Latency follow-up:** PR #18 is merged as `3ec145a`. The proposed 180-minute
+fresh run was withdrawn after user feedback; the approved next work is offline
+verification efficiency. The [coverage-efficiency increment](DEEP-RESEARCH-COVERAGE-EFFICIENCY.md)
+adds opt-in lossless packing, retaining the default and all acceptance gates.
+Delivery and hosted review: [PR #19](https://github.com/maluyao002/TradingAgents/pull/19).
+On the reconstructed historical inventory, coverage calls fall 16 → 10, while
+reserved output increases 96k → 120k tokens. This is not measured runtime or
+quality improvement. The next live checkpoint is a separately authorized small
+paired coverage diagnostic, not an automatic full NVDA rerun. Concurrency remains
+separate work. See the implementation log for integration/review results.
+
 PR #17 merged into `codex/deep-research-v2` as `ec56392`. The separately authorized
 NVDA run produced a shorter initial reader with a clean factual pass, but stopped
 during coverage batch 13 of 16 with a generic inference error. Known usage is
@@ -21,8 +32,8 @@ from `codex/research-offline-finalization-closure`, with `codex/deep-research-v2
 as its integration target. Historical reports remain unchanged. Preview-7 does not silently
 reuse preview-6 verification attestations.
 
-After integration, the next user checkpoint is a **new bounded live-validation
-plan and allowance**, with unknown historical usage preserved. The September 21
+After the efficiency increment, the next user checkpoint is a **small paired
+diagnostic plan and allowance**, with unknown historical usage preserved. The September 21
 source is ineligible for exact-candidate continuation under current rules.
 Financial/independent-evidence closure, HOOD generality, reader acceptance and
 release approval remain open. Offline tests cannot establish reader quality.

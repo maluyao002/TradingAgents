@@ -33,6 +33,11 @@ from .contracts import (
     ReviewFinding,
     Usage,
 )
+from .coverage_policy import (
+    coverage_batches_for_policy,
+    coverage_output_envelope,
+    packed_issue_context,
+)
 from .dossiers import DossierStore
 from .equity_valuation import EquityDCFModelInput, EquityForecastPeriod, equity_dcf_valuation
 from .evidence import validate_snapshot
@@ -58,9 +63,6 @@ from .review_batches import (
     FinalizationCallPlan,
     block_reader_contradictions,
     combine_coverage,
-    compact_coverage_context,
-    compact_issue_groups,
-    coverage_batches,
     fanout_group_dispositions,
     finalization_allowance,
     finalization_workload,
@@ -418,6 +420,11 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
         draft, drafts, valuation = None, {}, {"status": "unavailable"}
         evidence_led = request.quality_revision != "foundation"
         bounded_review = request.quality_revision == "evidence-led-bounded"
+        coverage_envelope = coverage_output_envelope(request.coverage_batch_policy)
+
+        def coverage_batches(issues):
+            return coverage_batches_for_policy(issues, request.coverage_batch_policy)
+
         verified_readers = {}
         reader_verifications = {}
         model_checkpoints = {}
@@ -516,6 +523,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                        "return_months": request.return_months,
                        "language": language or request.internal_language}
             if coverage_only:
+                if request.coverage_batch_policy != "legacy-12":
+                    payload["coverage_batch_policy"] = request.coverage_batch_policy
                 payload["system"] += (
                     " This is a limitation-coverage-only call, not source verification. "
                     "Assess every supplied issue against the exact reader text. Leave factual "
@@ -632,7 +641,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 save_resources()
                 return output
             # UTF-8 bytes are a conservative input bound, plus an output envelope.
-            output_envelope = 6_000 if coverage_only else 16_000
+            output_envelope = coverage_envelope if coverage_only else 16_000
             envelope = model_input_bytes(payload, role=role, output_token_envelope=output_envelope,
                                          valuation_method=request.valuation_method) + output_envelope
             origin = "current_live"
@@ -939,11 +948,10 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     "caveat coverage is checked in separate mandatory batches against these same bytes.")
 
                 def coverage_data(items):
-                    groups = group_equivalent_issues(items)
                     return {
                         "rendered_reader": rendered.reader_text,
                         "rendered_reader_sha256": rendered_hash,
-                        **compact_coverage_context(compact_issue_groups(groups)),
+                        **packed_issue_context(items),
                         "limitation_policy": review_data["limitation_policy"],
                         "review_scope": "Underlying claims and prior findings are supplied as "
                             "context, not proof. Missing claim context must remain unresolved. "
@@ -978,7 +986,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                             cached = (store.load_stage(batch_stage, payload) is not None
                                 or getattr(services.models, "has_saved_reply", lambda *_: False)(batch_stage, payload))
                             precheck_calls.append(FinalizationCallPlan(batch_stage, "repaired_coverage", payload,
-                                6_000, request.budget.call_timeout_seconds, cache_hit=cached,
+                                coverage_envelope, request.budget.call_timeout_seconds, cache_hit=cached,
                                 role="verifier", valuation_method=request.valuation_method))
                         workload = finalization_workload(precheck_calls)
                         remaining = request.budget.total_tokens - tracker.usage.total_tokens
@@ -1049,7 +1057,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     cached = (key in coverage_reuse or store.load_stage(batch_stage, payload) is not None
                               or getattr(services.models, "has_saved_reply", lambda *_: False)(batch_stage, payload))
                     planned_calls.append(FinalizationCallPlan(
-                        batch_stage, "current_coverage", payload, 6_000,
+                        batch_stage, "current_coverage", payload, coverage_envelope,
                         request.budget.call_timeout_seconds, cache_hit=cached, reader_bytes=reader_bytes,
                         role="verifier", valuation_method=request.valuation_method))
                 current_workload = finalization_workload(planned_calls)
@@ -1059,7 +1067,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     repair_data = {**editor_data, "draft_to_repair": source_draft.model_dump(mode="json"),
                                    "issue_lifecycle": lifecycle, "repair_findings": main_review.model_dump(mode="json")}
                     repair_payload = model_payload("repair_report", "editor", repair_data, draft_schema, language)
-                    finding_growth = len(batches) * 6_000 * 4
+                    finding_growth = len(batches) * coverage_envelope * 4
                     planned_calls.append(FinalizationCallPlan(
                         "repair_report", "possible_repair", b" " * (model_input_bytes(
                             repair_payload, role="editor", output_token_envelope=16_000,
@@ -1077,11 +1085,12 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                                 coverage_data(items), ReaderVerification, language, True)
                         planned_calls.append(FinalizationCallPlan(
                             f"verify_repaired_report-coverage-{index}", "possible_repair_coverage",
-                            b" " * (model_input_bytes(payload, role="verifier", output_token_envelope=6_000,
-                                                     valuation_method=request.valuation_method) + reader_bytes), 6_000,
+                            b" " * (model_input_bytes(payload, role="verifier", output_token_envelope=coverage_envelope,
+                                                     valuation_method=request.valuation_method) + reader_bytes), coverage_envelope,
                             request.budget.call_timeout_seconds, reader_bytes=2 * reader_bytes))
                 remaining_tokens = request.budget.total_tokens - tracker.usage.total_tokens
                 plan = {
+                    "coverage_batch_policy": request.coverage_batch_policy,
                     "reader_sha256": rendered_hash, "original_issue_count": len(parent_limitations),
                     "atomic_issue_count": len(limitations),
                     "grouped_issue_count": sum(len(group_equivalent_issues(items)) for items in batches),
@@ -1214,6 +1223,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                           + len(CASE_READER_REQUIREMENTS.encode("utf-8")))
                     allowance = finalization_allowance(
                         inventory, context_bytes=context_bytes,
+                        coverage_batch_policy=request.coverage_batch_policy,
                         call_timeout_seconds=request.budget.call_timeout_seconds,
                         language_count=1 + len(request.additional_report_languages),
                     )
@@ -1565,6 +1575,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             "run_metadata.json": canonical_json({"schema_version": 1, "engine": ENGINE_VERSION,
                 "identity": identity, "ticker": request.ticker, "cutoff": request.cutoff,
                 "backend": request.backend, "internal_language": request.internal_language,
+                "coverage_batch_policy": request.coverage_batch_policy,
                 "model_service_kind": getattr(services.models, "kind", "injected"),
                 "usage_measurement": (
                     "mixed_imported_historical_diagnostic_and_current"

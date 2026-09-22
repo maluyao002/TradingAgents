@@ -43,7 +43,7 @@ def _checkpoint(identity, output):
     )
 
 
-def build_case_recovery_source(tmp_path):
+def build_case_recovery_source(tmp_path, *, policy="legacy-12"):
     fixture_root = tmp_path / "fixture"
     request, services = case_setup(fixture_root)
     home = tmp_path / "codex-home"
@@ -52,7 +52,8 @@ def build_case_recovery_source(tmp_path):
     services.models.identity = source_model_identity
     full_run = tmp_path / "full-run"
     full_request = request.model_copy(
-        update={"backend": "codex", "output_dir": full_run, "dossier_dir": None}
+        update={"backend": "codex", "output_dir": full_run, "dossier_dir": None,
+                "coverage_batch_policy": policy}
     )
     result = run_research(full_request, services)
     assert result.stop_reason == "completed_needs_review"
