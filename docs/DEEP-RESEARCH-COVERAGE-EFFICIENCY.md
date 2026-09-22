@@ -1,5 +1,6 @@
 # Coverage efficiency — bounded offline increment
 
+Delivery: [PR #19](https://github.com/maluyao002/TradingAgents/pull/19).
 Integration target: `codex/deep-research-v2`, never main. Work branch:
 `codex/research-coverage-efficiency`. This supersedes the proposed 180-minute
 fresh-validation allowance; it does not authorize any live research calls.
@@ -86,7 +87,8 @@ coverage omissions, exact reuse, changed-reader review and unknown usage.
 Luna/medium supplied read-only historical scouting; Terra/medium supplied bounded
 regressions. Coordinator owns integration and commits.
 
-Final test and PR results are recorded in the implementation log. No research
+Final tests and independent review are recorded in the implementation log;
+the PR records hosted checks and integration. No research
 provider calls, historical report edits or financial/reader acceptance occurred.
 
 ## What remains and next sequence

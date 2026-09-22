@@ -11,6 +11,7 @@ remain in [the implementation plan](DEEP-RESEARCH-PLAN.md).
 fresh run was withdrawn after user feedback; the approved next work is offline
 verification efficiency. The [coverage-efficiency increment](DEEP-RESEARCH-COVERAGE-EFFICIENCY.md)
 adds opt-in lossless packing, retaining the default and all acceptance gates.
+Delivery and hosted review: [PR #19](https://github.com/maluyao002/TradingAgents/pull/19).
 On the reconstructed historical inventory, coverage calls fall 16 → 10, while
 reserved output increases 96k → 120k tokens. This is not measured runtime or
 quality improvement. The next live checkpoint is a separately authorized small
