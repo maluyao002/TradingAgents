@@ -811,7 +811,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             nonlocal finalization_candidate, candidate_review_stage, active_stage
             active_stage = stage
             rendered = render_reader(request, candidate, snapshot, reader_inputs(), language,
-                                     compact=bounded_review and case_context is not None)
+                                     compact=bounded_review and case_context is not None,
+                                     bind_case_state=bool(request.financial_case_path), case_context=case_context)
             rendered_hash = hashlib.sha256(rendered.reader_text.encode("utf-8")).hexdigest()
             limitations = limitation_packet([*required_limitations(), *candidate.limitations])
             if bounded_review:
@@ -906,7 +907,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     authored, candidate, tuple(f for f in snapshot.facts if f.id in _known_ids(snapshot)),
                     calculated_values, language, rendered.reader_text,
                     cite=case_context is not None, request=request, snapshot=snapshot, issues=reader_inputs(),
-                    case_context=case_context,
+                    case_context=case_context, bind_case_state=bool(request.financial_case_path),
                 )
                 bound_calculations = {
                     section["section_index"]: {
@@ -1505,7 +1506,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
         if evidence_led:
             rendered = verified_readers.get(request.report_language) or render_reader(
                 request, None, snapshot, [*reader_inputs(), *reviews], request.report_language,
-                compact=bounded_review and case_context is not None)
+                compact=bounded_review and case_context is not None,
+                bind_case_state=bool(request.financial_case_path), case_context=case_context)
             reader = rendered.reader_text
         admission = None
         if request.financial_case_path:
@@ -1562,7 +1564,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             # must still include later warnings/failures (e.g. an optional translation).
             final_audit = render_reader(request, primary_draft, snapshot,
                                         reader_inputs(include_retired=True), request.report_language,
-                                        compact=bounded_review and case_context is not None).limitations_audit
+                                        compact=bounded_review and case_context is not None,
+                                        bind_case_state=bool(request.financial_case_path),
+                                        case_context=case_context).limitations_audit
             verification = reader_verifications.get(request.report_language, {})
             dispositions = {item["issue_id"]: item for item in verification.get("review", {}).get(
                 "limitation_dispositions", [])} if verification.get("exported") else {}

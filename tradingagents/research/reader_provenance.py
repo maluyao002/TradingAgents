@@ -20,7 +20,11 @@ RENDERED_READER_POLICY = (
     "authored markers, expansion text, calculation IDs and hashes. Links to the model "
     "appendix identify analyst calculations, not issuer-reported results or proof of "
     "assumptions. Check numerical correctness, causal support, source/assumption scope, "
-    "and local citations independently. These bindings do not clear financial gates."
+    "and local citations independently. These bindings do not clear financial gates. "
+    "Code-owned review-status disclosures describe validated case state, not issuer facts. "
+    "Check the entire authored narrative for contradictions with those disclosures; their "
+    "presence does not excuse claims that an unreviewed financial case or absent cash-flow "
+    "model has been approved. Fiscal operating scenarios are not a calendar cash-flow model."
 )
 _MARKER = re.compile(r"\{\{(?:fact:[^{}]+|calc:[^{}]+|scenario_table|scenario_assumptions_table)\}\}")
 
@@ -40,7 +44,7 @@ def _reject_authored_calculation_links(value):
 
 
 def reader_provenance(authored, prepared, facts, calculations, language, reader, *, cite=False,
-                      request=None, snapshot=None, issues=(), case_context=None):
+                      request=None, snapshot=None, issues=(), case_context=None, bind_case_state=False):
     """Recompute every expansion; reject edited prose/metadata or fake calc links."""
     issues = tuple(issues)
     delivery = case_reader_delivery(case_context) if case_context is not None else None
@@ -80,7 +84,8 @@ def reader_provenance(authored, prepared, facts, calculations, language, reader,
                         "paragraphs": blocks})
     if request is None or snapshot is None:
         raise ValueError("reader binding requires exact rendering context")
-    rerendered = render_reader(request, prepared, snapshot, issues, language, compact=cite)
+    rerendered = render_reader(request, prepared, snapshot, issues, language, compact=cite,
+                              case_context=case_context, bind_case_state=bind_case_state)
     if rerendered.reader_text != reader:
         raise ValueError("prepared-to-reader binding mismatch")
     encoded_issues = []
@@ -97,6 +102,10 @@ def reader_provenance(authored, prepared, facts, calculations, language, reader,
     if delivery is not None:
         rendering_inputs.update(case_context_sha256=digest(case_context.model_context()),
                                 case_reader_delivery_sha256=digest(delivery))
+    if bind_case_state:
+        from .review_disclosures import DISCLOSURE_POLICY
+        rendering_inputs.update(review_disclosure_policy=DISCLOSURE_POLICY,
+            case_review_disclosure=rerendered.limitations_audit["case_review_disclosure"])
     return {"schema_version": 1, "calculation_citations": cite, "authored_draft_sha256": digest(authored),
             "prepared_draft_sha256": digest(prepared),
             "reader_sha256": sha256(reader.encode()).hexdigest(),
