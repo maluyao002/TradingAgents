@@ -1,11 +1,28 @@
 # Deep Research V2 — current status and delivery roadmap
 
-Reconciled September 18, 2026; updated September 21 for bounded validation follow-up.
+Reconciled September 18, 2026; updated September 22 for the paired diagnostic.
 This is the current work index and recommended execution order, not new release
 acceptance or authorization for additional live calls. The original M0–M6 gates
 remain in [the implementation plan](DEEP-RESEARCH-PLAN.md).
 
-### Latest checkpoint — September 21
+### Latest checkpoint — September 22
+
+The authorized [paired coverage diagnostic](DEEP-RESEARCH-COVERAGE-DIAGNOSTIC.md)
+completed all three calls in 6m46s using **48,815 measured tokens**. Packed review
+used 18,993 tokens/188.56s versus legacy's 29,822 tokens/217.28s on the same 18
+issues: 36.31% fewer tokens and 13.22% less time in this single, order-confounded
+comparison. Packed also identified a missing financial-draft disclosure that
+legacy accepted. Seventeen other decisions agreed; no exact-span failures occurred.
+
+This is preliminary efficiency evidence, not report acceptance or justification
+to switch the default. The next sequence is focused semantic negative/positive
+controls, then a fresh bounded counterbalanced diagnostic, before deciding on
+end-to-end acceptance. The user approved reasonable bounded follow-ups, including
+this test's explicit provider disclosure and best-effort token limit; unknown
+usage never becomes a retry balance. PR #20 contains the single-use harness and
+results. No historical report changed; Stage 3 and financial acceptance remain open.
+
+### Previous checkpoint — September 21
 
 **Latency follow-up:** PR #18 is merged as `3ec145a`. The proposed 180-minute
 fresh run was withdrawn after user feedback; the approved next work is offline

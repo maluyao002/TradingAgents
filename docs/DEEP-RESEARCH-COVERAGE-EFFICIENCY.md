@@ -93,6 +93,11 @@ provider calls, historical report edits or financial/reader acceptance occurred.
 
 ## What remains and next sequence
 
+September 22 update: PR #19 is integrated as `c759a66`, and the separately
+authorized three-call diagnostic completed. See the
+[measured results and current sequence](DEEP-RESEARCH-COVERAGE-DIAGNOSTIC.md).
+The proposal below is retained as history, not a request to rerun the used capsule.
+
 1. Review and integrate this offline increment on the feature branch.
 2. Separately authorize a **small paired coverage diagnostic**, not fresh research:
    one packed batch versus the equivalent two legacy batches, identical frozen
