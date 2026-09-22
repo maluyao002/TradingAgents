@@ -7,6 +7,16 @@ remain in [the implementation plan](DEEP-RESEARCH-PLAN.md).
 
 ### Latest checkpoint — September 22
 
+The approved [disclosure-control follow-up](DEEP-RESEARCH-DISCLOSURE-CONTROLS.md)
+completed six calls in **14m39s / 100,124 tokens**, with complete counters and no
+retry. Both policies recognized explicit financial-draft disclosure, but **both
+falsely closed the missing-disclosure control**. Exact witnesses passed; semantic
+coverage did not. A separate fiscal/calendar bridge ambiguity also remains open.
+PR #21 contains the reviewed harness and results. Keep legacy default and defer
+full acceptance. Next is a concise, provenance-bound review-status disclosure
+rendered from validated case state, plus the fiscal/calendar scope clarification,
+before a bounded actual-writer/reader check.
+
 The authorized [paired coverage diagnostic](DEEP-RESEARCH-COVERAGE-DIAGNOSTIC.md)
 completed all three calls in 6m46s using **48,815 measured tokens**. Packed review
 used 18,993 tokens/188.56s versus legacy's 29,822 tokens/217.28s on the same 18
