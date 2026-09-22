@@ -74,7 +74,10 @@ def test_controls_are_fixed_reader_only_variants_and_preserve_issue_evidence():
         {"limitation-financial-draft": "unresolved"},
         {"limitation-financial-draft": "reader_covered"},
     ]
-    assert all(set(item) == {"id", "reader", "expected_decisions", "rationale"} for item in controls)
+    assert all(set(item) == {"id", "reader", "expected_decisions", "required_reader_spans", "rationale"} for item in controls)
+    assert controls[2]["required_reader_spans"] == {
+        "limitation-financial-draft": [FINANCIAL_DRAFT_SENTENCE]
+    }
     assert issues == original
 
 
@@ -120,15 +123,28 @@ def test_negative_control_rejects_nonexact_supplied_quote():
 def test_explicit_financial_draft_control_evaluates_mocked_model_label_not_live_semantics():
     control = disclosure_controls("Needs review / Unrated.", _issues())[2]
     accepted_label = score_disclosure_control(
-        _review("reader_covered", control["reader"]), _issues(), control["reader"], control["expected_decisions"]
+        _review("reader_covered", control["reader"]), _issues(), control["reader"], control["expected_decisions"],
+        control["required_reader_spans"]
     )
     rejected_label = score_disclosure_control(
-        _review("unresolved", control["reader"]), _issues(), control["reader"], control["expected_decisions"]
+        _review("unresolved", control["reader"]), _issues(), control["reader"], control["expected_decisions"],
+        control["required_reader_spans"]
     )
 
     assert accepted_label["passed"]
     assert not rejected_label["passed"]
     assert any("unexpected decision" in reason for reason in rejected_label["mismatch_reasons"])
+
+
+def test_positive_control_rejects_an_exact_but_irrelevant_operating_quote():
+    control = disclosure_controls("Needs review / Unrated.", _issues())[2]
+    result = score_disclosure_control(
+        _review("reader_covered", control["reader"], excerpt=OPERATING_REVIEW_SENTENCE),
+        _issues(), control["reader"], control["expected_decisions"], control["required_reader_spans"],
+    )
+
+    assert not result["passed"]
+    assert any("required control witness not cited" in reason for reason in result["mismatch_reasons"])
 
 
 @pytest.mark.parametrize(
@@ -157,7 +173,8 @@ def test_explicit_financial_draft_control_evaluates_mocked_model_label_not_live_
 def test_scoring_rejects_malformed_or_blocked_positive_controls(review_factory, expected_reason):
     control = disclosure_controls("Base reader.", _issues())[2]
     result = score_disclosure_control(
-        review_factory(control["reader"]), _issues(), control["reader"], control["expected_decisions"]
+        review_factory(control["reader"]), _issues(), control["reader"], control["expected_decisions"],
+        control["required_reader_spans"]
     )
 
     assert not result["passed"]

@@ -530,6 +530,8 @@ def render_reader(
     language: ReportLanguage | None = None,
     *,
     compact: bool = False,
+    bind_case_state: bool = False,
+    case_context=None,
 ) -> ReaderRender:
     """Render a reader report and a complete limitations/source audit.
 
@@ -609,6 +611,27 @@ def render_reader(
         "",
         preview,
     ]
+    disclosure = None
+    if bind_case_state and request.financial_case_path is not None:
+        if case_context is None:
+            if draft is not None:
+                raise ValueError("case-backed reader requires validated review disclosure state")
+            # Failed ingestion may produce diagnostics, never a reviewed-status claim.
+            text.extend(["", "财务明细未通过验证；无法确认复核状态。" if chinese else
+                         "Financial-case validation is unavailable; review status cannot be established."])
+        else:
+            from .review_disclosures import review_disclosure
+            try:
+                disclosure = review_disclosure(request, snapshot, case_context, language)
+            except (ValueError, TypeError, KeyError):
+                if draft is not None:
+                    raise
+                # A stale/invalid case after a failed follow-up is diagnostic
+                # material only; never render its previous review status.
+                text.extend(["", "财务明细未通过当前验证；无法确认复核状态。" if chinese else
+                             "Financial-case validation is unavailable; review status cannot be established."])
+            else:
+                text.extend(["", disclosure["text"]])
 
     section_mappings: list[dict[str, Any]] = []
     paragraph_citations: list[dict[str, Any]] = []
@@ -832,4 +855,6 @@ def render_reader(
         "section_citations": section_citations,
         "source_footnotes": source_footnotes,
     }
+    if bind_case_state:
+        audit["case_review_disclosure"] = disclosure
     return ReaderRender(reader_text="\n".join(text) + "\n", limitations_audit=audit)

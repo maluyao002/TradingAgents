@@ -1,5 +1,10 @@
 # Disclosure controls — bounded follow-up, September 22, 2026
 
+Follow-up: the [retrospective review and bound-disclosure repair](DEEP-RESEARCH-REVIEW-DISCLOSURES.md)
+records issues found after this PR's initial review. Stricter read-only rescoring
+preserves the live observations below; new diagnostic plans bind the corrected
+runtime and evaluation contract. Historical artifacts remain unchanged.
+
 The [first paired diagnostic](DEEP-RESEARCH-COVERAGE-DIAGNOSTIC.md) found a
 financial-draft false closure despite exact quotations. Its harness is integrated
 by PR #20 (`bd604c7`) into `codex/deep-research-v2`. Main is unchanged; the merged

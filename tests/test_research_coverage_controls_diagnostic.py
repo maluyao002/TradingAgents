@@ -52,6 +52,50 @@ def test_control_plan_pairs_exact_inventories_and_reverses_policy_order(tmp_path
     assert plan["aggregate_reserve_tokens"] < request.budget.total_tokens == 350_000
 
 
+def test_control_plan_selects_the_global_protected_target_batch_without_reordering(tmp_path):
+    request, _ = request_and_plan(tmp_path)
+    request = request.model_copy(update={"budget": diagnostic.control_budget()})
+    issues = [{"issue_id": f"issue-{index}", "text": f"Exact reader caveat {index}.",
+               "origins": [], "reader_coverage_required": False} for index in range(42)]
+    issues[30].update(reader_coverage_required=True, origins=[{"origin_id": "case.review.draft"}])
+
+    plan = diagnostic.build_control_plan(request, issues, "\n".join(item["text"] for item in issues))
+
+    assert plan["kind"] == "disclosure-control-diagnostic-v2"
+    assert plan["selected_packed_batch_index"] == 1
+    assert [item["issue_id"] for item in plan["calls"][0]["issues"]] == [
+        f"issue-{index}" for index in range(24, 42)
+    ]
+
+
+def test_control_plan_fails_when_protected_batch_is_not_a_matched_pair(tmp_path):
+    request, _ = request_and_plan(tmp_path)
+    request = request.model_copy(update={"budget": diagnostic.control_budget()})
+    issues = [{"issue_id": f"issue-{index}", "text": f"Exact reader caveat {index}.",
+               "origins": [], "reader_coverage_required": False} for index in range(30)]
+    issues[24].update(reader_coverage_required=True, origins=[{"origin_id": "case.review.draft"}])
+
+    with pytest.raises(ValueError, match="not a matched one-versus-two"):
+        diagnostic.build_control_plan(request, issues, "\n".join(item["text"] for item in issues))
+
+
+def test_historical_v1_control_plan_is_validatable_but_not_executable(tmp_path):
+    request, _plan = control_fixture(tmp_path)
+    issues, reader = issues_and_reader()
+    issues[2].update(reader_coverage_required=True,
+                     origins=[{"origin_id": "case.review.draft"}],
+                     text="The financial schedules are an unreviewed draft; ingestion is not approval.")
+    plan = diagnostic._build_control_plan_v1(request, issues, reader)
+    service = FixtureService()
+
+    assert diagnostic.validate_plan(plan) == request
+    with pytest.raises(ValueError, match="read-only"):
+        diagnostic.execute_plan(plan, request, service, clock=Clock())
+
+    assert service.calls == [] and service.closed == 0
+    assert not request.output_dir.exists()
+
+
 @pytest.mark.parametrize("field", ["order", "expected", "reader", "budget", "payload", "reserve"])
 def test_control_plan_rejects_manifest_drift(tmp_path, field):
     _request, plan = control_fixture(tmp_path)
@@ -114,6 +158,7 @@ def test_control_deadline_is_not_renewed_between_conditions(tmp_path):
 
 def test_control_cli_shares_supervisor_and_single_use_approval_guards(tmp_path, monkeypatch):
     request, plan = control_fixture(tmp_path)
+    plan.update(diagnostic.execution_binding(tmp_path / "home"))
     path = tmp_path / "plan.json"
     plan["source_artifact_sha256"] = {}
     path.write_bytes(canonical_json(plan))
@@ -128,7 +173,7 @@ def test_control_cli_shares_supervisor_and_single_use_approval_guards(tmp_path, 
     monkeypatch.setattr(diagnostic, "verify_runtime", lambda _plan: None)
     monkeypatch.setattr(diagnostic, "run_supervised", supervise)
     args = ["run", "--plan", str(path), "--approved-plan-sha256", digest(plan),
-            "--codex-home", str(tmp_path / "home"), "--allow-live", "--allow-advisory-token-cap"]
+            "--codex-home", plan["codex_home"], "--allow-live", "--allow-advisory-token-cap"]
     assert diagnostic.main(args) == 0
     with pytest.raises(FileExistsError):
         diagnostic.main(args)

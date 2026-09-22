@@ -115,3 +115,9 @@ not change the executed implementation; their hosted status belongs to the PR.
 
 Stage 3 reader acceptance, financial-case closure, independent ecosystem evidence,
 HOOD generality and release approval remain open.
+
+## Retrospective review note
+
+The September 22 [follow-up review](DEEP-RESEARCH-REVIEW-DISCLOSURES.md) found and
+repairs execution-binding and pre-dispatch-accounting defects missed by the first
+review. This note does not alter the historical diagnostic results above.
