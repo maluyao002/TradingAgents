@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import defaultdict
+from copy import deepcopy
 from dataclasses import asdict, fields
 from datetime import datetime, timezone
 from pathlib import Path
@@ -57,6 +58,7 @@ from .report_review import (
     requires_reader_coverage,
     validated_disposition_ids,
 )
+from .research_questions import QUESTION_LED_REQUIREMENTS
 from .result_scope import scope_calculation
 from .review_batches import (
     CoverageBatchResult,
@@ -544,6 +546,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             if case_context is not None and not coverage_only and stage not in {"planner", "independent_challenge"}:
                 payload["financial_case"] = case_context.model_context()
                 payload["case_reader_delivery"] = case_reader_delivery(case_context)
+                payload["decision_led_research"] = deepcopy(QUESTION_LED_REQUIREMENTS)
                 if role == "editor":
                     writer_issues = split_compound_obligations(
                         limitation_packet(data.get("limitations", ())),
@@ -1181,11 +1184,37 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     break
                 if bounded_review:
                     inventory = limitation_packet(required_limitations())
-                    context_bytes = (len(canonical_json(_prompt_evidence(snapshot)))
-                                     + 2 * len(canonical_json(outputs)) + len(canonical_json(proposal)))
-                    if case_context is not None:
-                        context_bytes += (len(canonical_json(case_context.model_context()))
-                                          + len(CASE_READER_REQUIREMENTS.encode("utf-8")))
+                    prospective_values = calculation_catalog(proposal, valuation)
+                    if case_context is not None and case_context.operating_scenarios is not None:
+                        prospective_values = (*prospective_values, *case_context.operating_scenarios.calculated_values)
+                    if case_context is not None and case_context.cashflow_bridge is not None:
+                        prospective_values = (*prospective_values, *case_context.cashflow_bridge.calculated_values)
+                    prospective_data = {
+                        "analyses": outputs, "limitations": required_limitations(), "valuation": valuation,
+                        "valuation_inputs": proposal.model_dump(mode="json"),
+                        "calculated_values": [item.model_dump(mode="json") for item in prospective_values],
+                        "claim_verification": VerificationOutput().model_dump(mode="json"),
+                    }
+                    prospective_evidence = evidence_catalog(
+                        snapshot, prospective_values, eligible_ids=_known_ids(snapshot), case_context=case_context)
+                    # Build through the dispatch constructor so new policies, schemas,
+                    # case delivery and compound guidance cannot disappear from reserves.
+                    # Reader/provenance and future output growth remain planning allowances;
+                    # actual later calls still undergo exact-boundary admission.
+                    prospective_payloads = {
+                        "editor": ("editor", model_payload("editor", "editor", prospective_data, draft_schema)),
+                        "factual": ("verifier", model_payload("verify_report", "verifier", {
+                            **prospective_data, "rendered_reader": "", "inherited_issues": inventory,
+                            "resolution_evidence": prospective_evidence, "issue_resolution_policy": LIFECYCLE_POLICY,
+                            "resolution_witness_contract": resolution_witness_contract(prospective_evidence, ""),
+                            "conclusion_scope": case_context.scope.model_dump(mode="json") if case_context else None,
+                        }, LifecycleVerification)),
+                    }
+                    prospective_sizes = {name: model_input_bytes(payload, role=role, output_token_envelope=16_000,
+                                                                 valuation_method=request.valuation_method)
+                                         for name, (role, payload) in prospective_payloads.items()}
+                    growth_allowance = len(canonical_json(outputs))
+                    context_bytes = max(prospective_sizes.values()) + growth_allowance
                     allowance = finalization_allowance(
                         inventory, context_bytes=context_bytes,
                         coverage_batch_policy=request.coverage_batch_policy,
@@ -1205,6 +1234,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     store.save_stage(f"finalization-plan-{cycle}", {
                         "issue_ids": [item["issue_id"] for item in inventory],
                     }, {**allowance, "optional_cycle_skipped": skip,
+                        "prospective_context_bytes": prospective_sizes,
+                        "future_analysis_growth_bytes_planning_assumption": growth_allowance,
+                        "context_bytes_planning_assumption": context_bytes,
                         "optional_cycle_token_envelope": next_cycle_token_envelope,
                         "optional_cycle_call_seconds": next_cycle_call_seconds,
                         "reason": "Preserve mandatory drafting, factual review, per-issue coverage and one repair capacity."})
@@ -1337,6 +1369,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 calculated_values = calculation_catalog(proposal, valuation)
                 if case_context is not None and case_context.operating_scenarios is not None:
                     calculated_values = (*calculated_values, *case_context.operating_scenarios.calculated_values)
+                if case_context is not None and case_context.cashflow_bridge is not None:
+                    calculated_values = (*calculated_values, *case_context.cashflow_bridge.calculated_values)
                 editor_data["claim_verification"] = review.model_dump(mode="json")
                 editor_data["valuation_inputs"] = proposal.model_dump(mode="json")
                 editor_data["calculated_values"] = [value.model_dump(mode="json") for value in calculated_values]
@@ -1524,6 +1558,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 operating_scenarios_reviewed=bool(case_context is not None
                     and case_context.operating_scenarios is not None
                     and case_context.operating_scenarios.reviewed),
+                cashflow_bridge_reviewed=bool(case_context is not None
+                    and case_context.cashflow_bridge is not None
+                    and case_context.cashflow_bridge.reviewed),
             )
             assessment = Assessment(status=admission.assessment_status, findings=tuple(reviews))
             if admission.report_completion != "complete" and stop_reason == "completed_needs_review":
@@ -1629,6 +1666,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             artifacts["model_appendix.md"] = case_model_appendix(
                 calculated_values, request.report_language,
                 has_operating_scenarios=case_context is not None and case_context.operating_scenarios is not None,
+                has_cashflow_bridge=case_context is not None and case_context.cashflow_bridge is not None,
             )
         if recovery is not None:
             recovery_provenance = {

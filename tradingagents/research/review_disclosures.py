@@ -16,6 +16,8 @@ def review_disclosure(request, snapshot, context, language):
                 "source_passages": context.source_passages}
     if context.operating_scenarios is not None:
         envelope["operating_scenarios"] = parse_json(context.artifacts["operating_scenario_package.json"])
+    if context.cashflow_bridge is not None:
+        envelope["cashflow_bridge"] = parse_json(context.artifacts["cashflow_bridge_package.json"])
     checked = load_case_context(canonical_json(envelope), request, snapshot)
     if (checked.model_context() != context.model_context()
             or checked.artifacts != context.artifacts):
@@ -58,6 +60,26 @@ def review_disclosure(request, snapshot, context, language):
         "underwriting. That model bridge remains unavailable; valuation, per-share value and "
         "funding conclusions remain withheld."
     )
+    bridge = checked.cashflow_bridge
+    if bridge is not None:
+        review_text = (
+            "另行复核的条件性现金流桥接仅核查所列假设与计算，并非经济假设获批。"
+            if chinese and bridge.reviewed else
+            "条件性现金流桥接仍为未经独立复核的草稿；其数值结果不在读者报告中提供。"
+            if chinese else
+            "The conditional cash-flow bridge was separately reviewed for its stated assumptions and "
+            "calculations, not approved as an economic forecast."
+            if bridge.reviewed else
+            "The conditional cash-flow bridge remains an independently unreviewed draft; "
+            "its numerical results are withheld from the reader."
+        )
+        scope_text = review_text + (
+            " 财政期间现金流使用所列日期，未进行日历期间转换或补齐截止日前未观测数据。"
+            "这不批准财务明细、估值、每股价值或资金充足性结论。" if chinese else
+            " Fiscal cash flows use their stated dates; no calendar translation or unobserved "
+            "cutoff-date roll-forward is implied. This does not approve the financial schedules, "
+            "valuation, per-share value or funding adequacy; those conclusions remain withheld."
+        )
     heading = "复核状态与模型范围" if chinese else "Review status and model scope"
     text = f"## {heading}\n\n{financial_text} {operating_text}\n\n{scope_text}"
     return {"schema_version": 1, "policy": DISCLOSURE_POLICY,
@@ -70,5 +92,9 @@ def review_disclosure(request, snapshot, context, language):
         "operating_package_sha256": (
             sha256(checked.artifacts["operating_scenario_package.json"]).hexdigest()
             if operating is not None else None),
+        **({"cashflow_bridge_status": "reviewed_conditional_only" if bridge.reviewed else "draft_unreviewed",
+            "cashflow_bridge_package_sha256": sha256(
+                checked.artifacts["cashflow_bridge_package.json"]).hexdigest()}
+           if bridge is not None else {}),
         "text": text, "text_sha256": sha256(text.encode()).hexdigest(),
         "financial_sentence": financial_text, "scope_sentence": scope_text}

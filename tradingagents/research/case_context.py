@@ -15,6 +15,11 @@ from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
+from .cashflow_bridge import (
+    CashFlowBridgePackage,
+    CashFlowBridgeResult,
+    evaluate_cashflow_bridge,
+)
 from .contracts import (
     Contract,
     EvidenceSnapshot,
@@ -123,6 +128,7 @@ class FinancialCaseEnvelope(Contract):
     review: FinancialCaseReview | None = None
     source_passages: tuple[CaseSourcePassage, ...] = ()
     operating_scenarios: OperatingScenarioPackage | None = None
+    cashflow_bridge: CashFlowBridgePackage | None = None
 
 
 @dataclass(frozen=True)
@@ -140,6 +146,7 @@ class CaseContext:
     scope: ModelResultScope
     reviewed: bool
     operating_scenarios: OperatingScenarioResult | None = None
+    cashflow_bridge: CashFlowBridgeResult | None = None
     limitation_origins: dict[str, list[dict[str, object]]] = field(default_factory=dict)
 
     def model_context(self) -> dict:
@@ -172,6 +179,8 @@ class CaseContext:
             "limitation_origins": deepcopy(self.limitation_origins),
             **({"operating_scenarios": deepcopy(self.operating_scenarios.model_context)}
                if self.operating_scenarios is not None else {}),
+            **({"cashflow_bridge": deepcopy(self.cashflow_bridge.model_context)}
+               if self.cashflow_bridge is not None else {}),
         }
 
 
@@ -487,6 +496,22 @@ def load_case_context(
         limitations = tuple(dict.fromkeys((*limitations, *operating.limitations)))
         for text, origins in operating.limitation_origins.items():
             limitation_origins[text] = [*limitation_origins.get(text, ()), *origins]
+    if envelope.cashflow_bridge is not None and operating is None:
+        raise ValueError("cash-flow bridge ingestion requires an operating-scenario package")
+    cashflow = (
+        evaluate_cashflow_bridge(envelope.cashflow_bridge, case, checked_snapshot, operating)
+        if envelope.cashflow_bridge is not None and operating is not None
+        else None
+    )
+    if cashflow is not None:
+        limitations = tuple(dict.fromkeys((*limitations, *cashflow.limitations)))
+        for index, text in enumerate(cashflow.limitations):
+            limitation_origins[text] = [
+                *limitation_origins.get(text, ()),
+                LimitationOrigin(origin_id=f"cashflow_bridge.limitation.{index}").model_dump(
+                    mode="json"
+                ),
+            ]
 
     provisional = CaseContext(
         case=case,
@@ -500,6 +525,7 @@ def load_case_context(
         scope=scope,
         reviewed=reviewed,
         operating_scenarios=operating,
+        cashflow_bridge=cashflow,
         limitation_origins=limitation_origins,
     )
     artifacts = {
@@ -511,6 +537,8 @@ def load_case_context(
         artifacts["financial_case_review.json"] = canonical_json(review)
     if operating is not None:
         artifacts.update(operating.artifacts)
+    if cashflow is not None:
+        artifacts.update(cashflow.artifacts)
     return CaseContext(
         case=case,
         review=review,
@@ -523,5 +551,6 @@ def load_case_context(
         scope=scope,
         reviewed=reviewed,
         operating_scenarios=operating,
+        cashflow_bridge=cashflow,
         limitation_origins=limitation_origins,
     )
