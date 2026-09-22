@@ -98,7 +98,62 @@ Inspect the response and actual reader rather than treating process completion a
 a quality pass. The experiment tests writer/rendering integration, not the quality
 of a freshly regenerated analysis prefix or the reliability of semantic coverage.
 
-Next: finish independent review and integration, then execute the bounded check.
-Keep legacy coverage as default. Financial-case closure,
-independent ecosystem evidence, HOOD generality, reader acceptance and release
-approval remain separate deliverables.
+## Completed live result
+
+The two calls completed in **501.00 seconds (8m21s)** with **415,694 measured
+tokens**: 400,123 input + 15,571 output. Reasoning output is 5,627, already included
+in output; cached input is zero. All counters are complete, no dispatch remains
+pending, and no retry, extension or fallback occurred.
+
+| Call | Input | Output | Total | Duration |
+| --- | ---: | ---: | ---: | ---: |
+| Fresh Astra/high writer | 156,568 | 7,231 | 163,799 | 224.68s |
+| Fresh Sol/high factual review | 243,555 | 8,340 | 251,895 | 271.74s |
+
+The factual response has `reviewed_report=true`, no findings and no contradicted
+claim IDs. It explicitly keeps the financial-draft and fiscal/calendar model gaps
+open while recognizing their reader disclosure. A separate offline pass through
+the production lifecycle reconciliation accepts one resolution and five
+supersessions without integrity findings; 179 lifecycle issues remain open.
+Those are research/lifecycle states, **not** 179 proved reader defects. No coverage
+verification or report acceptance is inferred from this result.
+
+The exact candidate is 22,730 UTF-8 bytes / 2,905 whitespace-delimited words, with
+31 paragraph citation records containing explicit citations. Coordinator inspection
+confirms that the generated status block and authored scope language are consistent.
+An independently hash-recomputed presentation preview preserves identical candidate
+bytes and adds a clear unverified banner; appendix and audit links work there.
+
+Implementation: `ec67f201cde92bc06a2e88c80450964e43f9f751`.
+Plan SHA-256: `4892ff3d8e69cce1a38d9483b5b968ec2c97f979f924c06012f63c4eb2eef822`.
+Reader SHA-256: `da1ce92021b763b08012209c83ae6394bbbdbd406187601bc7413ab2adce48c0`.
+Initial combined conservative reserve: 1,966,155; actual second-call reserve:
+964,212. Source and runtime bindings were rechecked unchanged after completion.
+
+Local artifacts: `reports/NVDA_WRITER_DISCLOSURE_20260922/`, including
+`AUTHORIZATION.md`, `plan_1/plan.json`, `plan_1/run_1/diagnostic.json`, both replies,
+the exact factual payload, `plan_1/supervisor_result.json`, and
+`plan_1/reader_preview_1/reader_preview.md`. Rehearsal audits are explicitly fixture
+diagnostics, not live research acceptance records. Historical failed-call usage
+remains unknown and outside this new complete ledger.
+
+## Delivery and next decision
+
+[PR #22](https://github.com/maluyao002/TradingAgents/pull/22) targets only
+`codex/deep-research-v2`. Independent Sol/high and Terra/medium reviews and targeted
+regressions are recorded above. Required implementation CI passed Python
+3.10–3.13, clean locked install and container privacy/import. Documentation-only
+result updates retain the normal hosted checks.
+
+The narrow writer/disclosure gate has passed once; it does not establish repeated
+semantic reliability. Next, review the actual preview and plan a separately bounded
+coverage/acceptance path. Offline costing of this candidate yields 183 coverage
+obligations: **16 legacy calls / 711,501 conservative tokens**, or **10 opt-in packed
+calls / 548,977 conservative tokens**. These are coverage-only reservations, not
+measured spend or complete writer/repair/acceptance budgets. Packed remains
+non-default because the negative controls failed. No such campaign was launched.
+
+Financial-case closure, independent ecosystem evidence, HOOD generality, reader
+acceptance and release approval remain separate deliverables. Do not reuse these
+diagnostic calls as production continuation attestations or start a full rerun
+automatically.

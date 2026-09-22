@@ -14,19 +14,21 @@ control scoring/selection. Rescoring the saved responses preserves the two negat
 failures and two positive successes; no historical result was rewritten.
 The new reader contract renders review status from revalidated case state and
 separates operating sensitivities from a calendar cash-flow model. Preview-8 binds
-the new disclosure; old previews retain their original contract. The current gate
-is independent review plus a small fresh actual-writer/factual-reader diagnostic,
-not full report acceptance or a switch to packed coverage.
+the new disclosure; old previews retain their original contract. The fresh
+actual-writer/factual-reader diagnostic completed in **8m21s / 415,694 tokens**,
+with no factual findings or contradicted claims. The two target financial/model
+gaps remain open and explicitly disclosed. PR #22 delivers this increment; its
+implementation CI passed. Next is review of the actual preview and a separately
+bounded coverage/acceptance plan, not automatic full acceptance or a packed switch.
 
 The approved [disclosure-control follow-up](DEEP-RESEARCH-DISCLOSURE-CONTROLS.md)
 completed six calls in **14m39s / 100,124 tokens**, with complete counters and no
 retry. Both policies recognized explicit financial-draft disclosure, but **both
 falsely closed the missing-disclosure control**. Exact witnesses passed; semantic
 coverage did not. A separate fiscal/calendar bridge ambiguity also remains open.
-PR #21 contains the reviewed harness and results. Keep legacy default and defer
-full acceptance. Next is a concise, provenance-bound review-status disclosure
-rendered from validated case state, plus the fiscal/calendar scope clarification,
-before a bounded actual-writer/reader check.
+PR #21 contains that harness and result. Keep legacy default and defer full
+acceptance. It motivated the case-bound review-status disclosure, fiscal/calendar
+scope clarification and fresh writer/reader check now delivered in PR #22 above.
 
 The authorized [paired coverage diagnostic](DEEP-RESEARCH-COVERAGE-DIAGNOSTIC.md)
 completed all three calls in 6m46s using **48,815 measured tokens**. Packed review

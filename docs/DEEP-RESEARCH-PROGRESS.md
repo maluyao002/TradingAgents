@@ -28,8 +28,14 @@ operating review statuses separately, with exact provenance and fiscal/calendar
 scope clarification. It does not repair the missing financial model or excuse
 contradictory prose. Preview-8 changes current identities; historical previews
 retain their original rendering behavior. Targeted offline validation and a small
-actual-writer/factual-reader check are the current delivery gates. Full NVDA
-acceptance, independent evidence, financial closure and HOOD remain open.
+actual-writer/factual-reader check complete this increment. The two fresh calls
+finished in **501.00 seconds / 415,694 tokens**, with complete counters, no retries
+and no factual findings or contradicted claims. The new 2,905-word candidate
+explicitly preserves the financial-draft and fiscal/calendar model boundaries.
+Offline lifecycle reconciliation has no integrity findings; it does not stand in
+for coverage. Required implementation CI passed on PR #22. Full NVDA acceptance,
+independent evidence, financial closure and HOOD remain open; inspect the actual
+preview before planning a broader coverage/acceptance campaign.
 
 ### Disclosure-control follow-up — September 22, 2026
 
