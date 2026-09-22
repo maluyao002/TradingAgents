@@ -100,6 +100,7 @@ def safe_summary(request: ResearchRequest) -> dict[str, object]:
         else None,
         "report_language": request.report_language,
         "quality_revision": request.quality_revision,
+        "coverage_batch_policy": request.coverage_batch_policy,
         "valuation_method": request.valuation_method,
         "share_count_basis": request.share_count_basis,
         "additional_report_languages": list(request.additional_report_languages),

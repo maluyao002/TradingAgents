@@ -77,6 +77,8 @@ def load_request_inputs(request: ResearchRequest) -> dict[str, bytes]:
 def request_identity(request: ResearchRequest, inputs: dict[str, bytes] | None = None) -> str:
     inputs = load_request_inputs(request) if inputs is None else inputs
     settings = request.model_dump(mode="json", exclude={"output_dir", "dossier_dir"})
+    if settings.get("coverage_batch_policy") == "legacy-12":
+        settings.pop("coverage_batch_policy")
     # Frozen preview-3 requests predate this opt-in. Preserve their exact identity
     # for explicit recovery; the evidence-led workflow has a distinct identity.
     if settings.get("quality_revision") == "foundation":

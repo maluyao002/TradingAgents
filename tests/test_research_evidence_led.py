@@ -43,7 +43,7 @@ def test_foundation_identity_is_byte_compatible_and_revision_is_distinct(tmp_pat
     request, _ = setup(tmp_path)
     settings = request.model_dump(mode="json", exclude={
         "output_dir", "dossier_dir", "quality_revision", "valuation_method", "share_count_basis",
-        "financial_case_path",
+        "financial_case_path", "coverage_batch_policy",
     })
     assert request_identity(request) == digest({
         "engine": ENGINE_VERSION, "settings": settings,

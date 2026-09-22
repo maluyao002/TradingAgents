@@ -58,7 +58,7 @@ def test_saved_cost_plan_accounts_for_repair_and_exact_cached_coverage(tmp_path)
     assert plans["verify_repaired_report"]["current_pass"]["cached_call_count"] == 0
 
 
-def _budget_stopped_case(tmp_path):
+def _budget_stopped_case(tmp_path, *, policy="legacy-12"):
     from tests.test_research_case_engine import CaseFixture, case_setup
     from tradingagents.research.engine import run_research
     from tradingagents.research.storage import canonical_json
@@ -74,6 +74,7 @@ def _budget_stopped_case(tmp_path):
 
     baseline_models = ManyGaps()
     baseline, services = case_setup(tmp_path / "baseline", baseline_models)
+    baseline = baseline.model_copy(update={"coverage_batch_policy": policy})
     run_research(baseline, services)
     prefix = [payload for _, payload in baseline_models.calls
               if not payload["stage"].startswith("verify_report-coverage-")]
@@ -83,6 +84,7 @@ def _budget_stopped_case(tmp_path):
                   for payload in prefix)
     models = ManyGaps()
     request, services = case_setup(tmp_path / "bounded", models)
+    request = request.model_copy(update={"coverage_batch_policy": policy})
     request = request.model_copy(update={"budget": request.budget.model_copy(update={
         "total_tokens": largest + 10_000, "reserve_tokens": 0,
     })})
