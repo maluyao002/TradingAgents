@@ -14,7 +14,7 @@ from pathlib import Path
 
 from cli.research import load_request
 from scripts.research_coverage_benchmark import benchmark_source
-from tradingagents.codex.adapter import codex_failure_reason
+from tradingagents.codex.adapter import CodexAdapter, codex_failure_reason
 from tradingagents.research.budget import BudgetExhausted, BudgetTracker
 from tradingagents.research.contracts import Assessment, Budget, ResearchRequest, ResearchResult
 from tradingagents.research.coverage_payload import build_coverage_payload
@@ -47,13 +47,16 @@ WALL_CAP = 900
 WORKER_SECONDS = 880
 SUPERVISOR_SECONDS = 890
 CALL_CAP = 600
+MODEL_PROVIDER = "openai"
 
 
 def runtime_binding():
     root = Path(__file__).resolve().parents[1]
-    paths = [Path(__file__).resolve(), root / "scripts/research_coverage_benchmark.py"]
-    for directory in ("tradingagents/research", "tradingagents/codex"):
-        paths.extend(sorted((root / directory).glob("*.py")))
+    paths = sorted(
+        path
+        for directory in ("cli", "scripts", "tradingagents")
+        for path in (root / directory).rglob("*.py")
+    )
     return {str(path.relative_to(root)): hashlib.sha256(read_bytes(path)).hexdigest() for path in paths}
 
 
@@ -62,6 +65,21 @@ def verify_runtime(plan):
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     if plan["code_revision"] != revision or plan["runtime_sha256"] != runtime_binding():
         raise ValueError("diagnostic implementation changed after preparation")
+
+
+def execution_binding(codex_home):
+    """Return the non-secret provider/runtime identity approved for execution."""
+    home = Path(codex_home).resolve()
+    CodexAdapter(home)  # Validate that this is a dedicated runtime location; do not open it.
+    return {"model_provider": MODEL_PROVIDER, "codex_home": str(home)}
+
+
+def verify_execution_binding(plan, codex_home):
+    expected = execution_binding(codex_home)
+    if plan.get("model_provider") != MODEL_PROVIDER:
+        raise ValueError("diagnostic provider binding must be openai")
+    if plan.get("codex_home") != expected["codex_home"]:
+        raise ValueError("diagnostic Codex home differs from the approved plan")
 
 
 def diagnostic_budget():
@@ -85,7 +103,16 @@ def build_plan(request, issues, reader):
             break
     if selected is None:
         raise ValueError("no matched one-versus-two batch comparison fits")
-    index, batch, legacy = selected
+    index, batch, _legacy = selected
+    return _build_plan_for_selected_batch(request, batch, reader, index,
+                                          "first_packed_batch_spanning_two_legacy_batches")
+
+
+def _build_plan_for_selected_batch(request, batch, reader, index, selection):
+    """Build one matched legacy/packed plan from an already selected batch."""
+    legacy = coverage_batches_for_policy(batch, "legacy-12")
+    if len(legacy) != 2 or len(batch) <= 12:
+        raise ValueError("selected batch is not a matched one-versus-two comparison")
     calls = []
     for policy, batches in (("legacy-12", legacy), ("packed-24", (batch,))):
         variant = request.model_copy(update={"coverage_batch_policy": policy})
@@ -102,7 +129,7 @@ def build_plan(request, issues, reader):
     if reserve >= TOKEN_CAP:
         raise BudgetExhausted("complete_diagnostic_does_not_fit")
     return {"kind": "paired-coverage-diagnostic-v1", "request": request.model_dump(mode="json"),
-        "calls": calls, "selection": "first_packed_batch_spanning_two_legacy_batches",
+        "calls": calls, "selection": selection,
         "selected_packed_batch_index": index, "selected_issue_count": len(batch),
         "reader_sha256": hashlib.sha256(reader.encode()).hexdigest(),
         "selected_issues_sha256": digest(batch), "aggregate_reserve_tokens": reserve,
@@ -112,12 +139,8 @@ def build_plan(request, issues, reader):
         "token_enforcement": "conservative_admission_and_post_call_not_provider_hard_cap"}
 
 
-def build_control_plan(request, issues, reader):
-    """Two fixed disclosure controls, six calls and one shared allowance.
-
-    Expected labels stay outside provider payloads. Policy order reverses between
-    controls; this is a semantic pilot, not an unconfounded latency benchmark.
-    """
+def _build_control_plan_v1(request, issues, reader):
+    """Rebuild the original positional control contract for historical inspection."""
     from tradingagents.research.coverage_disclosure_eval import disclosure_controls
 
     if request.budget != control_budget():
@@ -125,7 +148,12 @@ def build_control_plan(request, issues, reader):
     bounded = request.model_copy(update={"budget": diagnostic_budget()})
     baseline = build_plan(bounded, issues, reader)
     selected = baseline["calls"][-1]["issues"]
-    controls = disclosure_controls(reader, selected)
+    # The saved v1 manifest predates scorer-only required witnesses. Keep its
+    # exact serialized contract rebuildable for read-only historical inspection.
+    controls = [
+        {key: value for key, value in control.items() if key != "required_reader_spans"}
+        for control in disclosure_controls(reader, selected)
+    ]
     by_id = {control["id"]: control for control in controls}
     calls = []
     for control_id, order in (("operating_review_only", (2, 0, 1)),
@@ -144,7 +172,60 @@ def build_control_plan(request, issues, reader):
         "order_limitation": "Policy order is balanced across different controls, not within each control."}
 
 
-def prepare_capsule(source, request, capsule, code_revision, *, disclosure=False):
+def build_control_plan(request, issues, reader):
+    """Two fixed disclosure controls, six calls and one shared allowance.
+
+    Expected labels stay outside provider payloads. Policy order reverses between
+    controls; this is a semantic pilot, not an unconfounded latency benchmark.
+    """
+    from tradingagents.research.coverage_disclosure_eval import (
+        disclosure_controls,
+        protected_financial_draft_issue,
+    )
+
+    if request.budget != control_budget():
+        raise ValueError("disclosure controls require the exact authorized limits")
+    bounded = request.model_copy(update={"budget": diagnostic_budget()})
+    target = protected_financial_draft_issue(issues)
+    selected = None
+    for index, batch in enumerate(coverage_batches_for_policy(issues, "packed-24")):
+        if any(item["issue_id"] == target["issue_id"] for item in batch):
+            selected = index, batch
+            break
+    if selected is None:
+        raise ValueError("protected financial-draft issue is absent from packed batches")
+    selected_index, selected_batch = selected
+    legacy = coverage_batches_for_policy(selected_batch, "legacy-12")
+    if len(legacy) != 2 or len(selected_batch) <= 12:
+        raise ValueError("protected financial-draft batch is not a matched one-versus-two comparison")
+    baseline = _build_plan_for_selected_batch(
+        bounded, selected_batch, reader, selected_index,
+        "packed_batch_containing_protected_financial_draft",
+    )
+    selected = baseline["calls"][-1]["issues"]
+    controls = disclosure_controls(reader, selected)
+    by_id = {control["id"]: control for control in controls}
+    calls = []
+    for control_id, order in (("operating_review_only", (2, 0, 1)),
+                              ("explicit_financial_draft", (0, 1, 2))):
+        variant = _build_plan_for_selected_batch(
+            bounded, selected, by_id[control_id]["reader"], selected_index,
+            "packed_batch_containing_protected_financial_draft",
+        )
+        for index in order:
+            call = variant["calls"][index]
+            calls.append({**call, "id": f"{control_id}/{call['id']}", "control_id": control_id})
+    reserve = sum(call["reserve_tokens"] for call in calls)
+    if reserve >= CONTROL_TOKEN_CAP:
+        raise BudgetExhausted("complete_diagnostic_does_not_fit")
+    return {**baseline, "kind": "disclosure-control-diagnostic-v2",
+        "request": request.model_dump(mode="json"), "calls": calls,
+        "baseline_reader": reader, "controls": controls,
+        "aggregate_reserve_tokens": reserve,
+        "order_limitation": "Policy order is balanced across different controls, not within each control."}
+
+
+def prepare_capsule(source, request, capsule, code_revision, codex_home, *, disclosure=False):
     source, capsule = Path(source).resolve(), Path(capsule).absolute()
     if capsule.exists() or capsule.resolve() != capsule or capsule.is_relative_to(source):
         raise ValueError("capsule requires a new non-symlink destination outside the source")
@@ -170,7 +251,8 @@ def prepare_capsule(source, request, capsule, code_revision, *, disclosure=False
     builder = build_control_plan if disclosure else build_plan
     plan = builder(request, issues, candidate["reader_text"])
     plan.update(source_run=str(source), source_artifact_sha256=benchmark["source_artifact_sha256"],
-                code_revision=code_revision, runtime_sha256=runtime_binding())
+                code_revision=code_revision, runtime_sha256=runtime_binding(),
+                **execution_binding(codex_home))
     plan["source_artifact_sha256"]["run_metadata.json"] = hashlib.sha256(metadata_bytes).hexdigest()
     verify_runtime(plan)
     for name, expected in plan["source_artifact_sha256"].items():
@@ -184,10 +266,11 @@ def prepare_capsule(source, request, capsule, code_revision, *, disclosure=False
 def validate_plan(plan):
     request = ResearchRequest.model_validate(plan["request"])
     calls = plan["calls"]
-    if plan.get("kind") == "disclosure-control-diagnostic-v1":
+    if plan.get("kind") in {"disclosure-control-diagnostic-v1", "disclosure-control-diagnostic-v2"}:
         if len(calls) != 6:
             raise ValueError("disclosure diagnostic requires exactly six calls")
-        expected = build_control_plan(request, calls[-1]["issues"], plan["baseline_reader"])
+        builder = _build_control_plan_v1 if plan["kind"].endswith("-v1") else build_control_plan
+        expected = builder(request, calls[-1]["issues"], plan["baseline_reader"])
         for key, value in expected.items():
             if key != "selected_packed_batch_index" and plan.get(key) != value:
                 raise ValueError("disclosure plan differs from its bounded contract")
@@ -211,6 +294,8 @@ def validate_plan(plan):
 def execute_plan(plan, request, service, *, clock=time.monotonic):
     if validate_plan(plan) != request:
         raise ValueError("worker request differs from approved plan")
+    if plan.get("kind") == "disclosure-control-diagnostic-v1":
+        raise ValueError("historical disclosure-control v1 plans are read-only")
     directory = request.output_dir
     directory.mkdir(parents=True, exist_ok=False)
     tracker = BudgetTracker(request.budget.model_copy(update={"wall_seconds": WORKER_SECONDS}), clock=clock)
@@ -223,14 +308,23 @@ def execute_plan(plan, request, service, *, clock=time.monotonic):
         trace.update(elapsed_seconds=tracker.elapsed_seconds, usage=tracker.usage.model_dump(mode="json"))
         atomic_write(directory / "diagnostic.json", canonical_json(trace))
 
-    save()
+    permit = row = None
+    started = None
+    call_invoked = False
+    reservation_settled = True
     try:
+        save()
         for index, call in enumerate(plan["calls"]):
+            permit = row = None
+            started = None
+            call_invoked = False
+            reservation_settled = True
             # Preserve capacity for the complete remaining comparison, not just
             # this call. Actual outputs are advisory-capped, so recheck each time.
             remaining_reserve = sum(c["reserve_tokens"] for c in plan["calls"][index:])
             tracker.admit(finalization=True, estimated_tokens=remaining_reserve)
             permit = tracker.reserve(call["reserve_tokens"], finalization=True)
+            reservation_settled = False
             row = {"id": call["id"], "policy": call["policy"], "status": "dispatched",
                    "payload_sha256": call["payload_sha256"], "timeout_seconds": permit.timeout_seconds}
             if "control_id" in call:
@@ -239,12 +333,14 @@ def execute_plan(plan, request, service, *, clock=time.monotonic):
             trace["pending_dispatch"] = True
             save()  # Durable intent precedes every potentially billable call.
             started = clock()
+            call_invoked = True
             reply = ModelReply.model_validate(service.complete("verifier", {**call["payload"],
                 "timeout_seconds": permit.timeout_seconds, "max_output_tokens": call["output_envelope"]},
                 request.model_copy(update={"coverage_batch_policy": call["policy"]})))
-            row.update(duration_seconds=max(0, clock() - started), usage=reply.usage.model_dump(mode="json"))
             tracker.complete(permit, reply.usage)
+            reservation_settled = True
             trace["pending_dispatch"] = False
+            row.update(duration_seconds=max(0, clock() - started), usage=reply.usage.model_dump(mode="json"))
             row["status"] = "reply_received"
             save()  # Known counters survive invalid output or later validation.
             reply_name = f"call-{index}-reply.json"
@@ -274,17 +370,20 @@ def execute_plan(plan, request, service, *, clock=time.monotonic):
                             if key in issue_ids}
                 if expected:
                     row["control_score"] = score_disclosure_control(
-                        checked, call["issues"], reader, expected)
+                        checked, call["issues"], reader, expected,
+                        control["required_reader_spans"])
             save()
         trace["status"] = "completed"
     except BaseException as exc:
-        if trace["pending_dispatch"]:
-            from tradingagents.research.contracts import Usage
-            tracker.record(Usage(complete=False))
-        if trace["calls"]:
-            row = trace["calls"][-1]
-            if row["status"] != "reviewed":
-                row.update(status="failed", duration_seconds=max(0, clock() - started))
+        if permit is not None and not reservation_settled:
+            tracker.cancel(permit, dispatched=call_invoked)
+            reservation_settled = True
+        if not call_invoked or (reservation_settled and tracker.usage.complete):
+            trace["pending_dispatch"] = False
+        if row is not None and row["status"] != "reviewed":
+            row["status"] = "failed"
+            if started is not None:
+                row["duration_seconds"] = max(0, clock() - started)
         trace.update(status="failed", failure_type=type(exc).__name__, failure_reason=codex_failure_reason(exc))
         if isinstance(exc, BudgetExhausted):
             trace["budget_stop"] = str(exc) if str(exc) in {
@@ -313,6 +412,7 @@ class CoverageDiagnosticWorker:
 
     def __call__(self, request):
         verify_runtime(self.plan)
+        verify_execution_binding(self.plan, self.home)
         return execute_plan(self.plan, request, CodexModelService(self.home))
 
 
@@ -324,6 +424,7 @@ def main(argv=None):
     prepare.add_argument("--source-run", type=Path, required=True)
     prepare.add_argument("--capsule", type=Path, required=True)
     prepare.add_argument("--code-revision", required=True)
+    prepare.add_argument("--codex-home", type=Path, required=True)
     prepare.add_argument("--disclosure-controls", action="store_true")
     run = commands.add_parser("run")
     run.add_argument("--plan", type=Path, required=True)
@@ -334,7 +435,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.command == "prepare":
         plan = prepare_capsule(args.source_run, load_request(args.config), args.capsule,
-                               args.code_revision, disclosure=args.disclosure_controls)
+                               args.code_revision, args.codex_home,
+                               disclosure=args.disclosure_controls)
         print(canonical_json({"plan_sha256": digest(plan), "reserve_tokens": plan["aggregate_reserve_tokens"],
                               "selected_issue_count": plan["selected_issue_count"]}).decode())
         return 0
@@ -345,6 +447,7 @@ def main(argv=None):
         raise ValueError("explicit best-effort token-limit acknowledgement required")
     request = validate_plan(plan)
     verify_runtime(plan)
+    verify_execution_binding(plan, args.codex_home)
     if request.output_dir.exists() or request.output_dir.resolve() != request.output_dir:
         raise ValueError("diagnostic output must be fresh and non-symlink")
     if request.output_dir != args.plan.resolve().parent / "run_1":

@@ -31,11 +31,13 @@ UNEXPECTED_DECISION = "unexpected decision"
 INVALID_WITNESS = "nonexact witness"
 BLOCKING_FINDING = "critical affected finding"
 UNVALIDATED_COVERAGE = "reader coverage did not validate"
+MISSING_REQUIRED_WITNESS = "missing required control witness"
+REQUIRED_WITNESS_NOT_CITED = "required control witness not cited"
 
 _ALLOWED_EXPECTED_DECISIONS = frozenset({"unresolved", "reader_covered"})
 
 
-def _draft_issue(issues: list[dict]) -> dict:
+def protected_financial_draft_issue(issues: list[dict]) -> dict:
     """Return the one protected issue owned by the financial-draft origin."""
     matched = [
         issue
@@ -60,18 +62,20 @@ def _controlled_reader(reader: str, *sentences: str) -> str:
 
 def disclosure_controls(reader: str, issues: list[dict]) -> list[dict]:
     """Create fixed offline disclosure controls without modifying issue evidence."""
-    issue_id = _draft_issue(issues)["issue_id"]
+    issue_id = protected_financial_draft_issue(issues)["issue_id"]
     return [
         {
             "id": GENERAL_STATUS_ONLY,
             "reader": reader,
             "expected_decisions": {issue_id: "unresolved"},
+            "required_reader_spans": {},
             "rationale": GENERAL_STATUS_RATIONALE,
         },
         {
             "id": OPERATING_REVIEW_ONLY,
             "reader": _controlled_reader(reader, OPERATING_REVIEW_SENTENCE),
             "expected_decisions": {issue_id: "unresolved"},
+            "required_reader_spans": {},
             "rationale": OPERATING_REVIEW_RATIONALE,
         },
         {
@@ -80,6 +84,9 @@ def disclosure_controls(reader: str, issues: list[dict]) -> list[dict]:
                 reader, OPERATING_REVIEW_SENTENCE, FINANCIAL_DRAFT_SENTENCE
             ),
             "expected_decisions": {issue_id: "reader_covered"},
+            # This scorer-only requirement prevents an exact but irrelevant
+            # general-status/operating quote from counting as positive evidence.
+            "required_reader_spans": {issue_id: [FINANCIAL_DRAFT_SENTENCE]},
             "rationale": FINANCIAL_DRAFT_RATIONALE,
         },
     ]
@@ -104,14 +111,15 @@ def _supplied_spans(disposition) -> tuple[str, ...]:
     return (*legacy, *disposition.reader_excerpts)
 
 
-def score_disclosure_control(review, issues: list[dict], reader: str, expected_decisions) -> dict:
+def score_disclosure_control(review, issues: list[dict], reader: str, expected_decisions,
+                             required_reader_spans=None) -> dict:
     """Score one synthetic control without treating it as report acceptance.
 
     The returned ``passed`` means only that the supplied response matched this
     offline evaluation case.  In particular, an expected unresolved disposition
     is a successful negative control, not a successful review.
     """
-    protected_id = _draft_issue(issues)["issue_id"]
+    protected_id = protected_financial_draft_issue(issues)["issue_id"]
     expected = dict(expected_decisions) if isinstance(expected_decisions, dict) else expected_decisions
     reasons = _expectation_errors(expected_decisions, protected_id)
     dispositions = [
@@ -144,6 +152,16 @@ def score_disclosure_control(review, issues: list[dict], reader: str, expected_d
         reasons.append(f"{INVALID_WITNESS}: {protected_id}")
     if expected_decision == "reader_covered" and protected_id not in valid_ids:
         reasons.append(f"{UNVALIDATED_COVERAGE}: {protected_id}")
+    if expected_decision == "reader_covered":
+        required = (
+            required_reader_spans.get(protected_id)
+            if isinstance(required_reader_spans, dict) else None
+        )
+        if (not isinstance(required, (tuple, list)) or not required
+                or any(not isinstance(span, str) or not span or span not in reader for span in required)):
+            reasons.append(f"{MISSING_REQUIRED_WITNESS}: {protected_id}")
+        elif not all(any(required_span in span for span in spans) for required_span in required):
+            reasons.append(f"{REQUIRED_WITNESS_NOT_CITED}: {protected_id}")
 
     expected_unresolved_finding = (
         expected_decision == "unresolved"

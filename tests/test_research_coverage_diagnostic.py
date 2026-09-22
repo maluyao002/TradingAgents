@@ -2,6 +2,7 @@
 
 from collections import deque
 from copy import deepcopy
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -93,9 +94,10 @@ def trace(request):
     return read_json(request.output_dir / "diagnostic.json")
 
 
-def cli_plan(tmp_path, *, output_dir=None):
+def cli_plan(tmp_path, *, output_dir=None, codex_home=None):
     capsule = tmp_path / "capsule"
     capsule.mkdir()
+    codex_home = (codex_home or tmp_path / "home").resolve()
     request = ResearchRequest(
         ticker="TEST",
         cutoff="2026-09-17T00:00:00Z",
@@ -107,6 +109,7 @@ def cli_plan(tmp_path, *, output_dir=None):
     )
     issues, reader = issues_and_reader()
     plan = diagnostic.build_plan(request, issues, reader)
+    plan.update(diagnostic.execution_binding(codex_home))
     plan["source_artifact_sha256"] = {}
     path = capsule / "plan.json"
     path.write_bytes(canonical_json(plan))
@@ -302,6 +305,8 @@ def test_cli_run_is_capsule_bound_single_attempt_without_starting_models(tmp_pat
     assert len(calls) == 1
     worker, called_request, timeout_seconds = calls[0]
     assert isinstance(worker, diagnostic.CoverageDiagnosticWorker)
+    assert worker.home == Path(plan["codex_home"])
+    assert plan["model_provider"] == "openai"
     assert called_request.output_dir == path.parent / "run_1"
     assert timeout_seconds == diagnostic.SUPERVISOR_SECONDS
     assert (capsule / "attempt_started").is_dir()
