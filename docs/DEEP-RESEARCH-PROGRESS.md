@@ -12,6 +12,33 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+### Substantive research closure — September 22, 2026
+
+Following PR #22 integration, the approved five-priority work moved to
+`codex/research-substantive-closure`. See the
+[delivery and remaining-work record](DEEP-RESEARCH-SUBSTANTIVE-CLOSURE.md).
+The increment adds lossless nine-question triage of all 185 historical records,
+a dated conditional cash-flow bridge integrated through reader/admission paths,
+a shared judgment-led analysis policy, and targeted independent-source follow-up.
+
+Independent Sol/high review found five concrete defects, including a material
+working-capital metric-pairing error. Targeted fixes cover paired metrics,
+decimal reproducibility, captured-source provenance, pinned triage lifecycle
+inputs and complete prospective delivery in optional-work cost estimates.
+Coordinator review also removed post-hoc source-capture provenance repair.
+The targeted verification set contains 195 distinct passing tests; lint and
+whitespace checks passed. These are engineering checks, not financial/report
+acceptance. No new live research/model run was performed.
+
+The actual cash-flow case remains an explicitly unreviewed conditional draft.
+Source review now includes current proxy evidence, three guidance/actual pairs,
+CoreWeave concentration/financing and external competitive deployment. Full-text
+acquisition saved three documents; four SEC filings require the user's contact
+identifier. Prototype capture metadata limitations are recorded, not hidden.
+New evidence must enter a fresh eligible packet and dependent analyses must be
+refreshed before the next bounded NVDA run. HOOD and actual-reader acceptance
+remain open. No main-branch, schedule, provider or historical report was changed.
+
 ### Retrospective review and validated reader boundary — September 22, 2026
 
 PR #21 is integrated as `d066d86`; development continues separately on

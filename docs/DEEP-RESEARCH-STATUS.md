@@ -7,6 +7,15 @@ remain in [the implementation plan](DEEP-RESEARCH-PLAN.md).
 
 ### Latest checkpoint — September 22
 
+**Substantive closure work is now the priority.** The user approved addressing
+actionable unknowns, cash-flow/model integration, independent evidence,
+judgment-led writing and integrated acceptance. Follow the
+[substantive closure work record](DEEP-RESEARCH-SUBSTANTIVE-CLOSURE.md), not another
+writer-only rerun of unchanged historical analyses. The new lossless work register
+maps all 185 original records to nine questions; it retires no issue. Financial
+acceptance, the enriched exact-reader check and HOOD generality remain separate
+gates. Newly acquired sources require a fresh eligible packet and dependent reviews.
+
 The requested [retrospective PR review and bound-disclosure increment](DEEP-RESEARCH-REVIEW-DISCLOSURES.md)
 found five defects missed by the earlier independent reviews of PRs #20/#21.
 Repairs tighten diagnostic execution binding, pre-dispatch accounting and synthetic
