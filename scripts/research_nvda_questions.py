@@ -13,6 +13,8 @@ from tradingagents.research.review_lifecycle import LifecycleVerification, recon
 from tradingagents.research.storage import atomic_write, canonical_json, digest, read_json
 
 INVENTORY_SHA256 = "c9cb96a778c6c53292c78b9220459212a3483ea3bb24e8191c90f3f6ceabbdc4"
+PAYLOAD_SHA256 = "7f5af9dcba71149ae60c83094f486976506a2837fbc7dea69897e226b4cd8054"
+REPLY_SHA256 = "21fe97aa125a7467b164b201be6bdf224aabb0321f3808fc700e6e49f3f6d9db"
 
 
 def nvda_questions(issues):
@@ -128,6 +130,8 @@ def build(source, destination):
         raise ValueError("requires a fresh output outside the historical source")
     payload = read_json(source / "factual-payload.json")
     reply = read_json(source / "factual-reply.json")
+    if digest(payload) != PAYLOAD_SHA256 or digest(reply) != REPLY_SHA256:
+        raise ValueError("NVDA triage requires the exact factual payload and reply")
     research = payload["research"]
     issues = research["inherited_issues"]
     questions = nvda_questions(issues)

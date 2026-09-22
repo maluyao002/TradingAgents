@@ -2,7 +2,7 @@ import pytest
 
 from scripts import research_nvda_questions as script
 from tradingagents.research.research_questions import question_register
-from tradingagents.research.storage import digest
+from tradingagents.research.storage import canonical_json, digest
 
 
 def test_all_authored_assignments_are_retained_without_closure(monkeypatch):
@@ -31,3 +31,19 @@ def test_historical_output_is_never_overwritten(tmp_path):
     existing.mkdir()
     with pytest.raises(ValueError, match="fresh output"):
         script.build(source, existing)
+
+
+@pytest.mark.parametrize("changed", ["payload", "reply"])
+def test_lifecycle_inputs_are_pinned_before_output_creation(tmp_path, monkeypatch, changed):
+    source = tmp_path / "source"
+    source.mkdir()
+    payload, reply = {"research": "fixture"}, {"data": "fixture"}
+    monkeypatch.setattr(script, "PAYLOAD_SHA256", digest(payload))
+    monkeypatch.setattr(script, "REPLY_SHA256", digest(reply))
+    (payload if changed == "payload" else reply)["changed"] = True
+    (source / "factual-payload.json").write_bytes(canonical_json(payload))
+    (source / "factual-reply.json").write_bytes(canonical_json(reply))
+    destination = tmp_path / "new"
+    with pytest.raises(ValueError, match="exact factual payload and reply"):
+        script.build(source, destination)
+    assert not destination.exists()
