@@ -10,7 +10,7 @@ import pytest
 from tests.test_research_operating_scenarios import _draft, _reviewed
 from tradingagents.research.calculated_values import render_calculations
 from tradingagents.research.case_context import load_case_context
-from tradingagents.research.case_report import case_reader_delivery
+from tradingagents.research.case_report import CASE_READER_REQUIREMENTS, case_reader_delivery
 from tradingagents.research.contracts import ResearchRequest
 from tradingagents.research.storage import canonical_json, read_json
 
@@ -236,3 +236,8 @@ def test_new_delivery_and_table_ignore_ambient_decimal_precision_rounding_and_tr
 
     assert delivery == baseline_delivery
     assert rendered == baseline_rendered
+
+
+def test_required_assumptions_marker_is_in_the_writer_allowlist():
+    assert ("only {{calc:ID}}, {{scenario_table}} and {{scenario_assumptions_table}} markers"
+            in CASE_READER_REQUIREMENTS)

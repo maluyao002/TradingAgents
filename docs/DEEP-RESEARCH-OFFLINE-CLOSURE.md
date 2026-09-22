@@ -100,3 +100,30 @@ reuse an expired allowance or silently fall back to an expensive full rerun.
 Any new live path requires explicit new allowance and the applicable acknowledgement
 of unknown historical usage. Then inspect the actual exported reader before
 moving to targeted financial/independent-evidence closure and HOOD.
+
+### Proposed next validation (not authorized)
+
+One fresh English NVDA case-backed validation under preview-7, using the same
+frozen September 19 evidence/case and unchanged model assignments. This is a
+controlled validation, not a market refresh. Bind the final reviewed integration
+commit and request identity at preparation; recheck these input SHA-256 values:
+
+- Evidence: `8a874ca14d1ddc923e6cb5a0f305e5c25796b75fba24970a8f6c097639a1188b`.
+- Case: `42dd5148d8ceb1856a080cd8e8fec145b4e0b22039123cb983245eaf8765d4aa`.
+
+Proposed new allowance: **6,000,000 tokens, 180 minutes overall, 600 seconds per
+call**, one repair at most, no automatic retry or renewal. Reserve five minutes
+outside the research worker for supervisor shutdown and artifact inspection.
+These are proposed ceilings, not expected spend or a provider-enforced token
+guarantee. The longer wall allowance addresses the observed sequential coverage
+latency plus a possible repair/re-verification pass; timing admission can still
+stop early. Coordinator/review-agent usage remains separate.
+
+Exact-candidate salvage is not presently eligible: the source has both unknown
+failed-call usage/unsettled dispatch and a different verification contract.
+Preserve and reuse its frozen evidence, case and comparison artifacts, but do
+not import incompatible review attestations or disguise a new full run as a cheap
+continuation. A version-safe salvage implementation would be separate development,
+not a flag override in this validation. New authorization must acknowledge that
+historical total usage remains unknown. Inspect the actual exported reader and
+its admission/coverage records; another green factual check alone is insufficient.

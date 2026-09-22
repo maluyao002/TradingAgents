@@ -15,9 +15,10 @@ No accepted reader was exported and the expired allowance is not a retry balance
 
 The approved [offline closure sequence](DEEP-RESEARCH-OFFLINE-CLOSURE.md) addresses
 safe failure diagnostics, explicit writer disclosures and scenario presentation,
-scoped compound obligations, exact witnesses and observed-latency planning. Work
-is isolated on `codex/research-offline-finalization-closure` for review and PR
-integration. Historical reports remain unchanged. Preview-7 does not silently
+scoped compound obligations, exact witnesses and observed-latency planning. The
+implementation is delivered through [PR #18](https://github.com/maluyao002/TradingAgents/pull/18)
+from `codex/research-offline-finalization-closure`, with `codex/deep-research-v2`
+as its integration target. Historical reports remain unchanged. Preview-7 does not silently
 reuse preview-6 verification attestations.
 
 After integration, the next user checkpoint is a **new bounded live-validation

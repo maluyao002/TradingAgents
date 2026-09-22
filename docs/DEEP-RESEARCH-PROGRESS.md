@@ -56,6 +56,10 @@ context is now retained only for explicitly supported retrieval metrics, without
 claiming a typed period/range match. Tests cover trailing exclusions, headings,
 malformed raw range text and unsupported expense routing. Guidance interpretation
 remains part of substantive writer/verifier review, not deterministic acceptance.
+The final guidance fix passed 78 affected reader/preview tests, and independent
+Sol re-review found no remaining actionable findings. Hosted review then caught
+a contradictory marker allowlist in the writer instructions; the required new
+assumptions-table marker is now explicitly permitted, with a prompt regression.
 
 ### Fresh NVDA validation and offline interface repair — September 20, 2026
 
