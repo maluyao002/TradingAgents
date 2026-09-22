@@ -1,4 +1,4 @@
-"""Three-call matched coverage diagnostic, never a report or reusable attestation.
+"""Bounded matched coverage diagnostics, never reports or reusable attestations.
 
 Prepare offline, then execute one hash-approved capsule once. No retries or
 fallbacks. The existing supervisor owns the whole model process tree/deadline.
@@ -42,6 +42,7 @@ from tradingagents.research.storage import (
 from tradingagents.research.supervisor import run_supervised
 
 TOKEN_CAP = 250_000
+CONTROL_TOKEN_CAP = 350_000
 WALL_CAP = 900
 WORKER_SECONDS = 880
 SUPERVISOR_SECONDS = 890
@@ -66,6 +67,10 @@ def verify_runtime(plan):
 def diagnostic_budget():
     return Budget(total_tokens=TOKEN_CAP, wall_seconds=WALL_CAP, call_timeout_seconds=CALL_CAP,
                   reserve_seconds=0, reserve_tokens=0, followup_cycles=0)
+
+
+def control_budget():
+    return diagnostic_budget().model_copy(update={"total_tokens": CONTROL_TOKEN_CAP})
 
 
 def build_plan(request, issues, reader):
@@ -107,7 +112,39 @@ def build_plan(request, issues, reader):
         "token_enforcement": "conservative_admission_and_post_call_not_provider_hard_cap"}
 
 
-def prepare_capsule(source, request, capsule, code_revision):
+def build_control_plan(request, issues, reader):
+    """Two fixed disclosure controls, six calls and one shared allowance.
+
+    Expected labels stay outside provider payloads. Policy order reverses between
+    controls; this is a semantic pilot, not an unconfounded latency benchmark.
+    """
+    from tradingagents.research.coverage_disclosure_eval import disclosure_controls
+
+    if request.budget != control_budget():
+        raise ValueError("disclosure controls require the exact authorized limits")
+    bounded = request.model_copy(update={"budget": diagnostic_budget()})
+    baseline = build_plan(bounded, issues, reader)
+    selected = baseline["calls"][-1]["issues"]
+    controls = disclosure_controls(reader, selected)
+    by_id = {control["id"]: control for control in controls}
+    calls = []
+    for control_id, order in (("operating_review_only", (2, 0, 1)),
+                              ("explicit_financial_draft", (0, 1, 2))):
+        variant = build_plan(bounded, selected, by_id[control_id]["reader"])
+        for index in order:
+            call = variant["calls"][index]
+            calls.append({**call, "id": f"{control_id}/{call['id']}", "control_id": control_id})
+    reserve = sum(call["reserve_tokens"] for call in calls)
+    if reserve >= CONTROL_TOKEN_CAP:
+        raise BudgetExhausted("complete_diagnostic_does_not_fit")
+    return {**baseline, "kind": "disclosure-control-diagnostic-v1",
+        "request": request.model_dump(mode="json"), "calls": calls,
+        "baseline_reader": reader, "controls": controls,
+        "aggregate_reserve_tokens": reserve,
+        "order_limitation": "Policy order is balanced across different controls, not within each control."}
+
+
+def prepare_capsule(source, request, capsule, code_revision, *, disclosure=False):
     source, capsule = Path(source).resolve(), Path(capsule).absolute()
     if capsule.exists() or capsule.resolve() != capsule or capsule.is_relative_to(source):
         raise ValueError("capsule requires a new non-symlink destination outside the source")
@@ -127,9 +164,11 @@ def prepare_capsule(source, request, capsule, code_revision):
     setting = request.models["verifier"]
     if (prior["model"], prior["effort"]) != (setting.model, setting.effort):
         raise ValueError("diagnostic must retain historical verifier model and effort")
-    request = request.model_copy(update={"budget": diagnostic_budget(), "output_dir": capsule / "run_1",
+    request = request.model_copy(update={"budget": control_budget() if disclosure else diagnostic_budget(),
+        "output_dir": capsule / "run_1",
         "additional_report_languages": (), "dossier_dir": None, "coverage_batch_policy": "legacy-12"})
-    plan = build_plan(request, issues, candidate["reader_text"])
+    builder = build_control_plan if disclosure else build_plan
+    plan = builder(request, issues, candidate["reader_text"])
     plan.update(source_run=str(source), source_artifact_sha256=benchmark["source_artifact_sha256"],
                 code_revision=code_revision, runtime_sha256=runtime_binding())
     plan["source_artifact_sha256"]["run_metadata.json"] = hashlib.sha256(metadata_bytes).hexdigest()
@@ -145,6 +184,14 @@ def prepare_capsule(source, request, capsule, code_revision):
 def validate_plan(plan):
     request = ResearchRequest.model_validate(plan["request"])
     calls = plan["calls"]
+    if plan.get("kind") == "disclosure-control-diagnostic-v1":
+        if len(calls) != 6:
+            raise ValueError("disclosure diagnostic requires exactly six calls")
+        expected = build_control_plan(request, calls[-1]["issues"], plan["baseline_reader"])
+        for key, value in expected.items():
+            if key != "selected_packed_batch_index" and plan.get(key) != value:
+                raise ValueError("disclosure plan differs from its bounded contract")
+        return request
     if len(calls) != 3 or [c["policy"] for c in calls] != ["legacy-12", "legacy-12", "packed-24"]:
         raise ValueError("diagnostic must contain exactly two legacy calls and one packed call")
     reader = calls[-1]["payload"]["research"]["rendered_reader"]
@@ -186,6 +233,8 @@ def execute_plan(plan, request, service, *, clock=time.monotonic):
             permit = tracker.reserve(call["reserve_tokens"], finalization=True)
             row = {"id": call["id"], "policy": call["policy"], "status": "dispatched",
                    "payload_sha256": call["payload_sha256"], "timeout_seconds": permit.timeout_seconds}
+            if "control_id" in call:
+                row["control_id"] = call["control_id"]
             trace["calls"].append(row)
             trace["pending_dispatch"] = True
             save()  # Durable intent precedes every potentially billable call.
@@ -203,7 +252,7 @@ def execute_plan(plan, request, service, *, clock=time.monotonic):
             files.add(reply_name)
             if not reply.usage.complete:
                 raise BudgetExhausted("usage_incomplete")
-            if tracker.usage.total_tokens > TOKEN_CAP or tracker.elapsed_seconds >= WORKER_SECONDS:
+            if tracker.usage.total_tokens > request.budget.total_tokens or tracker.elapsed_seconds >= WORKER_SECONDS:
                 raise BudgetExhausted("diagnostic_budget_exceeded")
             review = ReaderVerification.model_validate(reply.data)
             groups = group_equivalent_issues(call["issues"])
@@ -215,6 +264,17 @@ def execute_plan(plan, request, service, *, clock=time.monotonic):
             checked = check_dispositions(review, call["issues"], reader)
             row.update(status="reviewed", checked_review=checked.model_dump(mode="json"),
                        valid_disposition_ids=list(validated_disposition_ids(checked, call["issues"], reader)))
+            if "control_id" in call:
+                from tradingagents.research.coverage_disclosure_eval import score_disclosure_control
+                control = next(item for item in plan["controls"] if item["id"] == call["control_id"])
+                # A legacy batch may not contain the target issue. Do not score it
+                # as an omitted answer, or count it as a separate semantic trial.
+                issue_ids = {item["issue_id"] for item in call["issues"]}
+                expected = {key: value for key, value in control["expected_decisions"].items()
+                            if key in issue_ids}
+                if expected:
+                    row["control_score"] = score_disclosure_control(
+                        checked, call["issues"], reader, expected)
             save()
         trace["status"] = "completed"
     except BaseException as exc:
@@ -264,6 +324,7 @@ def main(argv=None):
     prepare.add_argument("--source-run", type=Path, required=True)
     prepare.add_argument("--capsule", type=Path, required=True)
     prepare.add_argument("--code-revision", required=True)
+    prepare.add_argument("--disclosure-controls", action="store_true")
     run = commands.add_parser("run")
     run.add_argument("--plan", type=Path, required=True)
     run.add_argument("--approved-plan-sha256", required=True)
@@ -272,7 +333,8 @@ def main(argv=None):
     run.add_argument("--allow-advisory-token-cap", action="store_true")
     args = parser.parse_args(argv)
     if args.command == "prepare":
-        plan = prepare_capsule(args.source_run, load_request(args.config), args.capsule, args.code_revision)
+        plan = prepare_capsule(args.source_run, load_request(args.config), args.capsule,
+                               args.code_revision, disclosure=args.disclosure_controls)
         print(canonical_json({"plan_sha256": digest(plan), "reserve_tokens": plan["aggregate_reserve_tokens"],
                               "selected_issue_count": plan["selected_issue_count"]}).decode())
         return 0

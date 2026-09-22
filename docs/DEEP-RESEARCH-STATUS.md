@@ -19,8 +19,11 @@ to switch the default. The next sequence is focused semantic negative/positive
 controls, then a fresh bounded counterbalanced diagnostic, before deciding on
 end-to-end acceptance. The user approved reasonable bounded follow-ups, including
 this test's explicit provider disclosure and best-effort token limit; unknown
-usage never becomes a retry balance. PR #20 contains the single-use harness and
-results. No historical report changed; Stage 3 and financial acceptance remain open.
+usage never becomes a retry balance. PR #20 is merged as `bd604c7` into the feature
+branch, and its sub-branch is removed. The approved
+[disclosure-control follow-up](DEEP-RESEARCH-DISCLOSURE-CONTROLS.md) adds offline
+controls and a six-call, 15-minute comparison with a shared 350k best-effort
+allowance. No historical report changed; Stage 3 and financial acceptance remain open.
 
 ### Previous checkpoint — September 21
 
