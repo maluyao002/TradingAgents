@@ -12,6 +12,36 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+### Matched coverage diagnostic — September 22, 2026
+
+PR #19 is integrated as `c759a66`. On `codex/coverage-paired-diagnostic`, PR #20
+adds a shared engine payload builder and a hash-bound single-use diagnostic with
+complete-path admission, durable dispatch intent, explicit advisory-cap consent,
+runtime/source binding and bounded process cleanup. Independent Sol/high review
+drove preservation of the original failure if cleanup also fails. Legacy payload
+compatibility remains covered by the frozen provider-boundary regression.
+
+After explicit user approval, all three calls completed in **405.88 seconds**,
+using **48,815 tokens**, with complete counters and no retry. The same 18 issues
+cost **29,822 tokens / 217.28s** in legacy 12+6 calls versus **18,993 tokens /
+188.56s** in one packed call. This is 36.31% fewer tokens and 13.22% less measured
+time, subject to fixed-order/cold-start confounding and single-pair uncertainty.
+
+Seventeen disposition decisions agreed. Packed correctly retained a case-specific
+unreviewed-financial-draft disclosure as unresolved where legacy cited only a
+general unaccepted-report label. This is one issue, represented by a provider
+finding and a deterministic unresolved finding. No exact witness failures or
+missing IDs occurred. Independent reader review was used to challenge the
+interpretation; coordinator adjudication preserves the distinct financial-case
+review obligation without requiring internal Stage terminology.
+
+Targeted offline tests and hosted CI passed on the executed implementation;
+counts, source bindings, limitations and the next sequence are in
+[the diagnostic report](DEEP-RESEARCH-COVERAGE-DIAGNOSTIC.md). Source artifact
+hashes remain unchanged, historical failed-call usage stays unknown, and no report
+was exported or accepted. Keep legacy default; prepare semantic controls before
+another separately recorded bounded comparison or full acceptance decision.
+
 ### Coverage-efficiency follow-up — September 21, 2026
 
 PR #18 is merged as `3ec145a`. The user declined a proposed 180-minute fresh
