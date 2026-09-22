@@ -33,10 +33,10 @@ from .contracts import (
     ReviewFinding,
     Usage,
 )
+from .coverage_payload import LIMITATION_POLICY, coverage_model_payload, coverage_review_data
 from .coverage_policy import (
     coverage_batches_for_policy,
     coverage_output_envelope,
-    packed_issue_context,
 )
 from .dossiers import DossierStore
 from .equity_valuation import EquityDCFModelInput, EquityForecastPeriod, equity_dcf_valuation
@@ -514,22 +514,15 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 role, data, outputs)))) if evidence_led else ()
             if coverage_only and (not bounded_review or role != "verifier"):
                 raise ValueError("coverage-only calls require the bounded reader verifier")
+            if coverage_only:
+                return coverage_model_payload(request, data, stage, role_index, language)
             payload = {**instruction(role, schema), "evidence": (
-                {"scope": "Reader limitation coverage only; factual verification is a separate mandatory stage."}
-                if coverage_only else _prompt_evidence(snapshot, queries)),
+                _prompt_evidence(snapshot, queries)),
                        "research": data, "cutoff": request.cutoff.isoformat(),
                        "mandate": request.mandate, "stage": stage, "role_call_index": role_index,
                        "valuation_months": request.valuation_months,
                        "return_months": request.return_months,
                        "language": language or request.internal_language}
-            if coverage_only:
-                if request.coverage_batch_policy != "legacy-12":
-                    payload["coverage_batch_policy"] = request.coverage_batch_policy
-                payload["system"] += (
-                    " This is a limitation-coverage-only call, not source verification. "
-                    "Assess every supplied issue against the exact reader text. Leave factual "
-                    "claim-ID decisions empty; a separate mandatory full-context call checks facts. "
-                    "Keep each disposition rationale concise without omitting its reasoning.")
             if evidence_led:
                 payload["quality_requirements"] = {
                     "revision": "evidence-led-bounded-1" if bounded_review else "evidence-led-1",
@@ -871,19 +864,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 "calculated_values": [value.model_dump(mode="json") for value in calculated_values],
                 "rendered_reader_sha256": rendered_hash, **(extra or {}),
                 "limitation_review": limitations,
-                "limitation_policy": "For EVERY limitation issue ID return one disposition. "
-                    "Material financial/research caveats must be reader_covered with an exact "
-                    "excerpt showing the caveat in the rendered reader. Use reader_excerpts for "
-                    "multiple separately exact passages; never join passages with ellipses. "
-                    "Copy each excerpt byte-for-byte from rendered_reader, preserving case, "
-                    "punctuation and Markdown. In particular, do not capitalize a sentence fragment "
-                    "when the reader uses lowercase after an uncertainty label. If no literal "
-                    "supporting passage exists, return unresolved rather than a paraphrased quote. "
-                    "Audit-only is allowed "
-                    "only for genuinely operational or immaterial details, with a specific "
-                    "rationale. Never classify a financially material unknown as immaterial "
-                    "to improve readability. reader_coverage_required issues must be reader_covered "
-                    "with exact spans, never audit-only. Return unresolved when it is missing.",
+                "limitation_policy": LIMITATION_POLICY,
             }
             if bounded_review:
                 # Save the authored bytes before review; this is NOT a verified export.
@@ -948,25 +929,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     "caveat coverage is checked in separate mandatory batches against these same bytes.")
 
                 def coverage_data(items):
-                    return {
-                        "rendered_reader": rendered.reader_text,
-                        "rendered_reader_sha256": rendered_hash,
-                        **packed_issue_context(items),
-                        "limitation_policy": review_data["limitation_policy"],
-                        "review_scope": "Underlying claims and prior findings are supplied as "
-                            "context, not proof. Missing claim context must remain unresolved. "
-                            "Only assess each supplied issue's materiality and "
-                            "coverage in the exact rendered text. Do not adjudicate factual "
-                            "claim IDs or imply source verification. Set reviewed_report only "
-                            "if you performed this coverage review. Each distinct issue needs "
-                            "its own justified disposition; shared prose does not automatically "
-                            "cover every issue. Unknown materiality must remain unresolved. "
-                            "shared_issue_context_ref refers to the exact field-bound value in "
-                            "shared_issue_context; read it as part of that issue, not as evidence "
-                            "of resolution. equivalent_issue_ids are code-checked identical obligations "
-                            "and context; return one disposition for the supplied issue_id, which "
-                            "will be mapped back to every original obligation without dropping any.",
-                    }
+                    return coverage_review_data(items, rendered.reader_text,
+                                                review_data["limitation_policy"])
 
                 if stage == "verify_repaired_report":
                     factual_payload = model_payload(stage, "verifier", factual_data, LifecycleVerification, language)
