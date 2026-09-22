@@ -12,6 +12,25 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+### Retrospective review and validated reader boundary — September 22, 2026
+
+PR #21 is integrated as `d066d86`; development continues separately on
+`codex/research-bound-review-disclosures`, targeting `codex/deep-research-v2`, never
+main. Both PRs #20/#21 had independent agent reviews and green CI but no formal
+GitHub approval reviews. Fresh Sol/high and Terra/medium reviews found five issues:
+execution-home/provider binding, incomplete runtime-source binding, pre-dispatch
+failure accounting, irrelevant positive-control witnesses and positional target
+selection. The [repair record](DEEP-RESEARCH-REVIEW-DISCLOSURES.md) distinguishes
+these findings from the preserved historical live results.
+
+The next reader increment revalidates case state before rendering financial and
+operating review statuses separately, with exact provenance and fiscal/calendar
+scope clarification. It does not repair the missing financial model or excuse
+contradictory prose. Preview-8 changes current identities; historical previews
+retain their original rendering behavior. Targeted offline validation and a small
+actual-writer/factual-reader check are the current delivery gates. Full NVDA
+acceptance, independent evidence, financial closure and HOOD remain open.
+
 ### Disclosure-control follow-up — September 22, 2026
 
 PR #20 merged as `bd604c7` into `codex/deep-research-v2`; its sub-branch was deleted

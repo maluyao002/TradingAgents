@@ -7,6 +7,17 @@ remain in [the implementation plan](DEEP-RESEARCH-PLAN.md).
 
 ### Latest checkpoint — September 22
 
+The requested [retrospective PR review and bound-disclosure increment](DEEP-RESEARCH-REVIEW-DISCLOSURES.md)
+found five defects missed by the earlier independent reviews of PRs #20/#21.
+Repairs tighten diagnostic execution binding, pre-dispatch accounting and synthetic
+control scoring/selection. Rescoring the saved responses preserves the two negative
+failures and two positive successes; no historical result was rewritten.
+The new reader contract renders review status from revalidated case state and
+separates operating sensitivities from a calendar cash-flow model. Preview-8 binds
+the new disclosure; old previews retain their original contract. The current gate
+is independent review plus a small fresh actual-writer/factual-reader diagnostic,
+not full report acceptance or a switch to packed coverage.
+
 The approved [disclosure-control follow-up](DEEP-RESEARCH-DISCLOSURE-CONTROLS.md)
 completed six calls in **14m39s / 100,124 tokens**, with complete counters and no
 retry. Both policies recognized explicit financial-draft disclosure, but **both
@@ -25,9 +36,8 @@ comparison. Packed also identified a missing financial-draft disclosure that
 legacy accepted. Seventeen other decisions agreed; no exact-span failures occurred.
 
 This is preliminary efficiency evidence, not report acceptance or justification
-to switch the default. The next sequence is focused semantic negative/positive
-controls, then a fresh bounded counterbalanced diagnostic, before deciding on
-end-to-end acceptance. The user approved reasonable bounded follow-ups, including
+to switch the default. Its recommended semantic controls have now been completed
+as described above, and failed the negative condition. The user approved reasonable bounded follow-ups, including
 this test's explicit provider disclosure and best-effort token limit; unknown
 usage never becomes a retry balance. PR #20 is merged as `bd604c7` into the feature
 branch, and its sub-branch is removed. The approved
