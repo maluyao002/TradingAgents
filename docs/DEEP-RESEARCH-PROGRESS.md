@@ -49,6 +49,14 @@ real-packet lifecycle fixture uses an explicit larger *synthetic* budget because
 its purpose is lifecycle behavior, not the historical live allowance; tight-budget
 admission tests remain unchanged.
 
+Further Sol review found a guidance-prefix extraction bug that could drop period
+qualifiers, plus a metric-routing bug that could attach gross-margin text to an
+expense input. The automatic range assignment was removed. Full exact source
+context is now retained only for explicitly supported retrieval metrics, without
+claiming a typed period/range match. Tests cover trailing exclusions, headings,
+malformed raw range text and unsupported expense routing. Guidance interpretation
+remains part of substantive writer/verifier review, not deterministic acceptance.
+
 ### Fresh NVDA validation and offline interface repair — September 20, 2026
 
 After PR #16 merged as `c397176`, the separately authorized fresh English NVDA

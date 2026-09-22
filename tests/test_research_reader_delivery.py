@@ -142,7 +142,7 @@ def test_new_assumptions_marker_has_explicit_input_and_calculation_labels(tmp_pa
     assert "{{scenario_assumptions_table}}" not in rendered
 
 
-def test_frozen_nvda_delivery_uses_issuer_ranges_and_q4_rates_without_scenario_minmax():
+def test_frozen_nvda_delivery_preserves_range_context_and_computes_q4_rates():
     path = (
         Path(__file__).resolve().parents[1]
         / "reports/NVDA_VALIDATION_20260921/run_1/operating_scenario_context.json"
@@ -157,23 +157,26 @@ def test_frozen_nvda_delivery_uses_issuer_ranges_and_q4_rates_without_scenario_m
     presentation = delivery["scenario_presentation"]
     downside_q3, downside_q4 = presentation["rows"][:2]
     q3_inputs = {item["name"]: item for item in downside_q3["inputs"]}
-    assert q3_inputs["revenue"]["issuer_guidance_range"]["range"] == "±2%"
-    assert q3_inputs["gross_margin"]["issuer_guidance_range"]["range"] == "±50 basis points"
-    assert q3_inputs["revenue"]["issuer_guidance_range"]["source_id"] == "nvda-q2-release"
-    assert "Revenue is expected" in q3_inputs["revenue"]["issuer_guidance_range"]["exact_excerpt"]
-    assert q3_inputs["opex"]["issuer_guidance_range"] is None
+    revenue = q3_inputs["revenue"]["unclassified_guidance_witnesses"][0]
+    margin = q3_inputs["gross_margin"]["unclassified_guidance_witnesses"][0]
+    assert "plus or minus 2%" in revenue["exact_excerpt"]
+    assert "third quarter of fiscal 2027" in revenue["exact_excerpt"]
+    assert "plus or minus 50 basis points" in margin["exact_excerpt"]
+    assert revenue["source_id"] == "nvda-q2-release"
+    assert q3_inputs["opex"]["unclassified_guidance_witnesses"] == []
+    assert all("issuer_guidance_range" not in item for item in q3_inputs.values())
     assert downside_q4["analyst_calculations"]["revenue_change_vs_previous_period"] == "-0.05"
     assert downside_q4["analyst_calculations"]["opex_change_vs_previous_period"] == "0.15"
     assert "input_ranges_across_scenarios" not in presentation
 
     rendered = render_calculations("{{scenario_assumptions_table}}", (), scenario_delivery=delivery)
-    assert "range ±2%" in rendered and "range ±50 basis points" in rendered
+    assert "range ±" not in rendered
     assert "[nvda-q2-release]" in rendered
     assert "-5.00%" in rendered and "15.00%" in rendered
     assert "108000000000" not in rendered
 
 
-def test_guidance_range_requires_one_matching_value_bound_clause_and_escapes_table_cells():
+def test_guidance_is_never_typed_by_number_matching_and_table_cells_are_escaped():
     mismatched = _guidance_context(
         "Revenue is expected to be $99 billion, plus or minus 2%."
     )
@@ -186,18 +189,15 @@ def test_guidance_range_requires_one_matching_value_bound_clause_and_escapes_tab
         label="Case | label\nwith newline",
     )
 
-    assert case_reader_delivery(mismatched)["scenario_presentation"]["rows"][0]["inputs"][0][
-        "issuer_guidance_range"
-    ] is None
-    assert case_reader_delivery(ambiguous)["scenario_presentation"]["rows"][0]["inputs"][0][
-        "issuer_guidance_range"
-    ] is None
+    for context in (mismatched, ambiguous, matched):
+        input_item = case_reader_delivery(context)["scenario_presentation"]["rows"][0]["inputs"][0]
+        assert "issuer_guidance_range" not in input_item
+        assert input_item["unclassified_guidance_witnesses"]
     delivery = case_reader_delivery(matched)
-    witness = delivery["scenario_presentation"]["rows"][0]["inputs"][0]["issuer_guidance_range"]
+    witness = delivery["scenario_presentation"]["rows"][0]["inputs"][0]["unclassified_guidance_witnesses"][0]
     assert witness == {
-        "range": "±2%",
         "source_id": "issuer-release",
-        "exact_excerpt": "Revenue is expected to be $100 billion, plus or minus 2%",
+        "exact_excerpt": "Revenue is expected to be $100 billion, plus or minus 2%.",
     }
     rendered = render_calculations("{{scenario_assumptions_table}}", (), scenario_delivery=delivery)
     assert "Case \\| label with newline" in rendered
@@ -211,7 +211,7 @@ def test_unsafe_guidance_clause_is_retained_as_an_unclassified_exact_witness():
 
     input_item = case_reader_delivery(context)["scenario_presentation"]["rows"][0]["inputs"][1]
 
-    assert input_item["issuer_guidance_range"] is None
+    assert "issuer_guidance_range" not in input_item
     assert input_item["unclassified_guidance_witnesses"] == [{
         "source_id": "issuer-release",
         "exact_excerpt": (

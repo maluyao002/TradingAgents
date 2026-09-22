@@ -106,84 +106,21 @@ def _source_ids(assumption: Mapping[str, object], material: Mapping[str, object]
     return result
 
 
-def _guidance_range(
-    metric: str,
-    assumption: Mapping[str, object],
-    material: Mapping[str, object],
-    accounting_basis: object,
-) -> dict[str, str] | None:
-    """Return one exact, value-bound issuer guidance range or withhold it.
-
-    Operating assumptions have no range field.  A range is therefore present only
-    when an attached exact source clause identifies the same metric and numeric
-    anchor.  Multiple matching clauses, mismatched values, or an unsafe gross-
-    margin basis deliberately yield no range rather than a plausible guess.
-    """
-
-    if assumption.get("classification") != "management_guidance_anchor":
-        return None
-    pattern = {
-        "revenue": re.compile(
-            r"\brevenue\b[^.\n]{0,240}?\bexpected\s+to\s+be\s+\$?"
-            r"(?P<value>[0-9][0-9,]*(?:\.[0-9]+)?)\s*(?P<scale>billion|million|bn|mn)?"
-            r"\s*,?\s*plus\s+or\s+minus\s+(?P<range>[0-9.]+\s*%)",
-            re.IGNORECASE,
-        ),
-        "gross_margin": re.compile(
-            r"\bgross\s+margins?\b[^.\n]{0,240}?\bexpected\s+to\s+be\s+"
-            r"(?P<value>[0-9][0-9,]*(?:\.[0-9]+)?)\s*%\s*,?\s*plus\s+or\s+minus\s+"
-            r"(?P<range>[0-9.]+\s*(?:basis\s+points?|bp))",
-            re.IGNORECASE,
-        ),
-    }.get(metric)
-    if pattern is None or (metric == "gross_margin" and accounting_basis != "US GAAP"):
-        return None
-    target = Decimal(_decimal_text(assumption.get("value")))
-    candidates: list[dict[str, str]] = []
-    for material_id in assumption.get("evidence_ids", ()):  # type: ignore[union-attr]
-        source = material.get(str(material_id), {})
-        text = source.get("text")
-        source_id = source.get("source_id")
-        if not isinstance(text, str) or not isinstance(source_id, str):
-            continue
-        for match in pattern.finditer(text):
-            clause_start = max(text.rfind(".", 0, match.start()) + 1, text.rfind("\n", 0, match.start()) + 1)
-            excerpt = text[clause_start:match.end()].strip()
-            if metric == "gross_margin":
-                shared_basis = re.match(
-                    r"^GAAP\s+and\s+non[\s\-\u2010-\u2015]*GAAP\s+gross\s+margins?\s+"
-                    r"(?:are|is)\s+expected\s+to\s+be\s+", excerpt, re.IGNORECASE)
-                if (re.search(r"\bGAAP\b", excerpt, re.IGNORECASE) is None
-                        or (re.search(r"\bnon[\s\-\u2010-\u2015]*GAAP\b", excerpt, re.IGNORECASE)
-                            and not shared_basis)):
-                    continue
-            with localcontext(_SCENARIO_DECIMAL_CONTEXT):
-                disclosed = Decimal(match.group("value").replace(",", ""))
-                scale = (match.groupdict().get("scale") or "").lower()
-                if scale in {"billion", "bn"}:
-                    disclosed *= Decimal("1e9")
-                elif scale in {"million", "mn"}:
-                    disclosed *= Decimal("1e6")
-                elif metric == "gross_margin":
-                    disclosed /= Decimal(100)
-            if disclosed != target:
-                continue
-            candidates.append({
-                "range": "±" + re.sub(r"\s+", " ", match.group("range")).strip(),
-                "source_id": source_id,
-                "exact_excerpt": excerpt,
-            })
-    return candidates[0] if len(candidates) == 1 else None
-
-
 def _unclassified_guidance_witnesses(
     metric: str, assumption: Mapping[str, object], material: Mapping[str, object]
 ) -> list[dict[str, str]]:
-    """Retain exact guidance-like clauses that are unsafe to type as an input range."""
+    """Retain complete source context, never infer a period/basis/range binding.
+
+    A lexical match is only a retrieval lead. Keep headings and trailing
+    qualifications intact; numerical and temporal interpretation belongs to
+    substantive review, not a prefix regex or matching input value.
+    """
 
     if assumption.get("classification") != "management_guidance_anchor":
         return []
-    metric_pattern = r"\brevenue\b" if metric == "revenue" else r"\bgross\s+margins?\b"
+    metric_pattern = {"revenue": r"\brevenue\b", "gross_margin": r"\bgross\s+margins?\b"}.get(metric)
+    if metric_pattern is None:
+        return []
     witnesses: list[dict[str, str]] = []
     for material_id in assumption.get("evidence_ids", ()):  # type: ignore[union-attr]
         source = material.get(str(material_id), {})
@@ -191,14 +128,11 @@ def _unclassified_guidance_witnesses(
         source_id = source.get("source_id")
         if not isinstance(text, str) or not isinstance(source_id, str):
             continue
-        for excerpt in re.split(r"(?<=[.!?])\s+|\n+", text):
-            if (
-                re.search(metric_pattern, excerpt, re.IGNORECASE)
-                and re.search(r"plus\s+or\s+minus", excerpt, re.IGNORECASE)
-            ):
-                witness = {"source_id": source_id, "exact_excerpt": excerpt.strip()}
-                if witness not in witnesses:
-                    witnesses.append(witness)
+        if (re.search(metric_pattern, text, re.IGNORECASE)
+                and re.search(r"plus\s+or\s+minus|±|\+/-", text, re.IGNORECASE)):
+            witness = {"source_id": source_id, "exact_excerpt": text}
+            if witness not in witnesses:
+                witnesses.append(witness)
     return witnesses
 
 
@@ -256,9 +190,6 @@ def _scenario_presentation(operating: Mapping[str, object]) -> dict | None:
                     value = Decimal(_decimal_text(assumption.get("value")))
                     by_name[name] = value
                     evidence_ids = [str(item) for item in assumption.get("evidence_ids", ())]
-                    guidance_range = _guidance_range(
-                        name, assumption, material, period.get("accounting_basis")
-                    )
                     inputs.append({
                         "name": name,
                         "value": _decimal_text(value),
@@ -266,11 +197,8 @@ def _scenario_presentation(operating: Mapping[str, object]) -> dict | None:
                         "classification": assumption.get("classification"),
                         "source_material_ids": evidence_ids,
                         "source_ids": _source_ids(assumption, material),
-                        "issuer_guidance_range": guidance_range,
-                        "unclassified_guidance_witnesses": (
-                            [] if guidance_range is not None
-                            else _unclassified_guidance_witnesses(name, assumption, material)
-                        ),
+                        "unclassified_guidance_witnesses": _unclassified_guidance_witnesses(
+                            name, assumption, material),
                     })
                 revenue_per_week = by_name["revenue"] / weeks
                 comparison = None
@@ -358,8 +286,10 @@ def case_reader_delivery(case_context_or_model_context: object) -> dict:
             "State the financial-draft and operating-package review statuses separately.",
             "Use {{scenario_assumptions_table}} only when scenario_presentation is present.",
             "Label source-backed inputs/provenance separately from analyst calculations.",
-            "When an unclassified_guidance_witness is supplied, retain its exact source scope "
-            "for writer/verifier review but do not present it as an applicable typed input range.",
+            "Retain supported issuer guidance ranges in concise sourced prose, checking the "
+            "complete unclassified_guidance_witnesses for the correct period, currency and "
+            "accounting basis. They are retrieval leads, not code-certified ranges. Do not "
+            "drop material ranges during compression or infer applicability from a matching number.",
             "Keep gaps consequence-first; retain operational audit mechanics outside reader prose.",
             "Where supported by the validated context, distinguish unrestricted corporate cash "
             "from restricted or customer cash; do not infer legal availability from a balance alone.",

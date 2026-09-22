@@ -3,7 +3,7 @@ from hashlib import sha256
 import pytest
 
 from tests.test_research_case_scenarios import ScenarioFixture, operating_setup
-from tradingagents.research.case_report import _guidance_range
+from tradingagents.research.case_report import _unclassified_guidance_witnesses
 from tradingagents.research.engine import run_research
 from tradingagents.research.reader_preview import preview_saved_reader
 from tradingagents.research.replay import SnapshotEvidenceService
@@ -73,20 +73,20 @@ def test_nonliteral_capitalization_is_rejected_without_erasing_other_valid_dispo
     assert any("not an exact substring" in f.message for f in checked.findings)
 
 
-@pytest.mark.parametrize("basis", ["non-GAAP", "non GAAP", "non–GAAP"])
-def test_non_gaap_guidance_never_becomes_gaap_range(basis):
-    assumption = {"value": "0.75", "classification": "management_guidance_anchor", "evidence_ids": ["m"]}
-    material = {"m": {"source_id": "source", "text":
-        f"{basis} gross margin is expected to be 75%, plus or minus 50 basis points."}}
-    assert _guidance_range("gross_margin", assumption, material, "US GAAP") is None
+@pytest.mark.parametrize("text", [
+    "Revenue is expected to be $100 billion, plus or minus 2% for a different fiscal quarter only.",
+    "Prior quarter only\nRevenue is expected to be $100 billion, plus or minus ..%.",
+    "Revenue is expected to be $100 billion, plus or minus 2%. This does not apply to Q3.",
+])
+def test_full_guidance_context_is_preserved_without_typed_period_or_numeric_claim(text):
+    assumption = {"value": "100000000000", "classification": "management_guidance_anchor", "evidence_ids": ["m"]}
+    material = {"m": {"source_id": "source", "text": text}}
+    assert _unclassified_guidance_witnesses("revenue", assumption, material) == [
+        {"source_id": "source", "exact_excerpt": text}]
 
 
-def test_single_explicit_shared_gaap_range_is_not_confused_with_two_basis_values():
-    assumption = {"value": "0.75", "classification": "management_guidance_anchor", "evidence_ids": ["m"]}
+def test_margin_passages_are_never_retrieved_as_opex_guidance():
+    assumption = {"value": "1", "classification": "management_guidance_anchor", "evidence_ids": ["m"]}
     material = {"m": {"source_id": "source", "text":
         "GAAP and non-GAAP gross margins are expected to be 75%, plus or minus 50 basis points."}}
-    assert _guidance_range("gross_margin", assumption, material, "US GAAP")["range"] == "±50 basis points"
-    material["m"]["text"] = (
-        "GAAP and non-GAAP gross margins are expected to be 75% and 76%, respectively, "
-        "plus or minus 50 basis points.")
-    assert _guidance_range("gross_margin", assumption, material, "US GAAP") is None
+    assert _unclassified_guidance_witnesses("opex", assumption, material) == []

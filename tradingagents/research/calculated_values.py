@@ -229,16 +229,11 @@ def _scenario_assumptions_table(delivery: dict, language: str) -> str:
                 if not isinstance(source_ids, list) or not all(isinstance(source_id, str) for source_id in source_ids):
                     raise ValueError("scenario assumptions table provenance is incomplete")
                 references = " ".join(f"[{cell(source_id)}]" for source_id in source_ids) or none
-                guidance = item.get("issuer_guidance_range")
-                if guidance is not None and not (
-                    isinstance(guidance, dict)
-                    and all(isinstance(guidance.get(key), str) for key in ("range", "source_id", "exact_excerpt"))
-                ):
-                    raise ValueError("scenario assumptions table guidance range is malformed")
-                range_text = f", range {cell(guidance['range'])}" if guidance else ""
+                if item.get("issuer_guidance_range") is not None:
+                    raise ValueError("unclassified guidance cannot become a typed table range")
                 input_text.append(
                     f"{cell(name)}: {shown_value:.2f} {cell(shown_unit)} "
-                    f"({cell(classification_label)}{range_text}; {references})"
+                    f"({cell(classification_label)}; {references})"
                 )
             weeks = Decimal(calculations["weeks"])
             week_text = f"{weeks:.2f}".rstrip("0").rstrip(".")

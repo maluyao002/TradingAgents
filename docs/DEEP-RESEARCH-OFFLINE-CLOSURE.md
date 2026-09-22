@@ -73,9 +73,12 @@ cannot silently reuse a preview-6 attestation. Historical preview-6 rendering
 remains supported with its original provenance contract. New case-backed
 presentation binds the delivery contract to validated frozen case/evidence bytes;
 preview reconstruction must reproduce it, not trust model-written numbers.
-Guidance-range extraction is deliberately narrow: exact source clauses must
-match the input value and safe accounting basis; ambiguous clauses remain exact
-unclassified witnesses for substantive review. Scenario arithmetic uses an
+Guidance ranges are **not automatically typed or assigned to a forecast input**.
+The complete referenced source passage, including headings and trailing scope
+qualifications, is supplied as an unclassified retrieval lead. The writer must
+retain supported ranges in concise sourced prose after checking period, currency
+and accounting basis; the verifier must substantively check that interpretation.
+Matching an input number is not proof of applicability. Scenario arithmetic uses an
 explicit Decimal context. These bindings verify presentation provenance, not
 the likelihood or economic adequacy of assumptions.
 
