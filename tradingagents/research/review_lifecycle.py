@@ -5,6 +5,7 @@ scope and quoted witnesses; coverage-only calls cannot resolve factual issues.
 Missing decisions retain the original issue. Historical records are never edited.
 """
 
+import json
 import re
 from collections import Counter
 from copy import deepcopy
@@ -55,6 +56,424 @@ EVIDENCE_REFERENCE_CONTRACT = (
     "claim_change:<sha256>",
 )
 _CLAIM_CHANGE_CONTRACT = "reader_bound_claim_change_v1"
+
+
+_COMPOUND_OBLIGATION_CONTRACT = "exact_compound_obligation_split_v1"
+_COMPOUND_COVERAGE_INSTRUCTION = (
+    "Assess the code-owned components, not the compound original as one proposition. "
+    "Every reader_required component needs its own exact literal reader span. A component "
+    "marked audit_only_satisfied is established only by its attached exact catalog binding "
+    "and must not be restated as absent. An audit_only_procedural component remains in the "
+    "immutable audit but need not be rendered. The original issue remains open audit "
+    "provenance and cannot be resolved or superseded as a whole."
+)
+
+_SCENARIO_AND_VALUATION_GAP = (
+    "Scenario and valuation review: the payload contains no scenario schedules, "
+    "code-calculated scenario bindings, independent review outputs, verified market quote "
+    "or consensus vintage. The retained market passages also omit the numerical inputs "
+    "required to reconstruct the described discount-rate approach."
+)
+_FISCAL_SCENARIO_AND_EQUITY_GAP = (
+    "Can the actual fiscal-year scenario schedules, calculation bindings and independent "
+    "reviews be supplied together with a reconciled cutoff-date equity bridge?"
+)
+_OPERATING_REVIEW_BOUNDARY = (
+    "This review used the supplied frozen sources offline and verifies their internal "
+    "fidelity, not independent online authentication or completeness of subsequent "
+    "information. Exact arithmetic does not validate the economic likelihood of the "
+    "assumptions. Changed package, case or evidence content requires fresh review and "
+    "matching hashes."
+)
+
+
+def _component(name, text, *, status, reader_treatment, scope):
+    return {
+        "name": name,
+        "text": text,
+        "status": status,
+        "reader_treatment": reader_treatment,
+        "scope": scope,
+    }
+
+
+_COMPOUND_PROFILES = {
+    _SCENARIO_AND_VALUATION_GAP: {
+        "profile": "conditional_operating_vs_market_valuation_inputs",
+        "requires_operating_evidence": True,
+        "components": (
+            _component(
+                "reviewed_conditional_operating_package",
+                "A reviewed conditional operating package supplies scenario schedules, "
+                "code-calculated bindings, and a hash-bound independent operating review.",
+                status="satisfied_current_evidence",
+                reader_treatment="audit_only_satisfied",
+                scope="conditional_operating_scenarios_only",
+            ),
+            _component(
+                "market_and_discount_rate_inputs",
+                "Whether a verified cutoff-date market quote, eligible matching-period "
+                "consensus, and sufficient numerical inputs to reconstruct the described "
+                "discount-rate approach are established remains a separate valuation "
+                "question; the operating review alone does not supply them.",
+                status="open",
+                reader_treatment="reader_required",
+                scope="market_inputs_and_valuation",
+            ),
+            _component(
+                "operating_review_scope_boundary",
+                "The independent review covers conditional operating schedules and arithmetic, "
+                "not actual fiscal-year results, financial-case schedules, or valuation.",
+                status="current_boundary",
+                reader_treatment="reader_required",
+                scope="operating_not_actual_or_valuation_review",
+            ),
+        ),
+    },
+    _FISCAL_SCENARIO_AND_EQUITY_GAP: {
+        "profile": "conditional_operating_vs_cutoff_equity_bridge",
+        "requires_operating_evidence": True,
+        "components": (
+            _component(
+                "reviewed_conditional_operating_package",
+                "A reviewed conditional operating package supplies fiscal-year conditional "
+                "operating schedules, calculation bindings, and a hash-bound independent "
+                "operating review.",
+                status="satisfied_current_evidence",
+                reader_treatment="audit_only_satisfied",
+                scope="conditional_operating_scenarios_only",
+            ),
+            _component(
+                "cutoff_equity_bridge",
+                "Whether a reconciled cutoff-date equity bridge is established remains a "
+                "separate valuation question; the operating review alone does not supply or "
+                "review it.",
+                status="open",
+                reader_treatment="reader_required",
+                scope="equity_per_share_value",
+            ),
+            _component(
+                "operating_review_scope_boundary",
+                "The independent review covers conditional operating schedules and arithmetic, "
+                "not actual fiscal-year results, financial-case schedules, or valuation.",
+                status="current_boundary",
+                reader_treatment="reader_required",
+                scope="operating_not_actual_or_valuation_review",
+            ),
+        ),
+    },
+    _OPERATING_REVIEW_BOUNDARY: {
+        "profile": "operating_review_material_vs_procedural_boundary",
+        "requires_operating_evidence": False,
+        "components": (
+            _component(
+                "frozen_offline_source_boundary",
+                "The review verifies the supplied frozen sources' internal fidelity, not "
+                "independent online authentication or completeness of subsequent information.",
+                status="current_boundary",
+                reader_treatment="reader_required",
+                scope="frozen_offline_source_review",
+            ),
+            _component(
+                "arithmetic_not_likelihood_boundary",
+                "Exact arithmetic does not validate the economic likelihood of the assumptions.",
+                status="current_boundary",
+                reader_treatment="reader_required",
+                scope="economic_likelihood_not_reviewed",
+            ),
+            _component(
+                "changed_content_re_review_rule",
+                "Changed package, case or evidence content requires fresh review and matching "
+                "hashes.",
+                status="open_procedural",
+                reader_treatment="audit_only_procedural",
+                scope="review_reexecution_control",
+            ),
+        ),
+    },
+}
+
+
+def _operating_package_binding(evidence):
+    """Return an exact catalog binding only for reviewed, package-bound schedules."""
+    if not isinstance(evidence, dict):
+        return None
+    reference = "review:operating_scenarios"
+    serialized = evidence.get(reference)
+    if not isinstance(serialized, str):
+        return None
+    try:
+        review = json.loads(serialized)
+    except (TypeError, ValueError):
+        return None
+    package_sha256 = review.get("package_sha256") if isinstance(review, dict) else None
+    if not (
+        isinstance(review, dict)
+        and review.get("context_kind") == "reviewed_conditional_operating_scenarios"
+        and review.get("reviewed") is True
+        and review.get("decision") == "conditional_operating_scenarios"
+        and isinstance(package_sha256, str)
+        and re.fullmatch(r"[a-f0-9]{64}", package_sha256)
+        and all(
+            isinstance(review.get(key), str)
+            and re.fullmatch(r"[a-f0-9]{64}", review[key])
+            for key in ("case_sha256", "evidence_sha256")
+        )
+    ):
+        return None
+
+    required_outputs = {
+        ("q3", "revenue"), ("q3", "operating_income"),
+        ("q4", "revenue"), ("q4", "operating_income"),
+        ("fiscal_total", "revenue"), ("fiscal_total", "operating_income"),
+    }
+    scenario_outputs = {}
+    valid_records = {}
+    prefix = "calculation:operating_scenario."
+    for calculation_reference, value in evidence.items():
+        if not calculation_reference.startswith(prefix) or not isinstance(value, str):
+            continue
+        identifier = calculation_reference.removeprefix("calculation:")
+        try:
+            scenario_prefix, period, metric = identifier.rsplit(".", 2)
+            record = json.loads(value)
+        except (TypeError, ValueError):
+            continue
+        scenario = scenario_prefix.removeprefix("operating_scenario.")
+        output = (period, metric)
+        if not scenario or output not in required_outputs or not isinstance(record, dict):
+            continue
+        expected_classification = (
+            "operating_scenario_assumption_not_reported_fact"
+            if period in {"q3", "q4"} and metric == "revenue"
+            else "conditional_operating_scenario_calculation_not_reported_fact"
+        )
+        if not (
+            record.get("id") == identifier
+            and record.get("model_input_sha256") == package_sha256
+            and record.get("valuation_method") == "operating_scenario"
+            and record.get("classification") == expected_classification
+            and isinstance(record.get("evidence_ids"), list)
+            and bool(record["evidence_ids"])
+            and isinstance(record.get("value"), str)
+            and bool(record["value"].strip())
+        ):
+            continue
+        scenario_outputs.setdefault(scenario, set()).add(output)
+        valid_records[calculation_reference] = value
+
+    complete_scenarios = sorted(
+        scenario for scenario, outputs in scenario_outputs.items()
+        if outputs == required_outputs
+    )
+    if not complete_scenarios:
+        return None
+    selected = sorted(
+        reference for reference in valid_records
+        if reference.removeprefix(prefix).rsplit(".", 2)[0] in complete_scenarios
+    )
+    bound_evidence = {reference: serialized}
+    bound_evidence.update({item: valid_records[item] for item in selected})
+    return {
+        "binding_id": "operating_package",
+        "catalog_sha256": digest(bound_evidence),
+        "package_sha256": package_sha256,
+        "witnesses": [
+            {"reference": reference, "excerpt": serialized},
+            *(
+                {"reference": item,
+                 "excerpt": f'\"id\":\"{item.removeprefix("calculation:")}\"'}
+                for item in selected
+            ),
+        ],
+    }
+
+
+def _compound_payload(issue, profile, evidence_binding):
+    components = []
+    for component in profile["components"]:
+        item = deepcopy(component)
+        item["component_id"] = f'{issue["issue_id"]}#component:{item["name"]}'
+        if item["status"] == "satisfied_current_evidence":
+            item["evidence_binding_id"] = evidence_binding["binding_id"]
+        components.append(item)
+    payload = {
+        "contract": _COMPOUND_OBLIGATION_CONTRACT,
+        "profile": profile["profile"],
+        "original": {
+            "issue_id": issue["issue_id"],
+            "text": issue["text"],
+            "sha256": digest({"issue_id": issue["issue_id"], "text": issue["text"]}),
+        },
+        "components": components,
+        "evidence_bindings": ([deepcopy(evidence_binding)] if evidence_binding else []),
+        "coverage_instruction": _COMPOUND_COVERAGE_INSTRUCTION,
+    }
+    payload["contract_sha256"] = digest(payload)
+    return payload
+
+
+def compound_obligation_contract_valid(issue):
+    """Validate the static, code-owned split without making evidence claims."""
+    compound = issue.get("compound_obligation")
+    if not isinstance(compound, dict):
+        return False
+    profile = _COMPOUND_PROFILES.get(issue.get("text"))
+    if profile is None or compound.get("profile") != profile["profile"]:
+        return False
+    original = compound.get("original")
+    if original != {
+        "issue_id": issue.get("issue_id"),
+        "text": issue.get("text"),
+        "sha256": digest({"issue_id": issue.get("issue_id"), "text": issue.get("text")}),
+    }:
+        return False
+    if compound.get("contract") != _COMPOUND_OBLIGATION_CONTRACT:
+        return False
+    if compound.get("coverage_instruction") != _COMPOUND_COVERAGE_INSTRUCTION:
+        return False
+    expected = []
+    bindings = compound.get("evidence_bindings")
+    if not isinstance(bindings, list):
+        return False
+    binding_ids = {
+        binding.get("binding_id") for binding in bindings if isinstance(binding, dict)
+    }
+    for component in profile["components"]:
+        item = deepcopy(component)
+        item["component_id"] = f'{issue.get("issue_id")}#component:{item["name"]}'
+        if item["status"] == "satisfied_current_evidence":
+            item["evidence_binding_id"] = "operating_package"
+            if "operating_package" not in binding_ids:
+                return False
+        expected.append(item)
+    if compound.get("components") != expected:
+        return False
+    supplied_hash = compound.get("contract_sha256")
+    unhashed = {key: value for key, value in compound.items() if key != "contract_sha256"}
+    return supplied_hash == digest(unhashed)
+
+
+def compound_obligation_evidence_valid(issue, evidence):
+    """Recompute rather than trust a stored current-evidence binding."""
+    if not compound_obligation_contract_valid(issue):
+        return False
+    profile = _COMPOUND_PROFILES[issue["text"]]
+    expected = (
+        [_operating_package_binding(evidence)]
+        if profile["requires_operating_evidence"] else []
+    )
+    return None not in expected and issue["compound_obligation"]["evidence_bindings"] == expected
+
+
+def split_compound_obligations(issues, evidence):
+    """Attach conservative atomic coverage components to exact known legacy issues.
+
+    Original issue IDs and text are never replaced. Similar or unmatched prose is
+    untouched. A stale operating component is marked satisfied only when the
+    current catalog contains a reviewed conditional-operating record and complete,
+    package-bound period/fiscal calculations. Open valuation components protect
+    the parent from whole-issue retirement.
+    """
+    operating_binding = _operating_package_binding(evidence)
+    result = []
+    for source in issues:
+        item = deepcopy(source)
+        profile = _COMPOUND_PROFILES.get(item.get("text"))
+        if profile is None:
+            result.append(item)
+            continue
+        if profile["requires_operating_evidence"] and operating_binding is None:
+            result.append(item)
+            continue
+        binding = operating_binding if profile["requires_operating_evidence"] else None
+        item["compound_obligation"] = _compound_payload(item, profile, binding)
+        reasons = tuple(item.get("resolution_protection_reasons", ()))
+        reason = "compound_obligation_has_current_or_open_components"
+        item["resolution_protection_reasons"] = (*reasons, *(() if reason in reasons else (reason,)))
+        item["resolution_protected"] = True
+        item["claim_change_eligible"] = False
+        item["reader_coverage_required"] = any(
+            component["reader_treatment"] == "reader_required"
+            for component in profile["components"]
+        )
+        result.append(item)
+    return result
+
+
+def compound_coverage_issues(issues):
+    """Expand valid parent contracts into independently reviewable atomic issues.
+
+    Code-satisfied stale components remain in the parent audit contract and are
+    not sent back to the coverage model. Every current reader or procedural
+    component receives a deterministic child ID. Unmatched and malformed parents
+    remain intact and therefore fail closed under the ordinary issue contract.
+    """
+    result = []
+    for source in issues:
+        parent = deepcopy(source)
+        if "compound_obligation" not in parent:
+            result.append(parent)
+            continue
+        if not compound_obligation_contract_valid(parent):
+            result.append(parent)
+            continue
+        compound = parent["compound_obligation"]
+        for component in compound["components"]:
+            if component["reader_treatment"] == "audit_only_satisfied":
+                continue
+            child = {
+                "issue_id": component["component_id"],
+                "text": component["text"],
+                "compound_parent": deepcopy(compound["original"]),
+                "compound_contract_sha256": compound["contract_sha256"],
+                "parent_context_sha256": digest({
+                    key: value for key, value in parent.items()
+                    if key != "compound_obligation"
+                }),
+                "coverage_component": deepcopy(component),
+                "prior_findings": deepcopy(parent.get("prior_findings", [])),
+                "origins": deepcopy(parent.get("origins", [])),
+                "reader_coverage_required": (
+                    component["reader_treatment"] == "reader_required"
+                ),
+                "resolution_protected": True,
+                "claim_change_eligible": False,
+            }
+            result.append(child)
+    return result
+
+
+def compound_coverage_component_valid(issue):
+    """Recognize only an exact child emitted by ``compound_coverage_issues``."""
+    parent = issue.get("compound_parent")
+    component = issue.get("coverage_component")
+    if not isinstance(parent, dict) or not isinstance(component, dict):
+        return False
+    profile = _COMPOUND_PROFILES.get(parent.get("text"))
+    if profile is None or parent.get("sha256") != digest({
+        "issue_id": parent.get("issue_id"), "text": parent.get("text")
+    }):
+        return False
+    expected = next(
+        (deepcopy(item) for item in profile["components"]
+         if item["name"] == component.get("name")),
+        None,
+    )
+    if expected is None or expected["reader_treatment"] == "audit_only_satisfied":
+        return False
+    expected["component_id"] = (
+        f'{parent.get("issue_id")}#component:{expected["name"]}'
+    )
+    return (
+        component == expected
+        and issue.get("issue_id") == expected["component_id"]
+        and issue.get("text") == expected["text"]
+        and isinstance(issue.get("compound_contract_sha256"), str)
+        and bool(re.fullmatch(r"[a-f0-9]{64}", issue["compound_contract_sha256"]))
+        and isinstance(issue.get("parent_context_sha256"), str)
+        and bool(re.fullmatch(r"[a-f0-9]{64}", issue["parent_context_sha256"]))
+    )
 
 
 class FindingDisposition(Contract):
@@ -293,6 +712,12 @@ def reconcile_review(review, issues, evidence, reader, scope):
     for identifier, issue in issue_map.items():
         decision = decisions.get(identifier)
         state = "open"
+        has_compound = "compound_obligation" in issue
+        compound_valid = (
+            not has_compound or compound_obligation_evidence_valid(issue, evidence)
+        )
+        if has_compound and not compound_valid:
+            fail("Compound obligation contract or evidence binding is invalid.", identifier)
         if decision is not None and decision.status != "open":
             expected_claim_change = claim_change_evidence((issue,), reader)
             claim_change_required = issue.get("lifecycle_subject") == "historical_claim_defect"
@@ -310,6 +735,7 @@ def reconcile_review(review, issues, evidence, reader, scope):
             valid = (
                 review.reviewed_report and not review.contradicted_claim_ids
                 and counts[identifier] == 1 and not issue.get("resolution_protected")
+                and not has_compound
                 and not issue.get("missing_claim_ids")
                 and _exact_spans(decision.reader_excerpts, reader)
                 and len(set(decision.reader_excerpts)) == len(decision.reader_excerpts)
@@ -399,6 +825,10 @@ LIFECYCLE_POLICY = (
     "and quote the replacement qualified discussion; the verifier must still judge its semantics. "
     "The record does not answer or retire "
     "an underlying research question, and a generic caveat does not suffice. "
+    "For a code-owned compound_obligation, assess its atomic coverage components; never "
+    "resolve or supersede the parent. An audit_only_satisfied operating component does not "
+    "clear or assert the answer to any current market, equity, financial-case, actual-results "
+    "or valuation question. "
     "Do not resolve missing financial prerequisites merely because they are disclosed. "
     "Only engine-designated obsolete review-status metadata is retirable; current authored "
     "operating/reviewer caveats stay protected even after review. For retirable origins, "

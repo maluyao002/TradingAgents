@@ -15,11 +15,13 @@ from zoneinfo import ZoneInfo
 
 from pydantic import TypeAdapter
 
+from tradingagents.codex.adapter import codex_failure_reason
+
 from .admission import evaluate_admission
 from .budget import BudgetExhausted, BudgetTracker
 from .calculated_values import calculation_catalog, render_calculations
 from .case_context import load_case_context
-from .case_report import CASE_READER_REQUIREMENTS, CaseReportDraft
+from .case_report import CASE_READER_REQUIREMENTS, CaseReportDraft, case_reader_delivery
 from .context import pack_evidence
 from .contracts import (
     Assessment,
@@ -34,6 +36,7 @@ from .contracts import (
 from .dossiers import DossierStore
 from .equity_valuation import EquityDCFModelInput, EquityForecastPeriod, equity_dcf_valuation
 from .evidence import validate_snapshot
+from .finalization_timing import finalization_time_plan
 from .investigation import collect_tasks, make_ledger
 from .investigation_review import InvestigationReview
 from .prompt_context import model_input_bytes
@@ -43,6 +46,7 @@ from .rendering import render_references
 from .report_review import (
     ReaderVerification,
     check_dispositions,
+    fan_in_compound_dispositions,
     limitation_packet,
     nonmandatory_review_finding_texts,
     requires_reader_coverage,
@@ -65,10 +69,12 @@ from .review_batches import (
 from .review_lifecycle import (
     LIFECYCLE_POLICY,
     LifecycleVerification,
+    compound_coverage_issues,
     enrich_issues,
     evidence_catalog,
     reconcile_review,
     resolution_witness_contract,
+    split_compound_obligations,
 )
 from .services import ModelReply, ResearchServices
 from .stages import AnalysisOutput, ReportDraft, ValuationProposal, VerificationOutput, instruction
@@ -400,6 +406,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             tracker.record(Usage(complete=False))
         dispatch_unsettled = bool(previous.get("dispatched"))
         usage_by_stage = dict(previous.get("by_stage", {}))
+        call_timings = list(previous.get("call_timings", []))
+        active_stage = None
         role_indices = defaultdict(int)
         outputs, reviews = {}, []
         active_admission_findings = []
@@ -428,6 +436,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
         draft_schema = CaseReportDraft if request.financial_case_path else ReportDraft
         stop_reason = "completed_needs_review"
         failure_type = None
+        failure_reason = None
+        failed_stage = None
 
         def aggregate_usage():
             if recovery is None:
@@ -455,7 +465,10 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 "usage": aggregate_usage().model_dump(mode="json"),
                 "elapsed_seconds": tracker.elapsed_seconds,
                 "dispatched": dispatch_unsettled if dispatched is None else dispatched,
+                "active_stage": active_stage if (dispatch_unsettled if dispatched is None else dispatched) else None,
+                "failure_reason": failure_reason, "failed_stage": failed_stage,
                 "by_stage": usage_by_stage,
+                "call_timings": call_timings,
             }
             if recovery is not None:
                 resource_data.update(
@@ -528,6 +541,16 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 }
             if case_context is not None and not coverage_only and stage not in {"planner", "independent_challenge"}:
                 payload["financial_case"] = case_context.model_context()
+                payload["case_reader_delivery"] = case_reader_delivery(case_context)
+                if role == "editor":
+                    writer_issues = split_compound_obligations(
+                        limitation_packet(data.get("limitations", ())),
+                        evidence_catalog(snapshot, calculated_values,
+                                         eligible_ids=_known_ids(snapshot), case_context=case_context),
+                    )
+                    payload["compound_obligation_guidance"] = [
+                        item for item in writer_issues if "compound_obligation" in item
+                    ]
                 payload["case_reader_requirements"] = (
                     RENDERED_READER_POLICY if "rendered_reader" in data else CASE_READER_REQUIREMENTS)
                 if record_delivery:
@@ -561,7 +584,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
 
         def call(stage, role, data, schema, finalization=False, language=None,
                  coverage_only=False):
-            nonlocal dispatch_unsettled
+            nonlocal dispatch_unsettled, active_stage
+            active_stage = stage
             payload = model_payload(stage, role, data, schema, language, coverage_only,
                                     record_delivery=True)
             role_indices[role] += 1
@@ -638,12 +662,20 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 # cannot dispatch here. Their known usage is already in the
                 # explicit recovery seed before the first stage admission.
                 timeout_seconds = tracker.admit(finalization=finalization)
+            call_started = tracker.elapsed_seconds
+            timing = {"stage": stage, "role": role, "model": request.models[role].model,
+                      "effort": request.models[role].effort, "usage_origin": origin,
+                      "service_kind": getattr(services.models, "kind", "injected"),
+                      "completed": False, "stage_accepted": False}
             try:
                 reply = services.models.complete(role, {**payload,
                     "timeout_seconds": timeout_seconds, "max_output_tokens": output_envelope}, request)
                 reply = ModelReply.model_validate(reply)
                 if origin == "current_live":
                     tracker.complete(permit, reply.usage)
+                timing.update(duration_seconds=max(0, tracker.elapsed_seconds - call_started),
+                              completed=reply.usage.complete)
+                call_timings.append(timing)
                 usage_by_stage.setdefault(stage, []).append({
                     "role": role, "model": request.models[role].model,
                     "effort": request.models[role].effort,
@@ -652,6 +684,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 save_resources(dispatched=False)
                 dispatch_unsettled = False
             except BaseException:
+                if timing not in call_timings:
+                    timing["duration_seconds"] = max(0, tracker.elapsed_seconds - call_started)
+                    call_timings.append(timing)
                 if origin == "current_live":
                     tracker.record(Usage(complete=False))
                 save_resources()
@@ -684,7 +719,15 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             }
             remember_coverage(output)
             save_finalization_checkpoint()
+            timing["stage_accepted"] = True
+            save_resources()
             return output
+
+        def time_plan(workload):
+            return finalization_time_plan(
+                workload["calls"], call_timings, request.models,
+                remaining_seconds=request.budget.wall_seconds - tracker.elapsed_seconds,
+            )
 
         def prepare_draft(candidate, language):
             if any(set(section.evidence_ids) - _known_ids(snapshot)
@@ -695,7 +738,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             return candidate.model_copy(update={"sections": tuple(
                 section.model_copy(update={"text": render_calculations(render_references(
                     section.text, eligible_facts, language), calculated_values, language,
-                    cite=bounded_review and case_context is not None)
+                    cite=bounded_review and case_context is not None,
+                    scenario_delivery=case_reader_delivery(case_context) if case_context is not None else None)
                     if evidence_led else render_references(section.text, eligible_facts, language)})
                 for section in candidate.sections)})
 
@@ -762,7 +806,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             return list(dict.fromkeys((*gaps, *ledger_texts)))
 
         def verify_reader(candidate, language, stage, extra=None, *, authored=None):
-            nonlocal finalization_candidate, candidate_review_stage
+            nonlocal finalization_candidate, candidate_review_stage, active_stage
+            active_stage = stage
             rendered = render_reader(request, candidate, snapshot, reader_inputs(), language,
                                      compact=bounded_review and case_context is not None)
             rendered_hash = hashlib.sha256(rendered.reader_text.encode("utf-8")).hexdigest()
@@ -821,6 +866,10 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     "Material financial/research caveats must be reader_covered with an exact "
                     "excerpt showing the caveat in the rendered reader. Use reader_excerpts for "
                     "multiple separately exact passages; never join passages with ellipses. "
+                    "Copy each excerpt byte-for-byte from rendered_reader, preserving case, "
+                    "punctuation and Markdown. In particular, do not capitalize a sentence fragment "
+                    "when the reader uses lowercase after an uncertainty label. If no literal "
+                    "supporting passage exists, return unresolved rather than a paraphrased quote. "
                     "Audit-only is allowed "
                     "only for genuinely operational or immaterial details, with a specific "
                     "rationale. Never classify a financially material unknown as immaterial "
@@ -844,6 +893,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     snapshot, calculated_values, eligible_ids=_known_ids(snapshot), case_context=case_context,
                     issues=limitations, reader=rendered.reader_text,
                 )
+                limitations = split_compound_obligations(limitations, resolution_evidence)
                 factual_data.update(
                     inherited_issues=limitations, resolution_evidence=resolution_evidence,
                     resolution_witness_contract=resolution_witness_contract(
@@ -866,6 +916,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     authored, candidate, tuple(f for f in snapshot.facts if f.id in _known_ids(snapshot)),
                     calculated_values, language, rendered.reader_text,
                     cite=case_context is not None, request=request, snapshot=snapshot, issues=reader_inputs(),
+                    case_context=case_context,
                 )
                 bound_calculations = {
                     section["section_index"]: {
@@ -920,7 +971,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                         precheck_calls = [FinalizationCallPlan(stage, "repaired_factual_review", factual_payload,
                             16_000, request.budget.call_timeout_seconds, role="verifier",
                             valuation_method=request.valuation_method)]
-                        for index, items in enumerate(coverage_batches(limitations)):
+                        for index, items in enumerate(coverage_batches(compound_coverage_issues(limitations))):
                             batch_stage = f"{stage}-coverage-{index}"
                             payload = model_payload(batch_stage, "verifier", coverage_data(items), ReaderVerification,
                                 language, True, role_call_index=role_indices["verifier"] + 1 + index)
@@ -933,11 +984,14 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                         remaining = request.budget.total_tokens - tracker.usage.total_tokens
                         precheck = {"reader_sha256": rendered_hash, "remaining_tokens": remaining,
                             "remaining_path": workload, "assumes_no_future_issue_retirement": True,
+                            "wall_time": time_plan(workload),
                             "fits_reserve": workload["conservative_reserve_tokens"] < remaining}
                         finalization_plans["reverification_admission"] = precheck
                         store.save_stage("reverification-admission", {}, precheck)
                         if not precheck["fits_reserve"]:
                             raise BudgetExhausted("reverification_path_budget_insufficient")
+                        if precheck["wall_time"]["stop_before_dispatch"]:
+                            raise BudgetExhausted("reverification_path_time_insufficient")
                 factual_review = call(stage, "verifier", factual_data, LifecycleVerification,
                                       True, language=language)
                 if factual_review.reviewed_report and language == request.report_language:
@@ -978,6 +1032,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 # candidate's bytes and attestation are never rewritten in place.
                 retired_reader_texts.update(item["text"] for item in lifecycle["issues"]
                                            if item["status"] in {"resolved", "superseded"})
+                parent_limitations = limitations
+                limitations = compound_coverage_issues(parent_limitations)
                 batches = coverage_batches(limitations)
                 batch_results = []
 
@@ -1026,7 +1082,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                             request.budget.call_timeout_seconds, reader_bytes=2 * reader_bytes))
                 remaining_tokens = request.budget.total_tokens - tracker.usage.total_tokens
                 plan = {
-                    "reader_sha256": rendered_hash, "original_issue_count": len(limitations),
+                    "reader_sha256": rendered_hash, "original_issue_count": len(parent_limitations),
+                    "atomic_issue_count": len(limitations),
                     "grouped_issue_count": sum(len(group_equivalent_issues(items)) for items in batches),
                     "factual_review_completed": True,
                     "remaining_workload": finalization_workload(planned_calls),
@@ -1038,11 +1095,23 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                     "per_call_admission_remains_mandatory": True},
                 }
                 finalization_plans[stage] = plan
+                plan["current_pass_wall_time"] = time_plan(current_workload)
+                plan["remaining_path_wall_time"] = time_plan(plan["remaining_workload"])
+                plan["coverage_time_checks"] = []
                 store.save_stage(f"{stage}-cost-plan", {"reader_sha256": rendered_hash}, plan)
                 if not plan["current_pass_fits_reserve"]:
                     raise BudgetExhausted("finalization_pass_budget_insufficient")
                 for index, items in enumerate(batches):
                     batch_stage = f"{stage}-coverage-{index}"
+                    # Reproject only work still needed against the same reader.
+                    # Possible repair is disclosed in the plan, but is not a
+                    # mandatory cost until the completed review requests it.
+                    active_stage = batch_stage
+                    wall = time_plan({"calls": current_workload["calls"][index:]})
+                    plan["coverage_time_checks"].append({"before_stage": batch_stage, **wall})
+                    store.save_stage(f"{stage}-cost-plan", {"reader_sha256": rendered_hash}, plan)
+                    if wall["stop_before_dispatch"]:
+                        raise BudgetExhausted("finalization_pass_time_insufficient")
                     batch_review = call(batch_stage, "verifier", coverage_data(items), ReaderVerification,
                                         True, language=language, coverage_only=True)
                     groups = group_equivalent_issues(items)
@@ -1057,6 +1126,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     })
                 verification = combine_coverage(main_review, batch_results, limitations,
                                                 rendered.reader_text, rendered_hash)
+                verification = fan_in_compound_dispositions(
+                    verification, parent_limitations, rendered.reader_text)
+                limitations = parent_limitations
             else:
                 verification = call(stage, "verifier", review_data, ReaderVerification,
                                     True, language=language)
@@ -1326,6 +1398,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                         # Do not buy a repair when the known remaining review path
                         # already cannot fit. Future candidate growth stays an
                         # explicit estimate; exact post-repair admission still runs.
+                        active_stage = "repair_report"
                         repair_payload = model_payload("repair_report", "editor", repair_data,
                                                        draft_schema, request.report_language)
                         repair_cached = (
@@ -1340,7 +1413,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 repair_payload if item["phase"] == "possible_repair" else
                                 b" " * item["serialized_input_bytes"],
                                 item["output_token_envelope"], item["timeout_seconds"],
-                                cache_hit=item["cache_hit"], reader_bytes=item["reader_bytes"],
+                                cache_hit=(repair_cached if item["phase"] == "possible_repair"
+                                           else item["cache_hit"]), reader_bytes=item["reader_bytes"],
                                 role="editor" if item["phase"] == "possible_repair" else "verifier",
                                 valuation_method=request.valuation_method,
                             ) for item in estimated_calls if item["phase"] != "current_coverage"
@@ -1348,12 +1422,15 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                         remaining = request.budget.total_tokens - tracker.usage.total_tokens
                         repair_plan = {"remaining_tokens": remaining, "repair_path": repair_path,
                                        "fits_reserve": repair_path["conservative_reserve_tokens"] < remaining,
+                                       "wall_time": time_plan(repair_path),
                                        "repair_cached": repair_cached,
                                        "future_candidate_sizes_are_estimates": True}
                         finalization_plans["repair_admission"] = repair_plan
                         store.save_stage("repair-admission", {}, repair_plan)
                         if not repair_cached and not repair_plan["fits_reserve"]:
                             raise BudgetExhausted("repair_path_budget_insufficient")
+                        if not repair_cached and repair_plan["wall_time"]["stop_before_dispatch"]:
+                            raise BudgetExhausted("repair_path_time_insufficient")
                     source_draft = call("repair_report", "editor", repair_data,
                                         draft_schema, True, language=request.report_language)
                     draft = prepare_draft(source_draft, request.report_language)
@@ -1439,6 +1516,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             # Do not emit provider errors or arbitrary validation inputs into reports.
             stop_reason = str(exc) if isinstance(exc, BudgetExhausted) else "stage_failed"
             failure_type = type(exc).__name__
+            failure_reason = codex_failure_reason(exc)
+            failed_stage = active_stage
             gaps.append(f"Research stopped: {stop_reason}; inspect saved valid stages.")
         finally:
             save_resources()
@@ -1499,6 +1578,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 "usage_by_stage": usage_by_stage,
                 "total_tokens": aggregate_usage().total_tokens, "stop_reason": stop_reason,
                 "failure_type": failure_type,
+                "failure_reason": failure_reason, "failed_stage": failed_stage,
+                "call_timings": call_timings,
                 "elapsed_seconds": tracker.elapsed_seconds, "production_accepted": False}),
         }
         if evidence_led:

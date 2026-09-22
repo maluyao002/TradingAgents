@@ -1,11 +1,32 @@
 # Deep Research V2 — current status and delivery roadmap
 
-Reconciled September 18, 2026; updated September 20 for bounded validation follow-up.
+Reconciled September 18, 2026; updated September 21 for bounded validation follow-up.
 This is the current work index and recommended execution order, not new release
 acceptance or authorization for additional live calls. The original M0–M6 gates
 remain in [the implementation plan](DEEP-RESEARCH-PLAN.md).
 
-### Latest checkpoint — September 20
+### Latest checkpoint — September 21
+
+PR #17 merged into `codex/deep-research-v2` as `ec56392`. The separately authorized
+NVDA run produced a shorter initial reader with a clean factual pass, but stopped
+during coverage batch 13 of 16 with a generic inference error. Known usage is
+1,395,072 tokens across 22 completed calls; failed-call usage remains unknown.
+No accepted reader was exported and the expired allowance is not a retry balance.
+
+The approved [offline closure sequence](DEEP-RESEARCH-OFFLINE-CLOSURE.md) addresses
+safe failure diagnostics, explicit writer disclosures and scenario presentation,
+scoped compound obligations, exact witnesses and observed-latency planning. Work
+is isolated on `codex/research-offline-finalization-closure` for review and PR
+integration. Historical reports remain unchanged. Preview-7 does not silently
+reuse preview-6 verification attestations.
+
+After integration, the next user checkpoint is a **new bounded live-validation
+plan and allowance**, with unknown historical usage preserved. The September 21
+source is ineligible for exact-candidate continuation under current rules.
+Financial/independent-evidence closure, HOOD generality, reader acceptance and
+release approval remain open. Offline tests cannot establish reader quality.
+
+### Previous checkpoint — September 20
 
 PR #16 merged into `codex/deep-research-v2`. A separately authorized fresh NVDA
 run then used 2,106,837 tokens in 62.53 minutes, but did not export an accepted

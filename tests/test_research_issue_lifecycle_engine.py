@@ -292,7 +292,13 @@ def test_saved_reviewed_operating_metadata_can_retire_without_clearing_financial
                 }]
             return reply.model_copy(update={"data": data})
 
-    request = original.model_copy(update={"output_dir": tmp_path / "metadata-mechanics", "backend": "replay"})
+    # This exercises lifecycle, not the historical live allowance. The expanded
+    # delivery contract needs a larger conservative repair reserve even though
+    # every reply here is synthetic; resource-admission tests cover tight budgets.
+    request = original.model_copy(update={
+        "output_dir": tmp_path / "metadata-mechanics", "backend": "replay",
+        "budget": original.budget.model_copy(update={"total_tokens": 3_000_000}),
+    })
     models = ReviewedMetadata()
     result = run_research(request, ResearchServices(SnapshotEvidenceService(_snapshot()), models))
     assert result.stop_reason == "completed_needs_review"

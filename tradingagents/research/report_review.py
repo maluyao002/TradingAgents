@@ -6,6 +6,11 @@ from typing import Literal
 from pydantic import Field, field_validator
 
 from .contracts import Contract, ReviewFinding
+from .review_lifecycle import (
+    compound_coverage_component_valid,
+    compound_coverage_issues,
+    compound_obligation_contract_valid,
+)
 from .stages import VerificationOutput
 from .storage import digest
 
@@ -67,6 +72,13 @@ def requires_reader_coverage(issue, *, financial_prerequisite_texts=()) -> bool:
     numerical issues may not.
     """
 
+    if "compound_obligation" in issue:
+        if not compound_obligation_contract_valid(issue):
+            return True
+        return any(
+            component["reader_treatment"] == "reader_required"
+            for component in issue["compound_obligation"]["components"]
+        )
     if issue.get("text") in frozenset(financial_prerequisite_texts):
         return True
     for finding in issue.get("prior_findings", ()):
@@ -86,6 +98,10 @@ def _provided_spans(disposition: LimitationDisposition) -> tuple[str, ...]:
 
 def _cannot_determine_proposition(issue) -> bool:
     """Fail closed for incomplete enriched context while accepting legacy packets."""
+    if "coverage_component" in issue:
+        return not compound_coverage_component_valid(issue)
+    if "compound_obligation" in issue:
+        return not compound_obligation_contract_valid(issue)
     context_fields = {"claims", "missing_claim_ids", "prior_findings", "resolution_protected"}
     if not context_fields.intersection(issue):
         return False
@@ -135,6 +151,12 @@ def _disposition_validation(review: ReaderVerification, issues, reader: str):
         if disposition.decision.startswith("audit_only"):
             if issue_by_id[issue_id].get("reader_coverage_required"):
                 failures.append((issue_id, f"Protected limitation requires reader coverage: {issue_id}"))
+            elif (
+                issue_by_id[issue_id].get("coverage_component", {}).get("reader_treatment")
+                == "audit_only_procedural"
+                and disposition.decision != "audit_only_operational"
+            ):
+                failures.append((issue_id, f"Procedural limitation must remain operational audit: {issue_id}"))
             elif spans:
                 failures.append((issue_id, f"Audit-only disposition has reader spans: {issue_id}"))
             else:
@@ -193,3 +215,86 @@ def check_dispositions(review: ReaderVerification, issues, reader: str) -> Reade
     # deterministic validation (including batch then combined validation) stable.
     additions = tuple(finding for finding in generated if finding not in review.findings)
     return review.model_copy(update={"findings": (*review.findings, *additions)})
+
+
+def fan_in_compound_dispositions(review, issues, reader: str) -> ReaderVerification:
+    """Map independently validated child decisions back to exact parent IDs.
+
+    The raw child review should be retained by the caller as batch audit. This
+    adapter does not infer semantic coverage: it emits a parent disposition only
+    after every non-satisfied component has independently passed the ordinary
+    exact-span/materiality checks. Child findings are rebound to their immutable
+    parent so they cannot disappear during parent-level admission.
+    """
+    review = ReaderVerification.model_validate(review.model_dump(mode="json"))
+    parents = tuple(issues)
+    atomic = tuple(compound_coverage_issues(parents))
+    checked = check_dispositions(review, atomic, reader)
+    valid_ids = set(validated_disposition_ids(checked, atomic, reader))
+    disposition_counts = Counter(
+        disposition.issue_id for disposition in checked.limitation_dispositions
+    )
+    disposition_by_id = {
+        disposition.issue_id: disposition
+        for disposition in checked.limitation_dispositions
+    }
+
+    child_to_parent = {
+        item["issue_id"]: item["compound_parent"]["issue_id"]
+        for item in atomic if "compound_parent" in item
+    }
+    parent_dispositions = []
+    for parent in parents:
+        if not compound_obligation_contract_valid(parent):
+            candidates = [
+                disposition for disposition in checked.limitation_dispositions
+                if disposition.issue_id == parent["issue_id"]
+            ]
+            parent_dispositions.extend(candidates)
+            continue
+
+        children = [
+            item for item in atomic
+            if item.get("compound_parent", {}).get("issue_id") == parent["issue_id"]
+        ]
+        child_ids = [item["issue_id"] for item in children]
+        if (
+            not child_ids
+            or any(disposition_counts[identifier] != 1 for identifier in child_ids)
+            or not set(child_ids) <= valid_ids
+        ):
+            continue
+        spans = []
+        rationales = []
+        for child in children:
+            disposition = disposition_by_id[child["issue_id"]]
+            rationales.append(disposition.rationale)
+            if child["reader_coverage_required"]:
+                spans.extend(_provided_spans(disposition))
+        spans = list(dict.fromkeys(spans))
+        if any(child["reader_coverage_required"] for child in children) and not spans:
+            continue
+        parent_dispositions.append(LimitationDisposition(
+            issue_id=parent["issue_id"],
+            decision="reader_covered" if spans else "audit_only_operational",
+            rationale=(
+                "Every code-owned current component passed independently: "
+                + " | ".join(rationales)
+            ),
+            reader_excerpts=tuple(spans),
+        ))
+
+    findings = tuple(finding.model_copy(update={
+        "affected_ids": tuple(dict.fromkeys(
+            child_to_parent.get(identifier, identifier)
+            for identifier in finding.affected_ids
+        )),
+    }) for finding in checked.findings)
+    parent_review = ReaderVerification(
+        reviewed_report=checked.reviewed_report,
+        supported_claim_ids=checked.supported_claim_ids,
+        contradicted_claim_ids=checked.contradicted_claim_ids,
+        findings=findings,
+        limitation_dispositions=tuple(parent_dispositions),
+    )
+    return check_dispositions(parent_review, parents, reader)
