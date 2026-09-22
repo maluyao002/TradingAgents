@@ -101,7 +101,13 @@ Any new live path requires explicit new allowance and the applicable acknowledge
 of unknown historical usage. Then inspect the actual exported reader before
 moving to targeted financial/independent-evidence closure and HOOD.
 
-### Proposed next validation (not authorized)
+### Superseded validation proposal (not authorized)
+
+The user rejected the 180-minute ceiling below and approved an offline latency
+increment instead. Do not use this proposal as the active next step or as an
+allowance. See [coverage efficiency](DEEP-RESEARCH-COVERAGE-EFFICIENCY.md) for the
+implemented opt-in batching policy, measured workload trade-off and the proposed
+small paired diagnostic. The following is retained as decision history.
 
 One fresh English NVDA case-backed validation under preview-7, using the same
 frozen September 19 evidence/case and unchanged model assignments. This is a

@@ -12,6 +12,35 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+### Coverage-efficiency follow-up — September 21, 2026
+
+PR #18 is merged as `3ec145a`. The user declined a proposed 180-minute fresh
+validation and approved offline turnaround improvements first. Development is on
+`codex/research-coverage-efficiency`, targeting `codex/deep-research-v2` only.
+
+Delivered an explicit `packed-24` coverage option, defaulting to legacy behavior,
+with a 24-raw-issue/12-KB packed-context bound and a 12k output allowance. All cost
+paths use that allowance, dispatch and planning share the same lossless packet
+builder, and recovery cannot mix policies. Full factual review and every
+reader-bound coverage gate remain required. No historical usage flag is cleared.
+
+The read-only historical inventory comparison retains all 182 issues and reduces
+coverage calls 16 → 10, repeated reader bytes 377,936 → 236,210; reserved output
+increases 96k → 120k tokens. No actual runtime, token-spend or quality improvement
+is claimed. The source hashes and matched batch assignments are checked without
+importing prior attestations. See [the delivery note](DEEP-RESEARCH-COVERAGE-EFFICIENCY.md)
+for reproduction and the separately proposed 15-minute paired diagnostic.
+
+Independent review drove explicit recovery/cost regressions, a shared dispatch
+packet builder and visible policy metadata. The targeted scope covers **283 distinct
+offline tests** across the integrated run and focused review follow-ups. Process
+supervision initially failed because sandbox process inspection was unavailable;
+all **53 supervisor tests** passed when rerun with that prerequisite permitted.
+The frozen legacy provider-boundary hash matches base `3ec145a`. Targeted lint,
+whitespace checks and the historical read-only benchmark pass. Hosted
+review/integration results will be recorded below. Concurrency, Stage 3 acceptance,
+financial/independent-evidence closure and HOOD remain open; no live run was started.
+
 ### September 21 validation and offline closure follow-up
 
 PR #17 merged as `ec56392`. The next authorized NVDA validation produced a
