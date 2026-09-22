@@ -12,6 +12,31 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+### Disclosure-control follow-up — September 22, 2026
+
+PR #20 merged as `bd604c7` into `codex/deep-research-v2`; its sub-branch was deleted
+locally/remotely. PR #21, developed on `codex/coverage-disclosure-controls`, adds
+offline disclosure contrasts and one shared six-call 900s/350k-best-effort budget.
+Terra/medium supplied the helper/tests; independent Sol/high safety review found
+no remaining blocker. Review fixed negative-control scoring so a correct
+unresolved answer with a missing-disclosure warning is successful detection, not
+acceptance. Seventy-two affected tests passed, followed by the final 30-test
+helper/control scope (overlap, not additive); lint and whitespace checks pass.
+
+The approved live campaign completed **six calls in 879.48s**, using **73,156
+input + 26,968 output = 100,124 tokens**, all complete. No retries, extensions or
+historical edits occurred. Both policies passed the explicit financial-draft
+positive and failed the operating-only negative. Packed used fewer tokens in both
+pairs, but failed to repeat the earlier correct negative judgment. A separate
+protected fiscal-to-calendar model-bridge disposition varied and remains open
+for scope adjudication. Independent focused review supports conservative retention.
+
+The [full result and next deliverable](DEEP-RESEARCH-DISCLOSURE-CONTROLS.md) record
+exact hashes, ordering/cache limitations, the observed advisory output overshoot,
+and the tightly exhausted wall allowance. Do not switch defaults or proceed to a
+full acceptance run. Prioritize deterministic case-state review disclosure and
+fiscal/calendar scope clarification before an actual-writer/reader check.
+
 ### Matched coverage diagnostic — September 22, 2026
 
 PR #19 is integrated as `c759a66`. On `codex/coverage-paired-diagnostic`, PR #20
