@@ -446,6 +446,8 @@ def main(argv=None):
     if not args.allow_advisory_token_cap:
         raise ValueError("explicit best-effort token-limit acknowledgement required")
     request = validate_plan(plan)
+    if plan.get("kind") == "disclosure-control-diagnostic-v1":
+        raise ValueError("historical disclosure-control v1 plans are read-only")
     verify_runtime(plan)
     verify_execution_binding(plan, args.codex_home)
     if request.output_dir.exists() or request.output_dir.resolve() != request.output_dir:

@@ -49,8 +49,7 @@ def test_verify_runtime_rejects_changed_first_party_source_bytes(tmp_path, monke
         diagnostic.verify_runtime(plan)
 
 
-def test_cli_rejects_unbound_codex_home_before_consuming_attempt(
-        tmp_path, monkeypatch):
+def test_cli_rejects_unbound_codex_home_before_consuming_attempt(tmp_path, monkeypatch):
     approved_home = (tmp_path / "approved-home").resolve()
     other_home = (tmp_path / "other-home").resolve()
     capsule, path, _request, plan = cli_plan(tmp_path)
@@ -65,10 +64,53 @@ def test_cli_rejects_unbound_codex_home_before_consuming_attempt(
     )
 
     with pytest.raises(ValueError, match="Codex home"):
-        diagnostic.main([
-            "run", "--plan", str(path), "--approved-plan-sha256", digest(plan),
-            "--codex-home", str(other_home), "--allow-live", "--allow-advisory-token-cap",
-        ])
+        diagnostic.main(
+            [
+                "run",
+                "--plan",
+                str(path),
+                "--approved-plan-sha256",
+                digest(plan),
+                "--codex-home",
+                str(other_home),
+                "--allow-live",
+                "--allow-advisory-token-cap",
+            ]
+        )
+
+    assert not (capsule / "attempt_started").exists()
+
+
+def test_cli_rejects_read_only_v1_before_consuming_attempt(tmp_path, monkeypatch):
+    capsule = tmp_path / "capsule"
+    capsule.mkdir()
+    path = capsule / "plan.json"
+    path.write_text("{}")
+    request, _plan = request_and_plan(tmp_path)
+    plan = {"kind": "disclosure-control-diagnostic-v1"}
+
+    monkeypatch.setattr(diagnostic, "read_json", lambda _path: plan)
+    monkeypatch.setattr(diagnostic, "validate_plan", lambda _plan: request)
+    monkeypatch.setattr(
+        diagnostic,
+        "run_supervised",
+        lambda *_args, **_kwargs: pytest.fail("read-only plan reached supervision"),
+    )
+
+    with pytest.raises(ValueError, match="read-only"):
+        diagnostic.main(
+            [
+                "run",
+                "--plan",
+                str(path),
+                "--approved-plan-sha256",
+                digest(plan),
+                "--codex-home",
+                str(tmp_path / "home"),
+                "--allow-live",
+                "--allow-advisory-token-cap",
+            ]
+        )
 
     assert not (capsule / "attempt_started").exists()
 
@@ -94,7 +136,8 @@ def test_worker_rechecks_home_binding_before_constructing_service(tmp_path, monk
 
 @pytest.mark.parametrize("provider", [None, "azure", "OpenAI"])
 def test_cli_requires_the_fixed_openai_provider_binding_before_attempt(
-        tmp_path, monkeypatch, provider):
+    tmp_path, monkeypatch, provider
+):
     capsule, path, _request, plan = cli_plan(tmp_path)
     plan["codex_home"] = str((tmp_path / "approved-home").resolve())
     if provider is None:
@@ -111,10 +154,19 @@ def test_cli_requires_the_fixed_openai_provider_binding_before_attempt(
     )
 
     with pytest.raises(ValueError, match="provider"):
-        diagnostic.main([
-            "run", "--plan", str(path), "--approved-plan-sha256", digest(plan),
-            "--codex-home", plan["codex_home"], "--allow-live", "--allow-advisory-token-cap",
-        ])
+        diagnostic.main(
+            [
+                "run",
+                "--plan",
+                str(path),
+                "--approved-plan-sha256",
+                digest(plan),
+                "--codex-home",
+                plan["codex_home"],
+                "--allow-live",
+                "--allow-advisory-token-cap",
+            ]
+        )
 
     assert not (capsule / "attempt_started").exists()
 
@@ -124,7 +176,8 @@ def test_cli_requires_the_fixed_openai_provider_binding_before_attempt(
     [(1, 0, 0), (2, 0, 0), (6, 1, 24)],
 )
 def test_predispatch_trace_write_failure_keeps_usage_known_and_returns_failure(
-        tmp_path, monkeypatch, failed_write, completed_calls, known_tokens):
+    tmp_path, monkeypatch, failed_write, completed_calls, known_tokens
+):
     request, plan = request_and_plan(tmp_path)
     service = FixtureService()
     real_write = diagnostic.atomic_write
