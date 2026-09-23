@@ -16,6 +16,8 @@ from tradingagents.codex.fundamentals import (
     validate_inputs,
 )
 
+ACTIVE_FUNDAMENTALS_MODEL = "gpt-6-sol"
+
 
 def _prepared():
     return {
@@ -93,22 +95,25 @@ def test_matched_api_and_codex_use_same_analyst_prompt_and_snapshot(monkeypatch)
     monkeypatch.setattr("tradingagents.llm_clients.factory.create_llm_client", factory)
 
     api = run_fundamentals(
-        "amd", "2026-09-13", backend="api", model="gpt-5.6-sol", effort="high",
+        "amd", "2026-09-13", backend="api", model=ACTIVE_FUNDAMENTALS_MODEL, effort="high",
         prepared=snapshot,
     )
     adapter = _Adapter()
     codex = run_fundamentals(
-        "AMD", "2026-09-13", backend="codex", model="gpt-5.6-sol", effort="high",
+        "AMD", "2026-09-13", backend="codex", model=ACTIVE_FUNDAMENTALS_MODEL, effort="high",
         prepared=snapshot, adapter=adapter,
     )
 
     factory.assert_called_once_with(
-        provider="openai", model="gpt-5.6-sol", reasoning_effort="high", max_retries=0, base_url=None,
+        provider="openai", model=ACTIVE_FUNDAMENTALS_MODEL, reasoning_effort="high", max_retries=0,
+        base_url=None,
     )
     assert prepare.call_count == 0
     assert api["prepared_data"] == codex["prepared_data"] == snapshot
     assert api["prepared_sha256"] == codex["prepared_sha256"]
     assert api["fundamentals_report"] == codex["fundamentals_report"]
+    assert adapter.selections == [(ACTIVE_FUNDAMENTALS_MODEL, "high")]
+    assert adapter.calls[0][2:] == (ACTIVE_FUNDAMENTALS_MODEL, "high")
     system = api_prompts[0][0].content
     assert adapter.calls[0][0] == system
     api_history = api_prompts[0][1:]
@@ -137,7 +142,7 @@ def test_fresh_preparation_happens_before_api_client_and_tags_identity(monkeypat
 
     monkeypatch.setattr("tradingagents.llm_clients.factory.create_llm_client", factory)
     result = run_fundamentals(
-        "amd", "2026-09-13", backend="api", model="gpt-5.6-sol", effort="high"
+        "amd", "2026-09-13", backend="api", model=ACTIVE_FUNDAMENTALS_MODEL, effort="high"
     )
     assert events[0] == ("prepare", "AMD", "2026-09-13")
     assert events[1][0] == "client"
@@ -162,7 +167,7 @@ def test_invalid_replay_is_rejected_before_preparation_or_model(monkeypatch, mut
     monkeypatch.setattr("tradingagents.llm_clients.factory.create_llm_client", factory)
     with pytest.raises(ValueError, match=match):
         run_fundamentals(
-            "AMD", "2026-09-13", backend="api", model="gpt-5.6-sol", effort="high",
+            "AMD", "2026-09-13", backend="api", model=ACTIVE_FUNDAMENTALS_MODEL, effort="high",
             prepared=snapshot,
         )
     prepare.assert_not_called()
@@ -176,7 +181,7 @@ def test_codex_selection_is_checked_before_fresh_provider_fetch(monkeypatch):
     monkeypatch.setattr("tradingagents.codex.fundamentals.prepare_fundamentals", prepare)
     with pytest.raises(ValueError, match="unsupported selection"):
         run_fundamentals(
-            "AMD", "2026-09-13", backend="codex", model="gpt-5.6-sol", effort="high",
+            "AMD", "2026-09-13", backend="codex", model=ACTIVE_FUNDAMENTALS_MODEL, effort="high",
             adapter=adapter,
         )
     prepare.assert_not_called()
@@ -186,7 +191,7 @@ def test_packet_retains_caveats_conflicts_and_unknown_citation_requires_review(m
     snapshot = _prepared()
     adapter = _Adapter(response=_report("fundamentals-fact-invented"))
     result = run_fundamentals(
-        "AMD", "2026-09-13", backend="codex", model="gpt-5.6-sol", effort="high",
+        "AMD", "2026-09-13", backend="codex", model=ACTIVE_FUNDAMENTALS_MODEL, effort="high",
         prepared=snapshot, adapter=adapter,
     )
     packet = result["evidence_packet"]
@@ -215,7 +220,7 @@ def test_packet_retains_caveats_conflicts_and_unknown_citation_requires_review(m
 def test_codex_prompt_wrapper_rejects_injected_roles_tools_and_nontext(messages, match):
     adapter = _Adapter()
     with pytest.raises(ValueError, match=match):
-        _CodexChatModel(adapter, "gpt-5.6-sol", "high").invoke(messages)
+        _CodexChatModel(adapter, ACTIVE_FUNDAMENTALS_MODEL, "high").invoke(messages)
     assert adapter.calls == []
 
 
@@ -240,7 +245,7 @@ def test_api_rejects_nontext_or_tool_response_without_codex_fallback(monkeypatch
     adapter = _Adapter()
     with pytest.raises(FundamentalsRunError):
         run_fundamentals(
-            "AMD", "2026-09-13", backend="api", model="gpt-5.6-sol", effort="high",
+            "AMD", "2026-09-13", backend="api", model=ACTIVE_FUNDAMENTALS_MODEL, effort="high",
             prepared=deepcopy(_prepared()),
         )
     assert adapter.calls == []
@@ -259,6 +264,23 @@ def test_validate_inputs_rejects_invalid_date_and_profile_before_fetch(monkeypat
 
 
 @pytest.mark.parametrize("backend", ["api", "codex"])
+def test_previous_sol_is_not_an_active_pilot_profile(monkeypatch, backend):
+    prepare = MagicMock()
+    factory = MagicMock()
+    adapter = _Adapter()
+    monkeypatch.setattr("tradingagents.codex.fundamentals.prepare_fundamentals", prepare)
+    monkeypatch.setattr("tradingagents.llm_clients.factory.create_llm_client", factory)
+    with pytest.raises(ValueError, match="profile"):
+        run_fundamentals(
+            "AMD", "2026-09-13", backend=backend, model="gpt-5.6-sol", effort="high",
+            adapter=adapter if backend == "codex" else None,
+        )
+    prepare.assert_not_called()
+    factory.assert_not_called()
+    assert not adapter.selections and not adapter.calls
+
+
+@pytest.mark.parametrize("backend", ["api", "codex"])
 @pytest.mark.parametrize("ticker", ["BTC-USD", "BTCUSD", "GC=F", "XAUUSD", "^GSPC", "US500", "EURUSD", "ETH-USDT"])
 def test_non_stock_symbols_rejected_before_external_work(monkeypatch, backend, ticker):
     prepare = MagicMock()
@@ -268,7 +290,7 @@ def test_non_stock_symbols_rejected_before_external_work(monkeypatch, backend, t
     monkeypatch.setattr("tradingagents.llm_clients.factory.create_llm_client", factory)
     with pytest.raises(ValueError, match="stock symbols only"):
         run_fundamentals(ticker, "2026-09-13", backend=backend,
-                         model="gpt-5.6-sol", effort="high",
+                         model=ACTIVE_FUNDAMENTALS_MODEL, effort="high",
                          adapter=adapter if backend == "codex" else None)
     prepare.assert_not_called()
     factory.assert_not_called()
@@ -285,7 +307,7 @@ def test_future_date_rejected_before_external_work(monkeypatch, backend):
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
     with pytest.raises(ValueError, match="future"):
         run_fundamentals("AMD", tomorrow, backend=backend,
-                         model="gpt-5.6-sol", effort="high",
+                         model=ACTIVE_FUNDAMENTALS_MODEL, effort="high",
                          adapter=adapter if backend == "codex" else None)
     prepare.assert_not_called()
     factory.assert_not_called()
@@ -307,5 +329,6 @@ def test_api_pilot_honors_configured_endpoint(monkeypatch, override):
         monkeypatch.setenv("TRADINGAGENTS_LLM_BACKEND_URL", override)
     factory = MagicMock()
     monkeypatch.setattr("tradingagents.llm_clients.factory.create_llm_client", factory)
+    # Direct API configuration still accepts an explicitly supplied older ID.
     pilot._api_model("gpt-5.6-sol", "high")
     assert factory.call_args.kwargs["base_url"] == (override or "https://configured.example/v1")
