@@ -15,8 +15,9 @@ has been delivered**. A successful diagnostic is not a completed or accepted rep
 - PR #24 merged as `d9bb516` into `codex/research-substantive-closure`.
   Its local/remote sub-branch was removed. All six checks passed on final PR head
   `7aca54c`; its review finding is resolved and re-review found no new inline findings.
-- PR #23 remains open against `codex/deep-research-v2`. Main and that frozen
-  integration branch were not advanced by PR #24.
+- PR #23 merged into `codex/deep-research-v2` as `bb580cb` on September 23,
+  after all six checks passed and all seven review threads were resolved.
+  Main remains unchanged. Follow-up work is on `codex/nvda-reader-financial-closure`.
 - Active Sol/Luna selections now use GPT-6. Runtime capability checks, API effort
   forwarding, conservative input-size admission and lossless packing are implemented.
 - The latest exact-reader factual diagnostic succeeded in **237.17 seconds /
@@ -25,6 +26,12 @@ has been delivered**. A successful diagnostic is not a completed or accepted rep
 - No final report was exported by that diagnostic; its proposed issue resolutions
   were not applied by the engine. Earlier failed-call usage remains unknown.
   A previous transient lifecycle failure did not recur, but its cause is unproven.
+- The approved next increment covers integration, reader assumptions, bounded
+  fresh NVDA validation/inspection, and targeted financial/evidence closure.
+  HOOD and release acceptance are not part of this increment. Reader inputs are
+  now code-owned and tested (`f3a7967`); typed reconciliation and immutable packet
+  preparation are implemented (`ecd2fc3`). Source/operating review passed; cash-flow
+  input review is pending. No new live research run has started yet.
 
 See the [concise implementation record](DEEP-RESEARCH-PROGRESS.md) for completed
 checkpoints and the [latest validation evidence](archive/deep-research/DEEP-RESEARCH-FRESH-VALIDATION.md)
@@ -66,9 +73,9 @@ useful fresh reader but remain part of the full release.
 
 ## Open engineering work — not requests for user sign-off
 
-- **Financial case:** distinguish package OCF-minus-asset-purchases from issuer FCF;
-  encode source-grounded residual attribution as typed, tested reconciliation.
-  Finish fiscal/calendar alignment, economic forecasts, opening-date roll-forward,
+- **Financial case:** typed, tested CFO/residual/issuer-FCF reconciliation is
+  implemented; complete the new packet's dependent reviews and fresh validation.
+  Finish fiscal/calendar alignment where required by the model, economic forecasts, opening-date roll-forward,
   usable cash/securities, debt/leases, capitalization and commitment/guarantee
   coverage. Unknown public-source relationships stay explicit; positive FCFF does
   not establish company-wide funding sufficiency.

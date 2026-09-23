@@ -5,12 +5,45 @@ and validation checkpoints, **not a second work queue**. For current priorities,
 open gates and user decisions, use the [current roadmap](DEEP-RESEARCH-STATUS.md).
 The [original implementation plan](DEEP-RESEARCH-PLAN.md) is preserved.
 
-## Latest completed increment — PR #24
+## Feature integration and next increment — September 23
+
+PR #23 merged into `codex/deep-research-v2` as `bb580cb` after six successful
+checks and resolution of all seven review threads. It includes PR #24 and the
+PR #25 documentation consolidation. Main was not advanced.
+
+Follow-up branch: `codex/nvda-reader-financial-closure`. Commit `f3a7967` adds
+a deterministic reviewed cash-flow assumptions table, exact-reader provenance,
+preview-12 cache isolation and historical preview compatibility. Independent
+review identified Markdown label injection; it was fixed with a focused negative
+control. The initial 29 reader/cache/preview tests passed; the added escaping
+regression also passes. This is engineering completion, not a live report result.
+
+Commit `ecd2fc3` implements typed historical CFO/issuer-FCF reconciliation and
+new immutable-packet preparation. It preserves the nonzero proxy residual with
+three source-grounded components and distinguishes the USD 69.987bn CFO-minus-
+purchases comparator from USD 69.895bn issuer FCF (USD 92m asset-principal
+payments). Changed evidence/case identities discard old dependent reviews.
+
+Independent review found and resolved two further issues: absent optional fields
+changed historical artifact hashes, and four reused source rows needed explicit
+cross-checks against existing facts. Actual saved preview-11 provenance now
+revalidates without modifying the saved run. **96 targeted tests**, lint and
+whitespace checks passed; no actionable code-review findings remain in the
+reviewed scope. Source/operating review of the new nine-fact packet passed;
+separate cash-flow review and bounded live validation are still pending here.
+
+The full-path budget includes factual, all coverage batches, possible repair and
+rechecks. The unchanged 3m-token / 5,400-second / 600-second-per-call bounds may
+cover one pass but do not guarantee a complete repair path. A new attempt must
+stop safely at its limits, not omit checks or silently renew the allowance.
+No new report or live-call success is claimed by these preparation steps.
+
+## Previous completed increment — PR #24
 
 PR #24 merged as `d9bb516` into `codex/research-substantive-closure`.
 The fully merged `codex/codex-runtime-model-alignment` branch was removed locally
-and remotely. PR #23 remains open against `codex/deep-research-v2`; main and the
-frozen integration branch are unchanged. Status synchronization was committed as
+and remotely. At that checkpoint PR #23 remained open against
+`codex/deep-research-v2`; integration is recorded above. Status synchronization was committed as
 `017771e`.
 
 Delivered:
@@ -50,7 +83,7 @@ original milestone is accepted.
 | Stage 3 / PR #13 | Financial-case/reader integration and deterministic admission | No accepted improved English reader |
 | PRs #14–18 | Wire repair, issue lifecycle/scope, bounded finalization, reader presentation and exact-artifact interfaces | Preserved live failures; no silent warning downgrades or final-report approval |
 | PRs #19–22 | Opt-in packed coverage, semantic controls, disclosure/review fixes and writer diagnostic | Negative-control failures remain material; efficiency is not semantic acceptance |
-| PR #23 work, still open | Nine-question work register, conditional cash-flow integration, new source packet and source/arithmetic review attachment | Typed financial reconciliation, full fresh reader path and HOOD remain open |
+| PR #23, merged | Nine-question work register, conditional cash-flow integration, new source packet and source/arithmetic review attachment | Typed financial reconciliation, full fresh reader path and HOOD remain open |
 | PR #24, merged into #23 branch | Runtime/model alignment and successful factual boundary diagnostic | One successful call, not full pipeline or release acceptance |
 
 ## Historical evidence
@@ -76,7 +109,8 @@ historical narrative while the active summaries remove repeated and stale queues
 Original design and implementation-plan contents and paths are unchanged.
 Reports, evidence, authorization artifacts, code and schedules are untouched.
 
-Documentation changes are isolated on `codex/docs-consolidation`, based on
-`codex/research-substantive-closure`, for a separate PR. No merge or new research
-run is implied by this cleanup. Add future completed checkpoints here briefly;
+Documentation changes were merged through PR #25 into
+`codex/research-substantive-closure`, then included in PR #23 integration.
+The documentation sub-branch was removed locally and remotely. No new research
+run was implied by this cleanup. Add future completed checkpoints here briefly;
 put large dated workpapers in the archive rather than creating another active plan.

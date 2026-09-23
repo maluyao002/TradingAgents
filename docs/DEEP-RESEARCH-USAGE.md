@@ -15,6 +15,38 @@ acceptance, see the [current status and roadmap](DEEP-RESEARCH-STATUS.md).
 
 ## Configuration and replay
 
+### Typed historical cash-flow reconciliation (offline)
+
+The optional cash-flow package `historical_reconciliation` selects a complete,
+signed source-statement row set. It reconstructs reported CFO, attributes the
+unchanged operating-tax/working-capital proxy residual, and distinguishes CFO
+less asset purchases from issuer FCF after asset-principal payments. It does not
+normalize earnings, approve forecast economics, or clear valuation/funding gates.
+Absent selectors preserve legacy package bytes and saved preview identities.
+
+The dated NVDA adapter accepts only the exact H1 FY2027 filing structure:
+
+```sh
+.venv/bin/python -m scripts.research_nvda_reconciliation_packet \
+  --source FROZEN_REVIEWED_INPUT_DIRECTORY \
+  --mapping EXACT_RESIDUAL_SOURCE_MAPPING_JSON \
+  --output NEW_UNREVIEWED_PACKET_DIRECTORY
+```
+
+It appends nine typed facts, preserves source bytes, verifies the reused NI/SBC/
+D&A/CFO rows, and drops old reviews from changed identities. Obtain and attach a
+fresh operating review with `scripts.research_operating_review`; then call
+`prepare_pending_cashflow(operating_source, draft_source, output)` from the
+reconciliation adapter to evaluate the pending bridge. Obtain a separate current
+cash-flow review and attach it with `scripts.research_cashflow_review`. All outputs
+must be fresh directories. Independent review is an actual review step, not a
+hash rewrite. These operations do not launch or authorize research.
+
+Preview-12 readers include a code-owned table of separately reviewed cash-flow
+assumptions and dates. Unreviewed/stale inputs remain withheld. The table is part
+of the exact factual-review/provenance binding; old previews retain their original
+rendering rather than receiving unverified new prose.
+
 ### Stage 2 financial-case preparation (offline by default)
 
 ```sh
