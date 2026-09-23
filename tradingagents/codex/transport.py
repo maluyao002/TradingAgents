@@ -77,6 +77,7 @@ _INHERITED_ENV = frozenset(
 )
 
 _SAFE_METHOD = re.compile(r"^[A-Za-z0-9_.:/-]{1,128}$")
+_INPUT_LENGTH_LIMIT = re.compile(r"Input exceeds the maximum length of ([0-9]{1,10})(?![0-9])")
 TRANSPORT_DIAGNOSTIC_METHODS = frozenset({
     "initialize", "account/read", "model/list", "config/read",
     "mcpServerStatus/list", "experimentalFeature/list", "thread/start",
@@ -124,13 +125,20 @@ class UnexpectedServerRequest(ProtocolError):
 class ServerError(TransportError):
     """A redacted JSON-RPC error returned by the app-server."""
 
-    def __init__(self, method: str, code: object = None) -> None:
+    def __init__(self, method: str, code: object = None, message: object = None) -> None:
         safe_code = _safe_error_code(code)
         suffix = f" (code {safe_code})" if safe_code is not None else ""
         safe_method = method if type(method) is str and method in TRANSPORT_DIAGNOSTIC_METHODS else "unknown"
         super().__init__(f"Codex app-server rejected {safe_method}{suffix}; details redacted")
         self.method = safe_method
         self.code = safe_code
+        self._reported_max_length = None
+        if safe_method == "turn/start" and safe_code == -32602 and type(message) is str:
+            match = _INPUT_LENGTH_LIMIT.match(message)
+            if match is not None:
+                limit = int(match.group(1))
+                if 0 < limit <= 2**31:
+                    self._reported_max_length = limit
 
 
 def _safe_error_code(value: object) -> int | None:
@@ -142,13 +150,19 @@ def _safe_error_code(value: object) -> int | None:
 def transport_failure_diagnostic(error: BaseException) -> dict[str, str | int]:
     """Extract only locally classified, bounded transport failure facts."""
     if type(error) is ServerError:
+        state = object.__getattribute__(error, "__dict__")
         fields: dict[str, str | int] = {"kind": "rpc_rejection"}
-        method = object.__getattribute__(error, "__dict__").get("method")
-        code = object.__getattribute__(error, "__dict__").get("code")
+        method = state.get("method")
+        code = state.get("code")
         if type(method) is str and method in TRANSPORT_DIAGNOSTIC_METHODS:
             fields["method"] = method
         if _safe_error_code(code) is not None:
             fields["code"] = code
+        limit = state.get("_reported_max_length")
+        if (method == "turn/start" and code == -32602
+                and type(limit) is int and 0 < limit <= 2**31):
+            fields["kind"] = "input_length_limit"
+            fields["reported_max_length"] = limit
         return fields
     if type(error) is ProtocolError or type(error) is UnexpectedServerRequest:
         state = object.__getattribute__(error, "__dict__")
@@ -537,7 +551,8 @@ class CodexAppServerTransport:
                 if has_error:
                     error = message["error"]
                     code = error.get("code") if isinstance(error, dict) else None
-                    raise ServerError(method, code)
+                    detail = error.get("message") if isinstance(error, dict) else None
+                    raise ServerError(method, code, detail)
                 return message["result"]
 
     def _reject_server_request(self, message: Mapping[str, Any]) -> None:

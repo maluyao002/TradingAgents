@@ -71,6 +71,9 @@ else:
             sys.stderr.write("TOP-SECRET-SERVER-DETAIL\n" * 10000)
             sys.stderr.flush()
             print(json.dumps({"id": request["id"], "error": {"code": -32000, "message": "TOP-SECRET-SERVER-DETAIL"}}), flush=True)
+        elif mode == "input-length-error":
+            print(json.dumps({"id": request["id"], "error": {"code": -32602,
+                "message": "Input exceeds the maximum length of 272000 units; private-prompt-SECRET"}}), flush=True)
         elif mode == "eof":
             sys.exit(0)
 """
@@ -376,6 +379,26 @@ def test_transport_diagnostics_are_finite_and_exclude_server_prose(tmp_path):
     assert transport_failure_diagnostic(ServerError("turn/start", "private-code-SECRET")) == {
         "kind": "rpc_rejection", "method": "turn/start",
     }
+
+
+def test_input_length_rejection_requires_exact_rpc_boundary_and_bounded_number(tmp_path):
+    with _transport(tmp_path, "input-length-error") as transport, pytest.raises(ServerError) as caught:
+        transport.request("turn/start", {"text": "private-prompt-SECRET"})
+    assert transport_failure_diagnostic(caught.value) == {
+        "kind": "input_length_limit", "method": "turn/start", "code": -32602,
+        "reported_max_length": 272000,
+    }
+    assert "SECRET" not in str(caught.value)
+    phrase = "Input exceeds the maximum length of 272000 private-prompt-SECRET"
+    for method, code, message in (
+        ("thread/start", -32602, phrase),
+        ("turn/start", -32000, phrase),
+        ("turn/start", -32602, "private-prompt-SECRET"),
+        ("turn/start", -32602, "private-prompt-SECRET Input exceeds the maximum length of 272000"),
+        ("turn/start", -32602, "Input exceeds the maximum length of 999999999999"),
+        ("turn/start", -32602, "Input exceeds the maximum length of 0"),
+    ):
+        assert transport_failure_diagnostic(ServerError(method, code, message))["kind"] == "rpc_rejection"
 
 
 def test_request_size_diagnostic_counts_serialized_bytes_without_payload(tmp_path):

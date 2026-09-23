@@ -36,6 +36,7 @@ CODEX_FAILURE_REASONS = frozenset({
     "transport_timeout",
     "transport_closed",
     "transport_error",
+    "transport_input_length_limit",
     "transport_request_size_limit",
     "transport_response_size_limit",
     "transport_protocol_error",
@@ -85,6 +86,7 @@ _DIAGNOSTIC_KINDS = frozenset({
     "request_size_limit", "response_size_limit", "malformed_json",
     "invalid_message", "invalid_response", "invalid_notification",
     "unexpected_server_request", "protocol_error", "rpc_rejection",
+    "input_length_limit",
     "timeout", "closed", "transport_error",
 })
 _DIAGNOSTIC_PHASES = frozenset({"thread_start", "turn_start", "turn_wait"})
@@ -107,9 +109,15 @@ def _allowlisted_failure_diagnostic(value: object) -> dict[str, str | int] | Non
         if (type(request_bytes) is int and type(limit_bytes) is int
                 and 0 <= request_bytes <= 2**31 and 0 <= limit_bytes <= 2**31):
             result.update(request_bytes=request_bytes, limit_bytes=limit_bytes)
-    elif kind == "rpc_rejection":
+    elif kind in {"rpc_rejection", "input_length_limit"}:
         method = value.get("method")
         code = value.get("code")
+        if kind == "input_length_limit":
+            limit = value.get("reported_max_length")
+            if (method != "turn/start" or type(code) is not int or code != -32602
+                    or type(limit) is not int or not 0 < limit <= 2**31):
+                return None
+            result["reported_max_length"] = limit
         if type(method) is str and method in TRANSPORT_DIAGNOSTIC_METHODS:
             result["method"] = method
         if type(code) is int and -(2**31) <= code < 2**31:
@@ -1041,6 +1049,7 @@ class CodexAdapter:
             if isinstance(failure, TransportError):
                 kind = diagnostic["kind"]
                 reason = {
+                    "input_length_limit": "transport_input_length_limit",
                     "request_size_limit": "transport_request_size_limit",
                     "response_size_limit": "transport_response_size_limit",
                     "rpc_rejection": "transport_rpc_rejected",

@@ -95,6 +95,10 @@ for line in sys.stdin:
         send({"id": request_id, "error": {"code": -32000,
               "message": "private-provider-prompt-SECRET"}})
         continue
+    if scenario == "rpc-input-length" and method == "turn/start":
+        send({"id": request_id, "error": {"code": -32602,
+              "message": "Input exceeds the maximum length of 272000 private-provider-prompt-SECRET"}})
+        continue
 
     if method == "initialize":
         codex_home = os.environ["CODEX_HOME"]
@@ -474,6 +478,18 @@ def test_rpc_rejection_retains_only_safe_method_code_and_phase(tmp_path):
     assert codex_failure_diagnostic(caught.value) == {
         "kind": "rpc_rejection", "phase": "turn_start",
         "method": "turn/start", "code": -32000,
+    }
+    assert "SECRET" not in str(caught.value)
+
+
+def test_input_length_rejection_retains_only_bounded_limit_and_phase(tmp_path):
+    adapter, _ = _adapter(tmp_path, "rpc-input-length")
+    with adapter, pytest.raises(CodexInferenceError) as caught:
+        adapter.complete_with_usage("Role", "private-prompt-SECRET", "gpt-test-terra", "medium")
+    assert codex_failure_reason(caught.value) == "transport_input_length_limit"
+    assert codex_failure_diagnostic(caught.value) == {
+        "kind": "input_length_limit", "phase": "turn_start", "method": "turn/start",
+        "code": -32602, "reported_max_length": 272000,
     }
     assert "SECRET" not in str(caught.value)
 
