@@ -1,5 +1,11 @@
 # Deep Research V2: preview operation and diagnostics
 
+Document role: **operating reference**, not the active delivery plan. Start with
+the [documentation index](README.md) and [current roadmap](DEEP-RESEARCH-STATUS.md).
+Dated packet paths and stage-specific examples below illustrate their original
+workflow; they are not authorization to rerun a live job or proof of current
+report acceptance. Use fresh destinations and explicit bounded authorization.
+
 This is an opt-in, research-only implementation. It does not change the existing
 weekly runner, trading graph, model settings, schedules, publishing or AMD task.
 No live provider is instantiated without the separate opt-in flag. Reports are

@@ -1,5 +1,10 @@
 # Stage 3 — authorized continuation and review handoff
 
+> Historical delivery / validation record. Preserve its evidence and decisions;
+> dated next steps and run allowances are not current instructions or reusable approval.
+> Use the [current roadmap](../../DEEP-RESEARCH-STATUS.md) for active work and
+> the [archive index](README.md) to navigate history.
+
 September 19, 2026. Stage 3 remains **incomplete**; a substantive English draft
 and comparison are available for user review, not an admitted final report.
 

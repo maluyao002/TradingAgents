@@ -1,5 +1,10 @@
 # Matched coverage diagnostic — September 22, 2026
 
+> Historical delivery / validation record. Preserve its evidence and decisions;
+> dated next steps and run allowances are not current instructions or reusable approval.
+> Use the [current roadmap](../../DEEP-RESEARCH-STATUS.md) for active work and
+> the [archive index](README.md) to navigate history.
+
 Delivery: [PR #20](https://github.com/maluyao002/TradingAgents/pull/20), targeting
 `codex/deep-research-v2`, never main. This records a coverage-only experiment,
 not a new report, reusable verification attestation or Stage 3 acceptance.

@@ -1,5 +1,10 @@
 # Substantive research closure — September 22, 2026
 
+> Historical delivery / validation record. Preserve its evidence and decisions;
+> dated next steps and run allowances are not current instructions or reusable approval.
+> Use the [current roadmap](../../DEEP-RESEARCH-STATUS.md) for active work and
+> the [archive index](README.md) to navigate history.
+
 ## Objective and delivery order
 
 The user approved addressing five research-quality problems: actionable unknowns,
