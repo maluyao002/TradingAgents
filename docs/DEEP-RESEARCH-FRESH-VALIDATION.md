@@ -365,3 +365,16 @@ financial reconciliation and targeted independent evidence gaps with dependent
 review before proving HOOD generality. Do not transplant this diagnostic into an
 admitted continuation. User reader acceptance and production release remain
 separate gates. No additional live run or PR merge is initiated by this success.
+
+### PR #24 integration — September 23
+
+Under the user's subsequent merge instruction, PR #24 merged at 14:58:04 UTC as
+`d9bb516b78926fcecc19a8868980f05fe876e440` into
+`codex/research-substantive-closure`. All six checks passed on final PR head
+`7aca54c`; the only review thread is resolved. The local base was fast-forwarded,
+and the fully merged `codex/codex-runtime-model-alignment` branch was deleted
+locally and remotely. Its commits remain recoverable through the merge history.
+PR #23 remains open against `codex/deep-research-v2`; main and the frozen branch
+remain unchanged. The status overview and implementation log now link this
+outcome. No additional research/model call or acceptance change accompanied
+the merge and documentation synchronization.

@@ -1,11 +1,41 @@
 # Deep Research V2 — current status and delivery roadmap
 
-Reconciled September 18, 2026; updated September 22 for the paired diagnostic.
+Reconciled September 18, 2026; updated September 23 for runtime repair and PR #24 integration.
 This is the current work index and recommended execution order, not new release
 acceptance or authorization for additional live calls. The original M0–M6 gates
 remain in [the implementation plan](DEEP-RESEARCH-PLAN.md).
 
-### Latest checkpoint — September 22
+### Latest checkpoint — September 23
+
+**The request-size blocker is repaired; final reader acceptance remains open.**
+PR #24 merged as `d9bb516` into `codex/research-substantive-closure` on September 23.
+Its local and remote sub-branch are removed. PR #23 remains open against
+`codex/deep-research-v2`; neither that frozen branch nor main was advanced.
+All six CI checks passed on PR #24's final head `7aca54c`, its review finding is
+resolved, and implementation re-review found no new inline findings.
+
+Active Sol/Luna profiles now use GPT-6, with runtime capability checks and native
+API reasoning-effort forwarding. Conservative input admission and lossless prompt
+packing repair the confirmed oversized Codex request; finite lifecycle diagnostics
+preserve strict protocol checks and historical unknown usage. The separate
+transient lifecycle failure did not recur, but its precise cause is not proven.
+
+The bounded GPT-6 Sol/xhigh exact-reader factual diagnostic completed in
+**3m57s / 282,304 tokens**, with complete telemetry for that call. It returned
+`reviewed_report=true` and one warning about omitted scenario tax, working-capital
+and depreciation assumptions. Its proposed issue dispositions are not applied
+lifecycle closures. This was **not a fresh end-to-end run or final report export**;
+historical failed-call usage remains unknown. See the
+[validation and diagnostic record](DEEP-RESEARCH-FRESH-VALIDATION.md).
+
+Next: finish feature-branch integration, expose those material assumptions in the
+next reader, budget the complete fresh analysis/writing/factual/coverage/repair
+path and inspect the actual exported English report. Typed financial
+reconciliation and targeted independent-evidence closure, then HOOD generality,
+remain engineering work. User reader acceptance and production release remain
+separate gates; Stage 3 is not closed by the diagnostic.
+
+### Previous checkpoint — September 22
 
 **Substantive closure work is now the priority.** The user approved addressing
 actionable unknowns, cash-flow/model integration, independent evidence,

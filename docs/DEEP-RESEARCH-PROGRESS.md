@@ -12,6 +12,36 @@ or pull request is implicit.
 
 ## Frozen baseline and separate review branch — September 18, 2026
 
+### Runtime/model alignment and PR #24 integration — September 23, 2026
+
+PR #24 merged as `d9bb516` into `codex/research-substantive-closure`; its
+`codex/codex-runtime-model-alignment` branch is removed locally and remotely.
+The merge preserves all implementation commits. PR #23 remains open, and main
+and `codex/deep-research-v2` remain unchanged. All six hosted checks passed on
+final PR head `7aca54c`; the API effort-forwarding review finding is resolved,
+and re-review of implementation head `eef3981` found no new inline findings.
+
+Delivered: GPT-6 Sol/Luna active model selection, exact dry-run model/effort
+disclosure, native API effort forwarding, safe transport/lifecycle diagnostics,
+conservative prompt-size admission, versioned lossless context packing and a
+hash-bound one-call factual diagnostic. Targeted offline regressions and hosted
+CI establish implementation behavior, not financial or reader acceptance.
+
+The successful GPT-6 Sol/xhigh factual diagnostic took **237.17 seconds** and
+used **271,498 input + 10,806 output = 282,304 tokens**, with complete per-call
+telemetry. Prior failures and unknown usage are preserved. The verifier returned
+one material presentation warning (cash-flow sensitivity assumptions); typed
+issuer-FCF reconciliation and independent-evidence limitations remain open.
+Its proposed issue resolutions are not engine-applied closures, and no final
+reader was exported. The separate transient lifecycle failure's cause remains
+unproven; no protocol acceptance check was relaxed.
+
+The [detailed validation record](DEEP-RESEARCH-FRESH-VALIDATION.md) contains the
+immutable attempt identities, failures, successful diagnostic and remaining
+sequence. Full-path fresh validation/actual-reader inspection, targeted financial
+and independent-evidence closure, HOOD generality, user acceptance and release
+remain separate deliverables. No new live run was launched during this merge.
+
 ### Substantive research closure — September 22, 2026
 
 Follow-up checkpoint: the [targeted evidence packet](DEEP-RESEARCH-FOLLOWUP-PACKET.md)
