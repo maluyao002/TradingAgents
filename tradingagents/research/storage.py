@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from .contracts import ResearchRequest
 
-ENGINE_VERSION = "research-v2-preview-10"
+ENGINE_VERSION = "research-v2-preview-11"
 
 
 def _encode(value):

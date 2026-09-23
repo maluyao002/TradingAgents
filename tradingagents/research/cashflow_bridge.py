@@ -216,7 +216,7 @@ class CashFlowBridgePackage(Contract):
     historical_anchor: ReportedCashFlowAnchor
     scenarios: tuple[CashFlowScenarioAssumptions, ...] = Field(min_length=1, max_length=3)
     commitment_horizon: str = Field(min_length=1)
-    commitment_assumptions: tuple[CommitmentOverlapAssumption, ...] = Field(min_length=1)
+    commitment_assumptions: tuple[CommitmentOverlapAssumption, ...]
     limitations: tuple[str, ...] = Field(min_length=1)
     review: CashFlowBridgeReview | None = None
 
@@ -680,6 +680,10 @@ def evaluate_cashflow_bridge(
     for identifier in sorted(in_horizon):
         source = commitments[identifier]
         treatment = treatments[identifier]
+        # Both deductions and treatment totals below are USD amounts. Never
+        # silently aggregate another currency or a nonmonetary quantity.
+        if source.unit != "USD" or source.currency != "USD":
+            raise ValueError("cash-flow commitments require USD units and currency")
         if treatment.treatment == "zero_disclosed" and source.normalized_value != 0:
             raise ValueError("zero-disclosed treatment requires a reported zero amount")
         if treatment.treatment != "zero_disclosed" and source.normalized_value == 0:
@@ -687,6 +691,15 @@ def evaluate_cashflow_bridge(
         if treatment.treatment == "incremental_deduction":
             if source.timing != "known":
                 raise ValueError("unknown-timing commitments cannot be deducted incrementally")
+            if (
+                source.amount_basis != "contractual_cash"
+                or source.treatment != "deduct_incrementally"
+                or source.overlap != "none"
+            ):
+                raise ValueError(
+                    "incremental commitment requires contractual cash and a compatible "
+                    "non-overlapping source treatment"
+                )
             if treatment.period_id not in incremental_by_period:
                 raise ValueError("incremental commitment references an unknown cash-flow period")
             period_start, period_end = period_dates[treatment.period_id]
