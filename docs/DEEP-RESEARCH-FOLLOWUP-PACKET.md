@@ -137,3 +137,41 @@ operating and cash-flow reviews, case ingestion, and engine-to-reader cash-flow
 delivery. The final reviewer also ran 44 focused checks. Ruff and whitespace
 checks passed. The local full suite was not rerun; hosted CI requirements remain
 unchanged. No live research/model call was used in place of these regressions.
+
+## PR #23 inline-review corrections
+
+The four subsequent GitHub inline findings are addressed separately from the
+earlier local review above:
+
+- Incremental commitments must overlap the assigned period's disclosed due
+  window; inclusive date boundaries are allowed, later-year assignments rejected.
+- Shared commitment treatments require identical period-ID/date mappings in
+  every scenario, preventing a deduction from disappearing in another scenario.
+- Bridge fact eligibility now permits pre-cutoff, exact SEC archive filings
+  retrieved later, bound to the instrument CIK and accession. Mutable URLs,
+  wrong identities, content mismatches and ineligible fact ancestry stay blocked.
+- Period and rollup calculation provenance includes operating-income source
+  ancestry and incremental commitment facts as well as cash-flow assumptions.
+  Missing operating-income calculation ancestry fails closed.
+
+Engine revision `research-v2-preview-10` invalidates old execution/cache identities
+and finalization checkpoints. Offline previews support the new revision without
+relaxing their frozen-case, catalog or rendering checks. Earlier saved bridge
+catalogs can fail revalidation because their ancestry is incomplete; they must
+not be relabeled or silently overwritten as current outputs.
+
+A read-only reevaluation of `reviewed_inputs_1` retained all 57 cash-flow values,
+their numeric fields and input/result identities, and expanded ancestry on 54
+entries. Every file in the historical input bundle was verified unchanged.
+The frozen derived artifacts therefore remain historical; fresh engine delivery
+reconstructs the corrected context/catalog from the unchanged reviewed inputs.
+This is not a new live validation or financial acceptance.
+
+Verification for this correction: **127 targeted tests passed** across the bridge,
+new inline-review regressions, review adapter, case context/scenarios, calculated
+values, engine delivery, reader previews, review disclosures and finalization
+recovery. This is a separate, overlapping test selection, not an additional 127
+unique tests on top of the prior checkpoint. Ruff and whitespace checks passed.
+An independent Sol/high read-only re-review found no actionable findings in
+the correction. That reviewer could not run pytest in its shell; the targeted
+test results above were run by the coordinator using the project environment.

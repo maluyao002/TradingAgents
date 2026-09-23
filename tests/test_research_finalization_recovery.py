@@ -136,6 +136,18 @@ def _authorization(plan):
     )
 
 
+def test_pre_cashflow_review_fix_checkpoint_cannot_continue(tmp_path):
+    from tradingagents.research.storage import parse_json
+
+    source, request, _, _ = _source(tmp_path)
+    checkpoint_path = source / "finalization_checkpoint.json"
+    checkpoint = parse_json(checkpoint_path.read_bytes())
+    checkpoint["engine_version"] = "research-v2-preview-9"
+    checkpoint_path.write_bytes(canonical_json(checkpoint))
+    with pytest.raises(ValueError, match="checkpoint contract is not current"):
+        prepare_finalization_continuation(source, request)
+
+
 class _Live:
     supports_hard_output_cap = False
 

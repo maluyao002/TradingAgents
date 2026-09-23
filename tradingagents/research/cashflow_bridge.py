@@ -20,6 +20,7 @@ from .calculated_values import CalculatedValue
 from .contracts import Contract, EvidenceSnapshot, FinancialFact, Identifier, ReviewFinding
 from .financial_case import FinancialCase, evidence_snapshot_sha256, reconcile_financial_case
 from .operating_scenarios import OperatingScenarioResult
+from .sources import is_exact_sec_archive_filing_url
 from .storage import canonical_json, digest
 
 _MAX_AMOUNT = Decimal("1e50")
@@ -287,7 +288,17 @@ def _eligible_fact_map(snapshot: EvidenceSnapshot) -> dict[str, FinancialFact]:
         if source.availability == "full_text"
         and source.published_at is not None
         and source.published_at <= snapshot.cutoff
-        and source.retrieved_at <= snapshot.cutoff
+        and (
+            source.retrieved_at <= snapshot.cutoff
+            or (
+                snapshot.instrument is not None
+                and source.kind == "filing"
+                and source.accession is not None
+                and is_exact_sec_archive_filing_url(
+                    source.url, cik=snapshot.instrument.cik, accession=source.accession
+                )
+            )
+        )
         and hashlib.sha256(source.content.encode("utf-8")).hexdigest() == source.content_sha256
     }
     eligible: dict[str, FinancialFact] = {}
@@ -473,6 +484,8 @@ def _calculated_values(
     historical: dict,
     scenarios: list[dict],
     result_hash: str,
+    operating_result: OperatingScenarioResult,
+    incremental_evidence_by_period: dict[str, list[str]],
 ) -> tuple[CalculatedValue, ...]:
     """Create the controlled-rendering catalog for a reviewed bridge only."""
 
@@ -519,6 +532,7 @@ def _calculated_values(
             "reported_anchors_with_conditional_tax_and_working_capital_proxy_not_reported_fact",
         )
     package_scenarios = {scenario.id: scenario for scenario in package.scenarios}
+    operating_values = {value.id: value for value in operating_result.calculated_values}
     for scenario in scenarios:
         assumptions_by_period = {
             period.period_id: period for period in package_scenarios[scenario["id"]].periods
@@ -526,7 +540,7 @@ def _calculated_values(
         scenario_evidence: list[str] = []
         for period in scenario["periods"]:
             assumptions = assumptions_by_period[period["period_id"]]
-            evidence_ids = tuple(
+            assumption_evidence = tuple(
                 dict.fromkeys(
                     item
                     for assumption in (
@@ -537,6 +551,18 @@ def _calculated_values(
                     )
                     for item in assumption.evidence_ids
                 )
+            )
+            operating_id = (
+                f"operating_scenario.{scenario['id']}.{period['period_id']}.operating_income"
+            )
+            if operating_id not in operating_values:
+                raise ValueError("cash-flow bridge requires operating-income calculation ancestry")
+            evidence_ids = tuple(
+                dict.fromkeys((
+                    *operating_values[operating_id].evidence_ids,
+                    *assumption_evidence,
+                    *incremental_evidence_by_period[period["period_id"]],
+                ))
             )
             scenario_evidence.extend(evidence_ids)
             prefix = f"cashflow_bridge.{scenario['id']}.{period['period_id']}"
@@ -626,9 +652,18 @@ def evaluate_cashflow_bridge(
     package_by_id = {item.id: item for item in package.scenarios}
     if set(package_by_id) != set(operating_by_id):
         raise ValueError("cash-flow scenarios must exactly cover reviewed operating scenarios")
-    period_ids = {
-        period.period_id for scenario in package.scenarios for period in scenario.periods
+    period_dates = {
+        period.period_id: (period.period_start, period.period_end)
+        for period in package.scenarios[0].periods
     }
+    # Commitment treatments are shared across scenarios, so their period keys
+    # must identify the same dates everywhere (not merely exist in the union).
+    for scenario in package.scenarios[1:]:
+        if {
+            period.period_id: (period.period_start, period.period_end)
+            for period in scenario.periods
+        } != period_dates:
+            raise ValueError("cash-flow scenarios must share identical period IDs and dates")
 
     commitments = {item.id: item for item in case.commitments.items}
     in_horizon = {
@@ -638,7 +673,10 @@ def evaluate_cashflow_bridge(
     if set(treatments) != in_horizon:
         raise ValueError("commitment assumptions must exactly cover the disclosed bridge horizon")
     commitment_rows = []
-    incremental_by_period = {period_id: Decimal(0) for period_id in period_ids}
+    incremental_by_period = {period_id: Decimal(0) for period_id in period_dates}
+    incremental_evidence_by_period: dict[str, list[str]] = {
+        period_id: [] for period_id in period_dates
+    }
     for identifier in sorted(in_horizon):
         source = commitments[identifier]
         treatment = treatments[identifier]
@@ -651,11 +689,17 @@ def evaluate_cashflow_bridge(
                 raise ValueError("unknown-timing commitments cannot be deducted incrementally")
             if treatment.period_id not in incremental_by_period:
                 raise ValueError("incremental commitment references an unknown cash-flow period")
+            period_start, period_end = period_dates[treatment.period_id]
+            if period_end < source.due_start or period_start > source.due_end:
+                raise ValueError(
+                    "incremental commitment period does not overlap its disclosed due window"
+                )
             if treatment.incremental_cash_outflow > source.normalized_value:
                 raise ValueError("incremental commitment deduction exceeds the disclosed amount")
             incremental_by_period[treatment.period_id] = _exact_sum(
                 incremental_by_period[treatment.period_id], treatment.incremental_cash_outflow
             )
+            incremental_evidence_by_period[treatment.period_id].append(source.fact_id)
         commitment_rows.append(
             {
                 **treatment.model_dump(mode="json"),
@@ -853,7 +897,10 @@ def evaluate_cashflow_bridge(
     }
     result_hash = digest(result_payload)
     calculated_values = (
-        _calculated_values(package, historical, rendered_scenarios, result_hash)
+        _calculated_values(
+            package, historical, rendered_scenarios, result_hash,
+            operating_result, incremental_evidence_by_period,
+        )
         if reviewed
         else ()
     )
