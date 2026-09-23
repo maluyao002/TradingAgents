@@ -47,11 +47,11 @@ Deep uses Terra / High for technical, news, and sentiment analysis, where interp
 | Display name | API model identifier |
 |---|---|
 | Astra | `gpt-6-astra` |
-| Sol | `gpt-5.6-sol` |
+| Sol | `gpt-6-sol` |
 | Terra | `gpt-5.6-terra` |
-| Luna | `gpt-5.6-luna` |
+| Luna | `gpt-6-luna` |
 
-The implementation uses explicit model identifiers, rather than the `gpt-5.6` alias for Sol. Effort values used by these profiles are lowercase: `low`, `medium`, `high`.
+The implementation uses explicit model identifiers for Sol and Luna. Effort values used by these profiles are lowercase: `low`, `medium`, `high`. The Codex runtime must advertise each profile's exact model and effort before that profile can run.
 
 ## Supporting calls and evaluation
 
@@ -61,7 +61,7 @@ The implementation uses explicit model identifiers, rather than the `gpt-5.6` al
 - Stronger reasoning cannot repair missing or stale data. All profiles should preserve source dates and missing-data flags; numerical risk limits and order checks belong in deterministic code.
 - These profiles configure analysis only and do not add broker execution.
 
-Model capability references: [OpenAI model comparison](https://developers.openai.com/api/docs/models/compare), [Astra](https://developers.openai.com/api/docs/models/gpt-6-astra), [Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol), [Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra), [Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna). These assignments are engineering recommendations, not measured trading-performance rankings.
+Model capability references: [OpenAI model comparison](https://developers.openai.com/api/docs/models/compare), [Astra](https://developers.openai.com/api/docs/models/gpt-6-astra), [Sol](https://developers.openai.com/api/docs/models/gpt-6-sol), [Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra), [Luna](https://developers.openai.com/api/docs/models/gpt-6-luna). These assignments are engineering recommendations, not measured trading-performance rankings.
 
 ## Running a profile
 

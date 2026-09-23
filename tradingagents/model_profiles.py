@@ -6,8 +6,8 @@ DEFAULT_MODEL_PROFILE = "balanced"
 
 
 def _agent(tier, effort):
-    return {"model": {"luna": "gpt-5.6-luna", "terra": "gpt-5.6-terra",
-                      "sol": "gpt-5.6-sol", "astra": "gpt-6-astra"}[tier],
+    return {"model": {"luna": "gpt-6-luna", "terra": "gpt-5.6-terra",
+                      "sol": "gpt-6-sol", "astra": "gpt-6-astra"}[tier],
             "reasoning_effort": effort}
 
 

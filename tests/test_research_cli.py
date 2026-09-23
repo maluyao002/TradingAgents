@@ -105,6 +105,15 @@ def test_dry_run_prints_normalized_safe_summary_without_creating_paths(tmp_path)
     assert summary["evidence_path"] == str(tmp_path / "snapshots/evidence.json")
     assert summary["prior_dossier_path"] == str(tmp_path / "dossiers/previous.json")
     assert summary["dossier_dir"] == str(tmp_path / "dossiers/new")
+    expected_models = request_data()["models"]
+    assert summary["model_roles"] == {
+        role: setting["effort"] for role, setting in expected_models.items()
+    }
+    assert summary["model_selections"] == {
+        role: {"model": setting["model"], "effort": setting["effort"]}
+        for role, setting in expected_models.items()
+    }
+    assert summary["model_selections"]["planner"] == {"model": "gpt-6-sol", "effort": "high"}
     assert "mandate" not in summary
     assert not (tmp_path / "out").exists()
     assert not (tmp_path / "snapshots").exists()

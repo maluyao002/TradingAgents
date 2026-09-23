@@ -94,6 +94,10 @@ def safe_summary(request: ResearchRequest) -> dict[str, object]:
         "financial_case_path": str(request.financial_case_path) if request.financial_case_path else None,
         "internal_language": request.internal_language,
         "model_roles": {role: setting.effort for role, setting in sorted(request.models.items())},
+        "model_selections": {
+            role: {"model": setting.model, "effort": setting.effort}
+            for role, setting in sorted(request.models.items())
+        },
         "output_dir": str(request.output_dir),
         "prior_dossier_path": str(request.prior_dossier_path)
         if request.prior_dossier_path

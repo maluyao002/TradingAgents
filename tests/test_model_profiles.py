@@ -108,5 +108,18 @@ def test_agreed_profile_assignments(role, quick, balanced, deep):
     for name, expected in zip(('quick', 'balanced', 'deep'), (quick, balanced, deep), strict=True):
         setting = MODEL_PROFILES[name]['agents'][role]
         tier, effort = expected.split('/')
-        assert setting['model'] == ('gpt-6-astra' if tier == 'astra' else 'gpt-5.6-' + tier)
+        assert setting['model'] == {
+            'astra': 'gpt-6-astra', 'sol': 'gpt-6-sol',
+            'terra': 'gpt-5.6-terra', 'luna': 'gpt-6-luna',
+        }[tier]
         assert setting['reasoning_effort'] == effort
+
+
+@pytest.mark.parametrize('name', list(MODEL_PROFILES))
+def test_supporting_profile_assignments_use_current_models(name):
+    agents = MODEL_PROFILES[name]['agents']
+    assert agents['signal'] == {'model': 'gpt-6-luna', 'reasoning_effort': 'low'}
+    assert agents['reflection'] == (
+        {'model': 'gpt-6-sol', 'reasoning_effort': 'high'} if name == 'deep'
+        else {'model': 'gpt-5.6-terra', 'reasoning_effort': 'medium'}
+    )

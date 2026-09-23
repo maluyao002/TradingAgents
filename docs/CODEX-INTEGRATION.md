@@ -68,6 +68,12 @@ OpenAI provider, ephemeral=true, and zero instruction sources. The created threa
 was absent from thread/list and unsubscribe succeeded. No turn/start was sent.
 An unauthenticated catalog is not proof of account entitlement or model access.
 
+A later metadata-only check of the existing isolated runtime on standalone Codex
+CLI 0.156.1 confirmed `gpt-6-sol` at high and xhigh, `gpt-6-luna` at high,
+and `gpt-6-astra` at high. It sent no inference turn. These observed pairs do
+not establish support for every effort used by a named profile; startup still
+checks each exact role assignment against that runtime's `model/list` response.
+
 Remaining gates before model execution: verify effective tool/configuration
 isolation, authentication with the dedicated runtime, structured output,
 cancellation during inference, model/effort adherence, and absence of research
@@ -102,10 +108,25 @@ preview does not run inference, fetch market data, save model settings, or fall 
 to an API provider. The early preview rejected checkpoint flags; the current full workflow supports
 backend-isolated checkpoint recovery as described below.
 
+Current named profiles assign `gpt-6-sol` to Sol roles and `gpt-6-luna` to
+Luna roles. Astra remains `gpt-6-astra`; Terra remains `gpt-5.6-terra`.
+The balanced research request defaults inherit these same role assignments.
+The Codex CLI 0.156.1 catalog added Sol and Luna to the picker. Update to that
+version or newer when the isolated runtime does not advertise the requested
+models. The app-server `model/list` response for that runtime and account is
+authoritative for availability and supported reasoning efforts. A profile with
+any missing model or effort remains unavailable; no older-model substitution
+or API fallback is made. Existing saved requests and reports keep their recorded
+model IDs. The standalone research CLI's `--dry-run` summary shows each role's
+exact model and effort in `model_selections`; the existing effort-only
+`model_roles` field remains for compatible consumers. A dry run performs no
+model or market-data calls.
+
 ### One-time sign-in (user-run)
 
 Use the official stable Codex CLI **0.153.4 or newer** on macOS/Linux and a dedicated runtime outside this
-repository. The default is `~/.tradingagents/codex`. Do not copy authentication files
+repository. This is the protocol floor; **0.156.1 or newer is recommended** for
+the GPT-6 Sol/Luna catalog. The default runtime is `~/.tradingagents/codex`. Do not copy authentication files
 from the normal Codex home or put credentials in this repository.
 
 This integration uses the isolation controls verified on CLI 0.153.4. Older, prerelease, or
@@ -313,6 +334,7 @@ tests establish routing, validation and recovery, not model quality or profitabi
 ## Sources
 
 - [Official app-server protocol](https://learn.chatgpt.com/docs/app-server)
+- [Official Codex changelog](https://learn.chatgpt.com/docs/changelog)
 - [Official authentication](https://learn.chatgpt.com/docs/auth)
 
 ### Report exports and market-data availability

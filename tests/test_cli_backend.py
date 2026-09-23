@@ -229,6 +229,42 @@ def test_codex_research_profile_rejects_unsupported_catalog(monkeypatch):
         backend.select_codex_profile(adapter)
 
 
+def test_old_sol_luna_catalog_does_not_enable_current_profiles(monkeypatch):
+    from tradingagents.codex.adapter import CodexAdapterError
+
+    class OldCatalog:
+        def validate_selection(self, model, effort):
+            if model not in {"gpt-6-astra", "gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna"}:
+                raise CodexAdapterError("model unavailable")
+
+    adapter = OldCatalog()
+    assert all(backend._profile_issues(adapter, name) for name in ("quick", "balanced", "deep"))
+    with pytest.raises(CodexAdapterError, match="No complete research profile"):
+        backend.select_codex_profile(adapter)
+
+
+def test_observed_high_efforts_alone_do_not_enable_profiles():
+    from tradingagents.codex.adapter import CodexAdapterError
+
+    observed = {
+        ("gpt-6-sol", "high"), ("gpt-6-sol", "xhigh"),
+        ("gpt-6-luna", "high"), ("gpt-6-astra", "high"),
+        ("gpt-5.6-terra", "medium"), ("gpt-5.6-terra", "high"),
+    }
+
+    class PartialCatalog:
+        def validate_selection(self, model, effort):
+            if (model, effort) not in observed:
+                raise CodexAdapterError("effort unavailable")
+
+    adapter = PartialCatalog()
+    assert "market" in backend._profile_issues(adapter, "quick")
+    assert "trader" in backend._profile_issues(adapter, "balanced")
+    assert "bull" in backend._profile_issues(adapter, "deep")
+    with pytest.raises(CodexAdapterError, match="No complete research profile"):
+        backend.select_codex_profile(adapter)
+
+
 def test_codex_selections_skip_api_settings(monkeypatch):
     from cli.models import AnalystType
     fake = _fake_adapter(monkeypatch)
@@ -250,4 +286,4 @@ def test_codex_selections_skip_api_settings(monkeypatch):
     assert config["llm_backend"] == "codex"
     assert config["backend_url"] is None
     assert config["checkpoint_enabled"] is True
-    assert config["agent_models"]["fundamentals"] == {"model": "gpt-5.6-sol", "reasoning_effort": "high"}
+    assert config["agent_models"]["fundamentals"] == {"model": "gpt-6-sol", "reasoning_effort": "high"}
