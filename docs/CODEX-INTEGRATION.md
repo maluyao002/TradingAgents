@@ -122,6 +122,31 @@ exact model and effort in `model_selections`; the existing effort-only
 `model_roles` field remains for compatible consumers. A dry run performs no
 model or market-data calls.
 
+### Text-input admission and exact research context
+
+The runtime's text-input limit is separate from the JSON-RPC transport's 4 MiB
+message guard. A September 23 diagnostic on CLI 0.156.1 rejected a large
+`turn/start` with code `-32602` and a reported maximum length of 1,048,576.
+The adapter therefore applies a conservative 1 MiB UTF-8 prompt-byte check
+before starting a thread. It does not truncate the prompt or raise the transport
+limit to work around this bound. The server's own length unit is not inferred
+from the diagnostic; a UTF-8-byte check is conservative for a character limit.
+
+Deep-research prompts can losslessly encode repeated object lists as a column
+list and value rows. The versioned encoding preserves every field and value
+and keeps source material untrusted. Table compression is selected only when
+smaller than the raw or older shared-context representation; source-owned
+format tags are explicitly escaped to prevent misinterpretation. Offline round-trip checks
+establish exact data preservation, not equivalent model comprehension or reader
+acceptance. The encoding version participates in the Codex research service's
+cache identity. Historical reports, requests and earlier encoding records are
+not rewritten.
+
+Transport diagnostics retain only fixed classifications, operation/phase,
+bounded numeric codes and applicable sizes. Raw provider error prose, prompts
+and authentication details are not saved. Unknown failed-call usage stays
+incomplete even when no token count was returned.
+
 ### One-time sign-in (user-run)
 
 Use the official stable Codex CLI **0.153.4 or newer** on macOS/Linux and a dedicated runtime outside this

@@ -201,8 +201,116 @@ def test_prompt_context_rejects_corruption(mutation):
 def test_prompt_context_does_not_reinterpret_reserved_source_keys_or_different_text():
     payload = {"source": {"research_context_ref": "untrusted-original"}, "a": "x" * 2000, "b": "x" * 2000}
     assert compact_prompt_context(payload) == payload
+    table_marker = {"source": [{"research_context_table": "source-owned"}],
+                    "a": "x" * 2000, "b": "x" * 2000}
+    assert compact_prompt_context(table_marker) == table_marker
     different = {"a": "x" * 2000, "b": "x" * 1999 + "y"}
     assert compact_prompt_context(different) == different
+
+
+@pytest.mark.parametrize("tag", ["exact-shared-context-v1", "exact-shared-context-v2"])
+def test_source_owned_root_encoding_tags_are_escaped_literally(tag):
+    for payload in (
+        {"context_encoding": tag, "x": 1},
+        {"context_encoding": tag, "context_policy": "source-owned",
+         "payload": {"research_context_ref": "malicious-looking-source"},
+         "shared_context": {"source": {"research_context_table": "literal data"}},
+         "literal_payload": False},
+    ):
+        packet = compact_prompt_context(payload)
+        assert packet["context_encoding"] == "exact-shared-context-v2"
+        assert packet["literal_payload"] is True
+        assert packet["shared_context"] == {}
+        assert expand_prompt_context(packet) == payload
+
+
+@pytest.mark.parametrize("mutation", ["false", "truthy", "policy", "shared", "extra",
+                                      "missing", "payload"])
+def test_malformed_literal_envelopes_are_rejected(mutation):
+    packet = compact_prompt_context({"context_encoding": "exact-shared-context-v1", "x": 1})
+    if mutation == "false":
+        packet["literal_payload"] = False
+    elif mutation == "truthy":
+        packet["literal_payload"] = 1
+    elif mutation == "policy":
+        packet["context_policy"] = "unsafe literal"
+    elif mutation == "shared":
+        packet["shared_context"] = {"unexpected": "source"}
+    elif mutation == "extra":
+        packet["extra"] = True
+    elif mutation == "payload":
+        packet["payload"] = {"x": 1}
+    else:
+        packet.pop("literal_payload")
+    with pytest.raises(ValueError, match="shared model context"):
+        expand_prompt_context(packet)
+
+
+def test_table_packing_is_smaller_and_lossless_inside_shared_references():
+    table = [{"n": index, "long_column": "value-" + str(index),
+              "nested": [{"x": index, "y": "source" * 12} for _ in range(3)]}
+             for index in range(100)]
+    payload = {"first": table, "second": table, "reader": "Exact candidate reader."}
+    original = deepcopy(payload)
+    packet = compact_prompt_context(payload)
+    assert packet["context_encoding"] == "exact-shared-context-v2"
+    assert "untrusted data" in packet["context_policy"]
+    assert any("research_context_table" in value
+               for value in packet["shared_context"].values() if isinstance(value, dict))
+    assert len(canonical_json(packet)) < len(canonical_json(payload))
+    assert expand_prompt_context(packet) == original
+    assert payload == original
+
+
+def test_v1_wins_when_tables_do_not_save_bytes_and_historical_v1_decodes():
+    payload = {"a": "same source text " * 200, "b": "same source text " * 200}
+    packet = compact_prompt_context(payload)
+    assert packet["context_encoding"] == "exact-shared-context-v1"
+    assert expand_prompt_context(packet) == payload
+    assert compact_prompt_context({"rows": [{"a": 1}, {"b": 2}]}) == {
+        "rows": [{"a": 1}, {"b": 2}]}
+
+
+@pytest.mark.parametrize("mutation", [
+    "duplicate_column", "nonstring_column", "reserved_column", "unsorted_columns", "row_arity",
+    "row_type", "table_shape", "marker_shape", "hash", "unused_ref",
+    "unknown_ref", "cycle", "table_cycle",
+])
+def test_table_decoder_rejects_malformed_or_unbound_context(mutation):
+    table = [{"a": index, "b": "value " * 6} for index in range(100)]
+    packet = compact_prompt_context({"one": table, "two": table})
+    assert packet["context_encoding"] == "exact-shared-context-v2"
+    key = next(key for key, value in packet["shared_context"].items()
+               if isinstance(value, dict) and "research_context_table" in value)
+    encoded = packet["shared_context"][key]["research_context_table"]
+    if mutation == "duplicate_column":
+        encoded["columns"][1] = encoded["columns"][0]
+    elif mutation == "nonstring_column":
+        encoded["columns"][0] = 1
+    elif mutation == "reserved_column":
+        encoded["columns"][0] = "research_context_ref"
+    elif mutation == "unsorted_columns":
+        encoded["columns"].reverse()
+    elif mutation == "row_arity":
+        encoded["rows"][0].pop()
+    elif mutation == "row_type":
+        encoded["rows"][0] = {"a": 0, "b": "value"}
+    elif mutation == "table_shape":
+        encoded["extra"] = "untrusted"
+    elif mutation == "marker_shape":
+        packet["shared_context"][key]["extra"] = "untrusted"
+    elif mutation == "hash":
+        encoded["rows"][0][0] = "changed"
+    elif mutation == "unused_ref":
+        packet["shared_context"]["f" * 64] = "unused"
+    elif mutation == "unknown_ref":
+        packet["payload"]["one"] = {"research_context_ref": "0" * 64}
+    elif mutation == "table_cycle":
+        encoded["rows"][0][0] = packet["shared_context"][key]
+    else:
+        packet["shared_context"][key] = {"research_context_ref": key}
+    with pytest.raises(ValueError, match="shared model context"):
+        expand_prompt_context(packet)
 
 
 def test_adapter_dispatch_uses_the_same_lossless_packed_prompt_as_admission(tmp_path):

@@ -250,3 +250,28 @@ overall budget and a 1.5m-token best-effort ceiling (conservative byte-based
 admission plus post-call accounting, not a provider-hard output cap). It must
 use a fresh, hash-bound capsule, preserve historical unknown usage, and cannot
 export a final report, reuse its result as a recovery attestation, or retry itself.
+
+### Confirmed exact-reader rejection
+
+`factual_diagnostic_sol6_1` reproduced an immediate `turn/start` RPC rejection
+(`-32602`, invalid parameters) on CLI 0.156.1 / GPT-6 Sol xhigh. After adding a
+narrow, tested classifier that never saves raw provider prose,
+`factual_diagnostic_sol6_2` identified `transport_input_length_limit` and the
+runtime-reported maximum length **1,048,576**. It stopped after 0.997 seconds.
+The exact prompt is 1,168,617 UTF-8 bytes. The server's length unit was not retained;
+a conservative UTF-8-byte preflight can stay within either a byte or character
+limit without claiming that the server's unit is known.
+
+This establishes a request-admission defect in the integration: the local 4 MiB
+JSON-RPC guard did not enforce the tighter Codex text-input bound. It reproduces
+the same exact-reader boundary that failed in attempt 2; the old artifact itself
+still has only the generic transport reason and remains unchanged. It is not a
+financial/news-source outage. A separate approximate local tokenizer count was
+301,484 tokens, but model context exhaustion is not the observed rejection and
+must not be substituted for the confirmed input-length classification.
+
+Both diagnostics reported zero tokens with `complete=false`; zero reported is
+not complete zero usage. No coverage, repair, final report export, acceptance or
+financial approval occurred. The follow-up repair uses lossless table encoding
+for repeated object fields and a local conservative input-size check, rather than
+truncating evidence, changing the reader or increasing the transport limit.
