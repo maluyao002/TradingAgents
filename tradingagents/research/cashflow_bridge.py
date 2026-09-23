@@ -14,7 +14,7 @@ from datetime import date, timedelta
 from decimal import Context, Decimal, localcontext
 from typing import Literal
 
-from pydantic import AwareDatetime, Field, field_validator, model_validator
+from pydantic import AwareDatetime, Field, field_validator, model_serializer, model_validator
 
 from .calculated_values import CalculatedValue
 from .contracts import Contract, EvidenceSnapshot, FinancialFact, Identifier, ReviewFinding
@@ -81,6 +81,64 @@ class ReportedCashFlowAnchor(Contract):
         ]
         if len(fact_ids) != len(set(fact_ids)):
             raise ValueError("working-capital facts cannot be reused across components")
+        return self
+
+
+_RECONCILIATION_METRICS = {
+    "net_income": "net_income",
+    "stock_compensation": "stock_based_compensation",
+    "deferred_tax": "deferred_tax",
+    "equity_gains": "equity_gains",
+    "other_adjustment": "other_adjustment",
+    "receivables_movement": "receivables_movement",
+    "inventory_movement": "inventory_movement",
+    "prepaid_other_assets_movement": "prepaid_other_assets_movement",
+    "payables_movement": "payables_movement",
+    "accrued_current_liabilities_movement": "accrued_current_liabilities_movement",
+    "other_long_term_liabilities_movement": "other_long_term_liabilities_movement",
+}
+_NONCASH_ROLES = (
+    "stock_compensation", "deferred_tax", "equity_gains", "other_adjustment"
+)
+_MOVEMENT_ROLES = (
+    "receivables_movement", "inventory_movement", "prepaid_other_assets_movement",
+    "payables_movement", "accrued_current_liabilities_movement",
+    "other_long_term_liabilities_movement",
+)
+
+
+class HistoricalCashFlowRowSelector(Contract):
+    """One signed, reported source-statement row selected for exact reconciliation."""
+
+    role: Literal[
+        "net_income", "stock_compensation", "deferred_tax", "equity_gains",
+        "other_adjustment", "receivables_movement", "inventory_movement",
+        "prepaid_other_assets_movement", "payables_movement",
+        "accrued_current_liabilities_movement", "other_long_term_liabilities_movement",
+    ]
+    fact_id: Identifier
+    sign: Literal["positive", "negative", "zero"]
+
+
+class HistoricalCashFlowReconciliationSelector(Contract):
+    """Complete H1 CFO rows, plus issuer FCF's distinct asset-principal row."""
+
+    anchor_source_id: Identifier
+    cashflow_statement_source_id: Identifier
+    rows: tuple[HistoricalCashFlowRowSelector, ...] = Field(min_length=11, max_length=11)
+    asset_principal_cashflow_fact_id: Identifier
+    issuer_free_cash_flow_fact_id: Identifier
+
+    @model_validator(mode="after")
+    def complete_unique_roles(self):
+        roles = [row.role for row in self.rows]
+        fact_ids = [row.fact_id for row in self.rows]
+        if set(roles) != set(_RECONCILIATION_METRICS) or len(roles) != len(set(roles)):
+            raise ValueError("historical reconciliation requires each source row role exactly once")
+        all_ids = [*fact_ids, self.asset_principal_cashflow_fact_id,
+                   self.issuer_free_cash_flow_fact_id]
+        if len(all_ids) != len(set(all_ids)):
+            raise ValueError("historical reconciliation facts cannot be reused across roles")
         return self
 
 
@@ -214,11 +272,21 @@ class CashFlowBridgePackage(Contract):
         "explicit_fiscal_period_dates_no_calendar_translation"
     )
     historical_anchor: ReportedCashFlowAnchor
+    historical_reconciliation: HistoricalCashFlowReconciliationSelector | None = None
     scenarios: tuple[CashFlowScenarioAssumptions, ...] = Field(min_length=1, max_length=3)
     commitment_horizon: str = Field(min_length=1)
     commitment_assumptions: tuple[CommitmentOverlapAssumption, ...]
     limitations: tuple[str, ...] = Field(min_length=1)
     review: CashFlowBridgeReview | None = None
+
+    @model_serializer(mode="wrap")
+    def omit_absent_reconciliation(self, handler):
+        # Preserve both semantic and byte-level artifact identity for packages
+        # created before this optional extension, including saved reader previews.
+        data = handler(self)
+        if self.historical_reconciliation is None:
+            data.pop("historical_reconciliation", None)
+        return data
 
     @model_validator(mode="after")
     def unique_nonblank_package(self):
@@ -249,7 +317,10 @@ def cashflow_bridge_package_sha256(package: CashFlowBridgePackage) -> str:
 
     if not isinstance(package, CashFlowBridgePackage):
         raise TypeError("package must be a CashFlowBridgePackage")
-    return digest(package.model_dump(mode="json", exclude={"review"}))
+    excluded = {"review"}
+    if package.historical_reconciliation is None:
+        excluded.add("historical_reconciliation")
+    return digest(package.model_dump(mode="json", exclude=excluded))
 
 
 def _exact_product(left: Decimal, right: Decimal) -> Decimal:
@@ -457,6 +528,170 @@ def _historical_result(anchor: ReportedCashFlowAnchor, facts: dict[str, Financia
     }
 
 
+def _historical_reconciliation(
+    selector: HistoricalCashFlowReconciliationSelector,
+    anchor: ReportedCashFlowAnchor,
+    historical: dict,
+    facts: dict[str, FinancialFact],
+) -> dict:
+    """Attribute the unchanged proxy residual to exact reported CFO source rows."""
+
+    anchor_ids = (
+        anchor.operating_income_fact_id, anchor.income_before_tax_fact_id,
+        anchor.income_tax_expense_fact_id, anchor.depreciation_amortization_fact_id,
+        anchor.capex_cashflow_fact_id, anchor.operating_cash_flow_fact_id,
+    )
+    if any(row.fact_id in anchor_ids for row in selector.rows):
+        raise ValueError("historical reconciliation row reuses a different anchor role")
+    anchor_cfo = facts[anchor.operating_cash_flow_fact_id]
+    anchor_capex = facts[anchor.capex_cashflow_fact_id]
+    anchor_da = facts[anchor.depreciation_amortization_fact_id]
+    if (
+        anchor_cfo.source_id != selector.anchor_source_id
+        or anchor_capex.source_id != selector.anchor_source_id
+        or anchor_da.source_id != selector.cashflow_statement_source_id
+    ):
+        raise ValueError("historical reconciliation anchor source mismatch")
+
+    row_by_role = {row.role: row for row in selector.rows}
+    source_rows = {}
+    for role, metric in _RECONCILIATION_METRICS.items():
+        selection = row_by_role[role]
+        fact = _fact(facts, selection.fact_id, metric, anchor)
+        expected_source = (
+            selector.anchor_source_id
+            if role in {"net_income", "stock_compensation"}
+            else selector.cashflow_statement_source_id
+        )
+        if fact.source_id != expected_source or fact.inputs or fact.formula:
+            raise ValueError(f"historical reconciliation source mismatch: {role}")
+        value = _normalized_fact_value(fact)
+        actual_sign = "positive" if value > 0 else "negative" if value < 0 else "zero"
+        if actual_sign != selection.sign:
+            raise ValueError(f"historical reconciliation sign mismatch: {role}")
+        source_rows[role] = {
+            "fact_id": fact.id,
+            "source_id": fact.source_id,
+            "source_location": fact.location,
+            "metric": fact.metric,
+            "source_value": fact.value,
+            "scale": fact.scale,
+            "signed_value": value,
+            "sign": actual_sign,
+        }
+
+    principal = _fact(
+        facts, selector.asset_principal_cashflow_fact_id,
+        "asset_principal_cashflow", anchor,
+    )
+    issuer_fcf = facts.get(selector.issuer_free_cash_flow_fact_id)
+    if issuer_fcf is None:
+        raise ValueError("historical reconciliation issuer FCF fact is absent or ineligible")
+    if (
+        issuer_fcf.metric != "issuer_free_cash_flow"
+        or issuer_fcf.period_type != "duration"
+        or issuer_fcf.period_start != anchor.period_start
+        or issuer_fcf.period_end != anchor.period_end
+        or issuer_fcf.basis != "issuer non-GAAP FCF"
+        or issuer_fcf.unit != "USD"
+        or issuer_fcf.currency != "USD"
+        or issuer_fcf.segment is not None
+    ):
+        raise ValueError("historical reconciliation issuer FCF selector mismatch")
+    if (
+        principal.source_id != selector.anchor_source_id
+        or issuer_fcf.source_id != selector.anchor_source_id
+        or principal.inputs or principal.formula or issuer_fcf.inputs or issuer_fcf.formula
+    ):
+        raise ValueError("historical reconciliation FCF source mismatch")
+    principal_value = _normalized_fact_value(principal)
+    issuer_value = _normalized_fact_value(issuer_fcf)
+    if principal_value > 0:
+        raise ValueError("asset principal cash flow must use the negative-outflow convention")
+    comparator = Decimal(historical["reported_free_cash_flow"])
+    if _exact_sum(comparator, principal_value) != issuer_value:
+        raise ValueError("issuer FCF differs from CFO less capex and asset principal")
+
+    noncash = _exact_sum(
+        *(source_rows[role]["signed_value"] for role in _NONCASH_ROLES)
+    )
+    movements = _exact_sum(
+        *(source_rows[role]["signed_value"] for role in _MOVEMENT_ROLES)
+    )
+    reconstructed_cfo = _exact_sum(
+        source_rows["net_income"]["signed_value"],
+        Decimal(historical["reported_depreciation_amortization"]),
+        noncash, movements,
+    )
+    if reconstructed_cfo != Decimal(historical["reported_operating_cash_flow"]):
+        raise ValueError("historical reconciliation CFO subtotal mismatch")
+
+    components = {
+        "tax_proxy_less_net_income": {
+            "value": _exact_sum(
+                Decimal(historical["nopat_proxy"]),
+                source_rows["net_income"]["signed_value"].copy_negate(),
+            ),
+            "fact_ids": (
+                anchor.operating_income_fact_id, anchor.income_before_tax_fact_id,
+                anchor.income_tax_expense_fact_id, row_by_role["net_income"].fact_id,
+            ),
+        },
+        "minus_omitted_noncash_adjustments": {
+            "value": noncash.copy_negate(),
+            "fact_ids": tuple(row_by_role[role].fact_id for role in _NONCASH_ROLES),
+        },
+        "balance_sheet_proxy_less_reported_movements": {
+            "value": _exact_sum(
+                Decimal(historical["change_in_known_row_working_capital"]).copy_negate(),
+                movements.copy_negate(),
+            ),
+            "fact_ids": tuple(dict.fromkeys((
+                *(fact_id for component in anchor.working_capital_components
+                  for fact_id in (component.current_fact_id, component.prior_fact_id)),
+                *(row_by_role[role].fact_id for role in _MOVEMENT_ROLES),
+            ))),
+        },
+    }
+    residual = _exact_sum(*(component["value"] for component in components.values()))
+    if residual != Decimal(historical["bridge_minus_reported_free_cash_flow"]):
+        raise ValueError("historical reconciliation residual does not match proxy bridge")
+    return {
+        "status": "mechanically_attributed_not_economic_approval",
+        "currency": "USD",
+        "period_start": anchor.period_start,
+        "period_end": anchor.period_end,
+        "anchor_source_id": selector.anchor_source_id,
+        "cashflow_statement_source_id": selector.cashflow_statement_source_id,
+        "source_rows": source_rows,
+        "depreciation_amortization_fact_id": anchor.depreciation_amortization_fact_id,
+        "depreciation_amortization_source_id": anchor_da.source_id,
+        "depreciation_amortization_source_location": anchor_da.location,
+        "depreciation_amortization_value": historical["reported_depreciation_amortization"],
+        "reported_noncash_adjustments": noncash,
+        "reported_cashflow_movements": movements,
+        "reconstructed_operating_cash_flow": reconstructed_cfo,
+        "reported_operating_cash_flow_fact_id": anchor.operating_cash_flow_fact_id,
+        "reported_operating_cash_flow_source_id": anchor_cfo.source_id,
+        "ocf_minus_capex": comparator,
+        "issuer_free_cash_flow": issuer_value,
+        "issuer_free_cash_flow_fact_id": issuer_fcf.id,
+        "issuer_free_cash_flow_source_location": issuer_fcf.location,
+        "asset_principal_cashflow": principal_value,
+        "asset_principal_cashflow_fact_id": principal.id,
+        "asset_principal_source_location": principal.location,
+        "issuer_fcf_less_ocf_minus_capex": _exact_sum(
+            issuer_value, comparator.copy_negate()
+        ),
+        "residual_components": components,
+        "bridge_minus_ocf_minus_capex": residual,
+        "limitation": (
+            "Source-statement arithmetic only; mixed working-capital movements and "
+            "operating-tax economics remain unresolved, and this is not economic approval."
+        ),
+    }
+
+
 def _review_status(package: CashFlowBridgePackage) -> tuple[bool, tuple[str, ...]]:
     review = package.review
     if review is None:
@@ -531,6 +766,31 @@ def _calculated_values(
             historical_evidence,
             "reported_anchors_with_conditional_tax_and_working_capital_proxy_not_reported_fact",
         )
+    reconciliation = historical.get("reconciliation")
+    if reconciliation is not None:
+        source_rows = reconciliation["source_rows"]
+        all_reconciliation_ids = tuple(dict.fromkeys((
+            *historical_evidence,
+            *(row["fact_id"] for row in source_rows.values()),
+            reconciliation["asset_principal_cashflow_fact_id"],
+            reconciliation["issuer_free_cash_flow_fact_id"],
+        )))
+        for field in (
+            "reconstructed_operating_cash_flow", "ocf_minus_capex",
+            "issuer_free_cash_flow", "issuer_fcf_less_ocf_minus_capex",
+            "bridge_minus_ocf_minus_capex",
+        ):
+            add(
+                f"cashflow_bridge.historical.reconciliation.{field}",
+                reconciliation[field], all_reconciliation_ids,
+                "mechanical_historical_reconciliation_not_economic_approval",
+            )
+        for name, component in reconciliation["residual_components"].items():
+            add(
+                f"cashflow_bridge.historical.reconciliation.{name}",
+                component["value"], component["fact_ids"],
+                "mechanical_proxy_residual_component_not_economic_approval",
+            )
     package_scenarios = {scenario.id: scenario for scenario in package.scenarios}
     operating_values = {value.id: value for value in operating_result.calculated_values}
     for scenario in scenarios:
@@ -644,6 +904,10 @@ def evaluate_cashflow_bridge(
 
     facts = _eligible_fact_map(snapshot)
     historical = _historical_result(package.historical_anchor, facts)
+    if package.historical_reconciliation is not None:
+        historical["reconciliation"] = _historical_reconciliation(
+            package.historical_reconciliation, package.historical_anchor, historical, facts
+        )
     if package.historical_anchor.period_end != case.opening_date:
         raise ValueError("reported cash-flow anchor must end on the observed case opening date")
 

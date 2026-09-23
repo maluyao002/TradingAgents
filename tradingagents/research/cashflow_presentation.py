@@ -1,7 +1,7 @@
 """Deterministic reader disclosure of reviewed conditional inputs, not forecasts."""
 
 import re
-from decimal import Decimal, localcontext
+from decimal import ROUND_HALF_EVEN, Context, Decimal, localcontext
 from html import escape
 
 
@@ -32,8 +32,7 @@ def cashflow_assumptions(bridge, language):
         plain = escape(str(value)).replace("|", "&#124;").replace("\n", " ").replace("\r", " ")
         return re.sub(r"([\\`*_{}\[\]()!])", r"\\\1", plain)
 
-    with localcontext() as ctx:
-        ctx.prec = 50
+    with localcontext(Context(prec=80, rounding=ROUND_HALF_EVEN)):
         for scenario in bridge.model_context["scenarios"]:
             for period in scenario["periods"]:
                 da = Decimal(period["depreciation_amortization"]["value"])

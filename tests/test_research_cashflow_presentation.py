@@ -1,6 +1,7 @@
 """Reviewed assumptions are mandatory reader content, not writer discretion."""
 
 from copy import deepcopy
+from decimal import ROUND_DOWN, localcontext
 from hashlib import sha256
 from types import SimpleNamespace
 
@@ -60,3 +61,13 @@ def test_table_labels_cannot_embed_markdown_images_or_links(tmp_path):
     table = cashflow_assumptions(SimpleNamespace(reviewed=True, model_context=model), "English")
     assert "![tracking](" not in table and "[link](" not in table
     assert r"\!\[tracking\]\(" in table and "&#124; extra" in table
+
+
+def test_presentation_is_independent_of_decimal_context(tmp_path):
+    request, snapshot = setup(tmp_path)
+    context = load_case_context(request.financial_case_path.read_bytes(), request, snapshot)
+    normal = cashflow_assumptions(context.cashflow_bridge, "English")
+    with localcontext() as ctx:
+        ctx.prec = 3
+        ctx.rounding = ROUND_DOWN
+        assert cashflow_assumptions(context.cashflow_bridge, "English") == normal

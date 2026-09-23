@@ -94,6 +94,12 @@ CASE_READER_REQUIREMENTS = (
     "periods unless a particular model requires it. A conditional cash-flow bridge does not "
     "complete valuation, capitalization, liquidity or economic underwriting. Explain which "
     "tax, reinvestment or commitment assumption drives the result, not merely that it is uncertain."
+    " The renderer adds a code-owned table of reviewed cash-flow inputs; explain the dominant "
+    "drivers without repeating the table. When historical reconciliation is supplied, distinguish "
+    "CFO less asset purchases from issuer-defined free cash flow, including asset-principal "
+    "payments. The legacy reported_free_cash_flow field names the former comparator, not issuer "
+    "FCF. Explain the remaining proxy residual and its typed components; mechanical attribution "
+    "is not normalization, economic approval, or a reason to remove funding/valuation limits."
 )
 
 
