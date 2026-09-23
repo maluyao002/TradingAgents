@@ -104,6 +104,28 @@ def _verified(case_recovery_source):
     return verify_case_recovery_prefix(prepared)
 
 
+def test_case_recovery_accepts_safe_diagnostic_and_rejects_extra_fields(case_recovery_source):
+    request, source_run, home = case_recovery_source
+    path = source_run / "stages/resources.json"
+    record = read_json(path)
+    assert "failure_diagnostic" not in record["output"]  # Legacy source remains valid.
+    prepare_case_recovery(request, source_run, home)
+
+    record["output"]["failure_reason"] = "transport_rpc_rejected"
+    record["output"]["failure_diagnostic"] = {
+        "kind": "rpc_rejection", "phase": "turn_start", "method": "turn/start", "code": -32000,
+    }
+    record["output_hash"] = digest(record["output"])
+    atomic_write(path, canonical_json(record))
+    prepare_case_recovery(request, source_run, home)
+
+    record["output"]["failure_diagnostic"]["raw_error"] = "private-provider-SECRET"
+    record["output_hash"] = digest(record["output"])
+    atomic_write(path, canonical_json(record))
+    with pytest.raises(ValueError, match="resource checkpoint shape"):
+        prepare_case_recovery(request, source_run, home)
+
+
 def _continuation(verified, tmp_path):
     source_request = verified.prepared.source_request
     budget = Budget(

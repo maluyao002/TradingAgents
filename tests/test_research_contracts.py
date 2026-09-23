@@ -70,6 +70,22 @@ def test_request_round_trip_is_versioned_and_requires_aware_cutoff():
             ResearchRequest.model_validate(request_data(**invalid))
 
 
+def test_default_research_roles_follow_balanced_profile():
+    roles = default_roles()
+    assert {role: (setting.model, setting.effort) for role, setting in roles.items()} == {
+        "planner": ("gpt-6-sol", "high"),
+        "business": ("gpt-6-sol", "high"),
+        "accounting": ("gpt-6-sol", "high"),
+        "expectations": ("gpt-6-sol", "high"),
+        "management": ("gpt-6-sol", "high"),
+        "valuation": ("gpt-6-sol", "high"),
+        "events": ("gpt-5.6-terra", "medium"),
+        "challenger": ("gpt-6-astra", "high"),
+        "verifier": ("gpt-6-sol", "high"),
+        "editor": ("gpt-6-astra", "high"),
+    }
+
+
 def test_request_requires_exact_roles_and_replay_evidence():
     missing_role = deepcopy(request_data()["models"])
     missing_role.pop("editor")

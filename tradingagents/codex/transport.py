@@ -76,8 +76,18 @@ _INHERITED_ENV = frozenset(
     }
 )
 
-_SAFE_ERROR_CODE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
 _SAFE_METHOD = re.compile(r"^[A-Za-z0-9_.:/-]{1,128}$")
+_INPUT_LENGTH_LIMIT = re.compile(r"Input exceeds the maximum length of ([0-9]{1,10})(?![0-9])")
+TRANSPORT_DIAGNOSTIC_METHODS = frozenset({
+    "initialize", "account/read", "model/list", "config/read",
+    "mcpServerStatus/list", "experimentalFeature/list", "thread/start",
+    "turn/start", "turn/interrupt", "thread/unsubscribe",
+})
+_PROTOCOL_DIAGNOSTICS = frozenset({
+    "protocol_error", "request_size_limit", "response_size_limit",
+    "malformed_json", "invalid_message", "invalid_response",
+    "invalid_notification", "unexpected_server_request",
+})
 _STABLE_CODEX_VERSION = re.compile(
     r"^codex-cli (0|[1-9][0-9]{0,8})\."
     r"(0|[1-9][0-9]{0,8})\."
@@ -100,6 +110,13 @@ class TransportClosed(TransportError):
 class ProtocolError(TransportError):
     """The app-server emitted an invalid or unexpected protocol message."""
 
+    def __init__(self, message: str, *, kind: str = "protocol_error",
+                 request_bytes: int | None = None, limit_bytes: int | None = None) -> None:
+        super().__init__(message)
+        self._diagnostic_kind = kind if kind in _PROTOCOL_DIAGNOSTICS else "protocol_error"
+        self._request_bytes = request_bytes
+        self._limit_bytes = limit_bytes
+
 
 class UnexpectedServerRequest(ProtocolError):
     """The server attempted to ask this metadata-only client to perform work."""
@@ -108,20 +125,62 @@ class UnexpectedServerRequest(ProtocolError):
 class ServerError(TransportError):
     """A redacted JSON-RPC error returned by the app-server."""
 
-    def __init__(self, method: str, code: object = None) -> None:
+    def __init__(self, method: str, code: object = None, message: object = None) -> None:
         safe_code = _safe_error_code(code)
         suffix = f" (code {safe_code})" if safe_code is not None else ""
-        super().__init__(f"Codex app-server rejected {method}{suffix}; details redacted")
-        self.method = method
+        safe_method = method if type(method) is str and method in TRANSPORT_DIAGNOSTIC_METHODS else "unknown"
+        super().__init__(f"Codex app-server rejected {safe_method}{suffix}; details redacted")
+        self.method = safe_method
         self.code = safe_code
+        self._reported_max_length = None
+        if safe_method == "turn/start" and safe_code == -32602 and type(message) is str:
+            match = _INPUT_LENGTH_LIMIT.match(message)
+            if match is not None:
+                limit = int(match.group(1))
+                if 0 < limit <= 2**31:
+                    self._reported_max_length = limit
 
 
-def _safe_error_code(value: object) -> str | int | None:
-    if isinstance(value, int) and not isinstance(value, bool):
-        return value
-    if isinstance(value, str) and _SAFE_ERROR_CODE.fullmatch(value):
+def _safe_error_code(value: object) -> int | None:
+    if type(value) is int and -(2**31) <= value < 2**31:
         return value
     return None
+
+
+def transport_failure_diagnostic(error: BaseException) -> dict[str, str | int]:
+    """Extract only locally classified, bounded transport failure facts."""
+    if type(error) is ServerError:
+        state = object.__getattribute__(error, "__dict__")
+        fields: dict[str, str | int] = {"kind": "rpc_rejection"}
+        method = state.get("method")
+        code = state.get("code")
+        if type(method) is str and method in TRANSPORT_DIAGNOSTIC_METHODS:
+            fields["method"] = method
+        if _safe_error_code(code) is not None:
+            fields["code"] = code
+        limit = state.get("_reported_max_length")
+        if (method == "turn/start" and code == -32602
+                and type(limit) is int and 0 < limit <= 2**31):
+            fields["kind"] = "input_length_limit"
+            fields["reported_max_length"] = limit
+        return fields
+    if type(error) is ProtocolError or type(error) is UnexpectedServerRequest:
+        state = object.__getattribute__(error, "__dict__")
+        kind = state.get("_diagnostic_kind")
+        fields = {"kind": kind if type(kind) is str and kind in _PROTOCOL_DIAGNOSTICS
+                  else "protocol_error"}
+        if fields["kind"] == "request_size_limit":
+            for name, key in (("request_bytes", "_request_bytes"),
+                              ("limit_bytes", "_limit_bytes")):
+                value = state.get(key)
+                if type(value) is int and 0 <= value <= 2**31:
+                    fields[name] = value
+        return fields
+    if type(error) is TransportTimeout:
+        return {"kind": "timeout"}
+    if type(error) is TransportClosed:
+        return {"kind": "closed"}
+    return {"kind": "transport_error"}
 
 
 def build_app_server_command(executable: str = "codex") -> tuple[str, ...]:
@@ -377,15 +436,18 @@ class CodexAppServerTransport:
                     self._messages.put(TransportClosed("Codex app-server closed stdout"))
                     return
                 if len(line) > self.message_limit:
-                    self._messages.put(ProtocolError("Codex app-server message exceeded size limit"))
+                    self._messages.put(ProtocolError("Codex app-server message exceeded size limit",
+                                                     kind="response_size_limit"))
                     return
                 try:
                     decoded = json.loads(line)
                 except (UnicodeDecodeError, json.JSONDecodeError):
-                    self._messages.put(ProtocolError("Codex app-server emitted malformed JSON"))
+                    self._messages.put(ProtocolError("Codex app-server emitted malformed JSON",
+                                                     kind="malformed_json"))
                     return
                 if not isinstance(decoded, dict):
-                    self._messages.put(ProtocolError("Codex app-server message must be an object"))
+                    self._messages.put(ProtocolError("Codex app-server message must be an object",
+                                                     kind="invalid_message"))
                     return
                 self._messages.put(decoded)
         except (OSError, ValueError):
@@ -399,7 +461,9 @@ class CodexAppServerTransport:
         except (TypeError, ValueError) as exc:
             raise ProtocolError("Request parameters are not JSON serializable") from exc
         if len(encoded) > self.message_limit:
-            raise ProtocolError("Codex app-server request exceeded size limit")
+            raise ProtocolError("Codex app-server request exceeded size limit",
+                                kind="request_size_limit", request_bytes=len(encoded),
+                                limit_bytes=self.message_limit)
         deadline = time.monotonic() + self.timeout if deadline is None else deadline
         try:
             with self._write_lock:
@@ -474,17 +538,21 @@ class CodexAppServerTransport:
                     continue
 
                 if "id" not in message:
-                    raise ProtocolError("Codex app-server response is missing an id")
+                    raise ProtocolError("Codex app-server response is missing an id",
+                                        kind="invalid_response")
                 if message["id"] != request_id:
-                    raise ProtocolError("Codex app-server response id did not match request")
+                    raise ProtocolError("Codex app-server response id did not match request",
+                                        kind="invalid_response")
                 has_result = "result" in message
                 has_error = "error" in message
                 if has_result == has_error:
-                    raise ProtocolError("Codex app-server response must contain one result or error")
+                    raise ProtocolError("Codex app-server response must contain one result or error",
+                                        kind="invalid_response")
                 if has_error:
                     error = message["error"]
                     code = error.get("code") if isinstance(error, dict) else None
-                    raise ServerError(method, code)
+                    detail = error.get("message") if isinstance(error, dict) else None
+                    raise ServerError(method, code, detail)
                 return message["result"]
 
     def _reject_server_request(self, message: Mapping[str, Any]) -> None:
@@ -499,17 +567,18 @@ class CodexAppServerTransport:
                     },
                 }
             )
-        method = message.get("method")
-        safe_method = method if isinstance(method, str) and _SAFE_ERROR_CODE.fullmatch(method) else "unknown"
-        raise UnexpectedServerRequest(f"Rejected unexpected server request: {safe_method}")
+        raise UnexpectedServerRequest("Rejected unexpected server request",
+                                      kind="unexpected_server_request")
 
     @staticmethod
     def _validate_notification(message: Mapping[str, Any]) -> None:
         method = message.get("method")
         if not isinstance(method, str) or not _SAFE_METHOD.fullmatch(method):
-            raise ProtocolError("Codex app-server notification has an invalid method")
+            raise ProtocolError("Codex app-server notification has an invalid method",
+                                kind="invalid_notification")
         if "params" in message and not isinstance(message["params"], dict):
-            raise ProtocolError("Codex app-server notification has invalid params")
+            raise ProtocolError("Codex app-server notification has invalid params",
+                                kind="invalid_notification")
 
     def pop_notifications(self) -> list[dict[str, Any]]:
         with self._notifications_lock:
@@ -552,7 +621,8 @@ class CodexAppServerTransport:
                     raise message
                 if "method" not in message:
                     raise ProtocolError(
-                        "Codex app-server emitted a response without an active request"
+                        "Codex app-server emitted a response without an active request",
+                        kind="invalid_response",
                     )
                 if "id" in message:
                     self._reject_server_request(message)

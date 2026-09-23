@@ -14,9 +14,14 @@ from tradingagents.research.models import (
     _call_deadline,
     _ClosingSafeAdapter,
 )
-from tradingagents.research.prompt_context import model_boundary, model_input_bytes
+from tradingagents.research.prompt_context import (
+    PROMPT_CONTEXT_ENCODING_VERSION,
+    expand_prompt_context,
+    model_boundary,
+    model_input_bytes,
+)
 from tradingagents.research.stages import AnalysisOutput, ValuationProposal
-from tradingagents.research.storage import canonical_json
+from tradingagents.research.storage import canonical_json, digest
 from tradingagents.research.wire import WIRE_SCHEMA_VERSION, validate_strict_schema
 
 
@@ -181,8 +186,29 @@ def test_case_editor_reaches_strict_adapter_and_preserves_scoped_structure(tmp_p
 def test_model_identity_includes_wire_contract_version(tmp_path):
     first = CodexModelService(tmp_path / "runtime", adapter_factory=Adapter)
     assert WIRE_SCHEMA_VERSION == "research-wire-v3"
+    assert PROMPT_CONTEXT_ENCODING_VERSION == "exact-shared-context-v2"
+    assert first.identity != digest({"service": "isolated-codex-v1", "wire": WIRE_SCHEMA_VERSION,
+                                     "home": str((tmp_path / "runtime").resolve())})
     assert first.identity != CodexModelService(
         tmp_path / "different-runtime", adapter_factory=Adapter).identity
+
+
+def test_codex_dispatch_uses_exact_table_packed_boundary(tmp_path):
+    request, payload = setup(tmp_path)
+    evidence = [{"source_id": f"source-{index}", "excerpt": "untrusted detail " * 4}
+                for index in range(100)]
+    payload["evidence"] = evidence
+    expected = model_boundary("business", payload, output_token_envelope=100,
+                              valuation_method="fcff")
+    packet = json.loads(expected.prompt)
+    assert packet["context_encoding"] == PROMPT_CONTEXT_ENCODING_VERSION
+    assert expand_prompt_context(packet) == {"evidence": evidence}
+    with CodexModelService(tmp_path / "runtime", adapter_factory=Adapter) as service:
+        service.complete("business", payload, request)
+    args, _ = Adapter.constructed[0].calls[0]
+    assert args[1].encode() == expected.prompt
+    assert expected.input_bytes == model_input_bytes(
+        payload, role="business", output_token_envelope=100, valuation_method="fcff")
 
 
 def test_valuation_wire_instruction_is_trusted_system_text_only(tmp_path, monkeypatch):

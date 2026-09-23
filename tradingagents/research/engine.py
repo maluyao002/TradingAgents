@@ -16,7 +16,11 @@ from zoneinfo import ZoneInfo
 
 from pydantic import TypeAdapter
 
-from tradingagents.codex.adapter import codex_failure_reason
+from tradingagents.codex.adapter import (
+    codex_failure_diagnostic,
+    codex_failure_reason,
+    safe_failure_type,
+)
 
 from .admission import evaluate_admission
 from .budget import BudgetExhausted, BudgetTracker
@@ -446,6 +450,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
         stop_reason = "completed_needs_review"
         failure_type = None
         failure_reason = None
+        failure_diagnostic = None
         failed_stage = None
 
         def aggregate_usage():
@@ -475,7 +480,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 "elapsed_seconds": tracker.elapsed_seconds,
                 "dispatched": dispatch_unsettled if dispatched is None else dispatched,
                 "active_stage": active_stage if (dispatch_unsettled if dispatched is None else dispatched) else None,
-                "failure_reason": failure_reason, "failed_stage": failed_stage,
+                "failure_reason": failure_reason, "failure_diagnostic": failure_diagnostic,
+                "failed_stage": failed_stage,
                 "by_stage": usage_by_stage,
                 "call_timings": call_timings,
             }
@@ -1535,8 +1541,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
         except Exception as exc:
             # Do not emit provider errors or arbitrary validation inputs into reports.
             stop_reason = str(exc) if isinstance(exc, BudgetExhausted) else "stage_failed"
-            failure_type = type(exc).__name__
+            failure_type = safe_failure_type(exc)
             failure_reason = codex_failure_reason(exc)
+            failure_diagnostic = codex_failure_diagnostic(exc)
             failed_stage = active_stage
             gaps.append(f"Research stopped: {stop_reason}; inspect saved valid stages.")
         finally:
@@ -1603,7 +1610,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 "usage_by_stage": usage_by_stage,
                 "total_tokens": aggregate_usage().total_tokens, "stop_reason": stop_reason,
                 "failure_type": failure_type,
-                "failure_reason": failure_reason, "failed_stage": failed_stage,
+                "failure_reason": failure_reason, "failure_diagnostic": failure_diagnostic,
+                "failed_stage": failed_stage,
                 "call_timings": call_timings,
                 "elapsed_seconds": tracker.elapsed_seconds, "production_accepted": False}),
         }

@@ -30,6 +30,34 @@ from tradingagents.research.storage import atomic_write, canonical_json, read_js
 POLICIES = [("legacy-12", "packed-24"), ("packed-24", "legacy-12")]
 
 
+def _stopped_policy_case(tmp_path, policy):
+    source, services, models, result = _budget_stopped_case(tmp_path, policy=policy)
+    if result.stop_reason == "completed_needs_review" and policy == "packed-24":
+        # Table packing reduces the exact packed-policy reserve. Use the saved
+        # current-pass cost to place a fresh offline run just below admission.
+        plan = read_json(source.output_dir / "finalization_plan.json")["verify_report"]
+        slack = plan["remaining_tokens"] - plan["current_pass"]["conservative_reserve_tokens"]
+        assert slack > 0 and plan["current_pass_fits_reserve"]
+        bounded = source.model_copy(update={
+            "output_dir": tmp_path / "stopped",
+            "budget": source.budget.model_copy(update={
+                "total_tokens": source.budget.total_tokens - slack - 1,
+            }),
+        })
+        models = type(models)()
+        result = run_research(bounded, ResearchServices(services.evidence, models))
+        source = bounded
+    assert result.stop_reason == "finalization_pass_budget_insufficient"
+    assert not any(payload["stage"].startswith("verify_report-coverage-")
+                   for _, payload in models.calls)
+    stopped_plan = read_json(source.output_dir / "finalization_plan.json")["verify_report"]
+    assert stopped_plan["current_pass_fits_reserve"] is False
+    assert stopped_plan["remaining_tokens"] <= stopped_plan["current_pass"][
+        "conservative_reserve_tokens"]
+    assert result.usage.complete
+    return source, services, models, result
+
+
 @pytest.mark.parametrize("policy,changed", POLICIES)
 def test_ordinary_resume_rejects_policy_change_before_model_call(tmp_path, policy, changed):
     from tests.test_research_bounded_finalization import BoundedFixture
@@ -45,8 +73,7 @@ def test_ordinary_resume_rejects_policy_change_before_model_call(tmp_path, polic
 
 @pytest.mark.parametrize("policy,changed", POLICIES)
 def test_finalization_plan_cannot_mix_policies(tmp_path, policy, changed):
-    source, _, _, result = _budget_stopped_case(tmp_path, policy=policy)
-    assert result.stop_reason == "finalization_pass_budget_insufficient"
+    source, _, _, _ = _stopped_policy_case(tmp_path, policy)
     with pytest.raises(ValueError, match="settings"):
         prepare_finalization_continuation(source.output_dir, source.model_copy(update={
             "output_dir": tmp_path / "continued", "coverage_batch_policy": changed,
@@ -56,8 +83,7 @@ def test_finalization_plan_cannot_mix_policies(tmp_path, policy, changed):
 
 @pytest.mark.parametrize("policy", ["legacy-12", "packed-24"])
 def test_same_policy_continuation_reuses_verified_prefix(tmp_path, policy):
-    source, services, _, result = _budget_stopped_case(tmp_path, policy=policy)
-    assert result.stop_reason == "finalization_pass_budget_insufficient"
+    source, services, _, result = _stopped_policy_case(tmp_path, policy)
     if policy == "legacy-12":
         # Historical request JSON predates the opt-in; absence must mean legacy.
         path = source.output_dir / "finalization_checkpoint.json"

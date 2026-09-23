@@ -66,7 +66,7 @@ def test_api_pilot_never_starts_codex(monkeypatch, tmp_path):
     pilot.run_pilot(Console(file=StringIO()), Backend.API, ticker='AMD', date='2026-09-13',
                     profile='balanced', output=tmp_path)
     assert run.call_args.kwargs['adapter'] is None
-    assert run.call_args.kwargs['model'] == 'gpt-5.6-sol'
+    assert run.call_args.kwargs['model'] == 'gpt-6-sol'
     assert run.call_args.kwargs['effort'] == 'high'
 
 

@@ -16,7 +16,7 @@ from pathlib import Path
 from tradingagents.codex.adapter import CodexAdapter
 
 from .contracts import ResearchRequest, Usage
-from .prompt_context import model_boundary
+from .prompt_context import PROMPT_CONTEXT_ENCODING_VERSION, model_boundary
 from .services import ModelReply
 from .storage import digest, parse_json
 from .wire import WIRE_SCHEMA_VERSION, codec_for
@@ -83,6 +83,7 @@ class CodexModelService:
     def __init__(self, home: Path, *, adapter_factory=_ClosingSafeAdapter):
         self.home = Path(home).resolve()
         self.identity = digest({"service": "isolated-codex-v1", "wire": WIRE_SCHEMA_VERSION,
+                                "prompt_context": PROMPT_CONTEXT_ENCODING_VERSION,
                                 "home": str(self.home)})
         self._factory = adapter_factory
         self._adapter = None

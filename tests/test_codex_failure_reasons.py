@@ -13,7 +13,9 @@ from tradingagents.codex.adapter import (
     CodexStructuredOutputError,
     CodexUsageLimitError,
     _turn_error,
+    codex_failure_diagnostic,
     codex_failure_reason,
+    safe_failure_type,
 )
 
 
@@ -97,3 +99,23 @@ def test_reason_lookup_never_invokes_untrusted_property_or_accepts_spoofed_categ
 
     assert codex_failure_reason(Untrusted()) == "unknown"
     assert codex_failure_reason(Spoofed()) == "unknown"
+
+
+def test_failure_type_and_diagnostic_helpers_discard_untrusted_exception_data():
+    PrivatePromptSECRET = type("PrivatePromptSECRET", (RuntimeError,), {})
+    assert safe_failure_type(PrivatePromptSECRET()) == "Exception"
+    assert safe_failure_type(CodexInferenceError("redacted")) == "CodexInferenceError"
+    assert safe_failure_type(ValueError()) == "ValueError"
+
+    error = CodexInferenceError(
+        "private-prompt-SECRET", reason="transport_rpc_rejected",
+        diagnostic={"kind": "rpc_rejection", "phase": "turn_start",
+                    "method": "private-method-SECRET", "code": True,
+                    "server_error": "private-provider-SECRET"},
+    )
+    assert codex_failure_diagnostic(error) == {"kind": "rpc_rejection", "phase": "turn_start"}
+    error._diagnostic = {"kind": "rpc_rejection", "phase": "turn_start",
+                         "method": "turn/start", "code": 2**64,
+                         "server_error": "private-provider-SECRET"}
+    assert codex_failure_diagnostic(error) == {"kind": "rpc_rejection", "phase": "turn_start",
+                                               "method": "turn/start"}

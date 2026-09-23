@@ -1,5 +1,6 @@
 """Matched offline coverage-policy runs; never a live quality/latency claim."""
 
+import json
 from hashlib import sha256
 
 import pytest
@@ -11,10 +12,16 @@ from tests.test_research_finalization_engine import _budget_stopped_case
 from tradingagents.research.contracts import ResearchRequest
 from tradingagents.research.engine import run_research
 from tradingagents.research.finalization_recovery import prepare_finalization_continuation
-from tradingagents.research.prompt_context import model_boundary, model_input_bytes
+from tradingagents.research.prompt_context import (
+    CONTEXT_POLICY,
+    _shared_packet,
+    expand_prompt_context,
+    model_boundary,
+    model_input_bytes,
+)
 from tradingagents.research.review_lifecycle import _OPERATING_REVIEW_BOUNDARY
 from tradingagents.research.services import ResearchServices
-from tradingagents.research.storage import digest, read_json, request_identity
+from tradingagents.research.storage import canonical_json, digest, read_json, request_identity
 
 
 def run_policy(path, policy, models):
@@ -98,17 +105,27 @@ def test_packed_repair_plans_and_dispatch_use_scaled_output_allowance(tmp_path):
     )
 
 
-def test_legacy_provider_boundary_matches_frozen_feature_base(tmp_path):
-    # Measured independently on feature-base 3ec145a with the identical fixture.
+def test_legacy_provider_boundary_preserves_feature_base_content_under_v2(tmp_path):
+    # Feature-base 3ec145a used v1 packing. Its domain content and trusted
+    # instruction/schema are unchanged; only the lossless prompt encoding moved.
     models = BoundedFixture(count=182)
     request, _, result = run_policy(tmp_path, "legacy-12", models)
     assert result.stop_reason == "completed_needs_review"
     payload = next(p for _, p in models.calls if p["stage"] == "verify_report-coverage-0")
     boundary = model_boundary("verifier", payload, output_token_envelope=6_000,
                               valuation_method=request.valuation_method)
-    assert digest({"instructions": boundary.instructions, "prompt_utf8": boundary.prompt.decode(),
+    domain = {key: value for key, value in payload.items()
+              if key not in {"system", "response_schema", "timeout_seconds", "max_output_tokens"}}
+    v1 = {"context_encoding": "exact-shared-context-v1", "context_policy": CONTEXT_POLICY,
+          **_shared_packet(domain)}
+    historical_prompt = min((canonical_json(domain), canonical_json(v1)), key=len)
+    assert digest({"instructions": boundary.instructions, "prompt_utf8": historical_prompt.decode(),
                    "output_schema": boundary.output_schema}) == (
         "c1c9cbad5ab5ec9cd7670cf396976c6ff43ef72fbcb5b81ac464300e8703da0d")
+    assert canonical_json(expand_prompt_context(json.loads(boundary.prompt))) == canonical_json(domain)
+    assert digest({"instructions": boundary.instructions, "prompt_utf8": boundary.prompt.decode(),
+                   "output_schema": boundary.output_schema}) == (
+        "ebd1334b526487fb65c84d8fd9d374b7bc4c567e691c8777b94d18eb1eb99fe2")
 
 
 def test_packed_failure_preserves_unknown_usage_and_cannot_retry(tmp_path):
