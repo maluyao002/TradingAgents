@@ -87,6 +87,13 @@ CASE_READER_REQUIREMENTS = (
     "amounts from six-month observations. State, when relevant, that frozen-source review is not online "
     "authentication and arithmetic review is not an assessment of economic likelihood. Do not assert an "
     "input is absent unless the validated context or a cited source establishes that absence."
+    " If a separate cashflow_bridge_delivery is supplied, its review status is independent of "
+    "both the operating package and the financial schedules. Use only supplied {{calc:ID}} "
+    "references for reviewed conditional cash-flow figures; unreviewed bridge results stay in "
+    "the audit. Fiscal cash flows use explicit period dates and need not be translated to calendar "
+    "periods unless a particular model requires it. A conditional cash-flow bridge does not "
+    "complete valuation, capitalization, liquidity or economic underwriting. Explain which "
+    "tax, reinvestment or commitment assumption drives the result, not merely that it is uncertain."
 )
 
 
@@ -265,6 +272,7 @@ def case_reader_delivery(case_context_or_model_context: object) -> dict:
         raise ValueError("case reader delivery requires a validated financial review status")
     operating = context.get("operating_scenarios")
     reviewed_operating = isinstance(operating, Mapping) and operating.get("reviewed") is True
+    bridge = context.get("cashflow_bridge")
     return {
         "schema_version": 1,
         "contract_kind": "offline_case_reader_delivery",
@@ -287,6 +295,17 @@ def case_reader_delivery(case_context_or_model_context: object) -> dict:
             ),
         },
         "scenario_presentation": _scenario_presentation(operating) if reviewed_operating else None,
+        **({"cashflow_bridge_delivery": {
+            "review_status": bridge.get("review_status"),
+            "classification": "conditional_cash_flow_not_valuation_or_financial_case_approval",
+            "date_convention": bridge.get("date_convention"),
+            "reader_calculation_policy": "Use supplied calc references only; draft outputs remain withheld.",
+            "requirements": [
+                "Explain the operating-income, tax, D&A, capex, working-capital and commitment bridge.",
+                "Retain proxy limitations and distinguish historical anchors from assumed forecast values.",
+                "Do not infer valuation, per-share value or funding adequacy from positive cash flow.",
+            ],
+        }} if isinstance(bridge, Mapping) else {}),
         "writer_requirements": [
             "State the financial-draft and operating-package review statuses separately.",
             "Use {{scenario_assumptions_table}} only when scenario_presentation is present.",

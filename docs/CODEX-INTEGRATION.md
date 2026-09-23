@@ -68,6 +68,12 @@ OpenAI provider, ephemeral=true, and zero instruction sources. The created threa
 was absent from thread/list and unsubscribe succeeded. No turn/start was sent.
 An unauthenticated catalog is not proof of account entitlement or model access.
 
+A later metadata-only check of the existing isolated runtime on standalone Codex
+CLI 0.156.1 confirmed `gpt-6-sol` at high and xhigh, `gpt-6-luna` at high,
+and `gpt-6-astra` at high. It sent no inference turn. These observed pairs do
+not establish support for every effort used by a named profile; startup still
+checks each exact role assignment against that runtime's `model/list` response.
+
 Remaining gates before model execution: verify effective tool/configuration
 isolation, authentication with the dedicated runtime, structured output,
 cancellation during inference, model/effort adherence, and absence of research
@@ -102,10 +108,58 @@ preview does not run inference, fetch market data, save model settings, or fall 
 to an API provider. The early preview rejected checkpoint flags; the current full workflow supports
 backend-isolated checkpoint recovery as described below.
 
+Current named profiles assign `gpt-6-sol` to Sol roles and `gpt-6-luna` to
+Luna roles. Astra remains `gpt-6-astra`; Terra remains `gpt-5.6-terra`.
+The balanced research request defaults inherit these same role assignments.
+The Codex CLI 0.156.1 catalog added Sol and Luna to the picker. Update to that
+version or newer when the isolated runtime does not advertise the requested
+models. The app-server `model/list` response for that runtime and account is
+authoritative for availability and supported reasoning efforts. A profile with
+any missing model or effort remains unavailable; no older-model substitution
+or API fallback is made. Existing saved requests and reports keep their recorded
+model IDs. The standalone research CLI's `--dry-run` summary shows each role's
+exact model and effort in `model_selections`; the existing effort-only
+`model_roles` field remains for compatible consumers. A dry run performs no
+model or market-data calls.
+
+The shared native OpenAI API client also recognizes GPT-6 Sol and Luna as
+reasoning models and forwards the profile's selected effort. Offline tests cover
+every distinct named-profile model/effort pair; API menus recognize both new IDs
+without changing Custom's legacy default choices.
+
+### Text-input admission and exact research context
+
+The runtime's text-input limit is separate from the JSON-RPC transport's 4 MiB
+message guard. A September 23 diagnostic on CLI 0.156.1 rejected a large
+`turn/start` with code `-32602` and a reported maximum length of 1,048,576.
+The adapter therefore applies a conservative 1 MiB UTF-8 prompt-byte check
+before starting a thread. It does not truncate the prompt or raise the transport
+limit to work around this bound. The server's own length unit is not inferred
+from the diagnostic; a UTF-8-byte check is conservative for a character limit.
+
+Deep-research prompts can losslessly encode repeated object lists as a column
+list and value rows. The versioned encoding preserves every field and value
+and keeps source material untrusted. Table compression is selected only when
+smaller than the raw or older shared-context representation; source-owned
+format tags are explicitly escaped to prevent misinterpretation. Offline round-trip checks
+establish exact data preservation, not equivalent model comprehension or reader
+acceptance. The encoding version participates in the Codex research service's
+cache identity. Historical reports, requests and earlier encoding records are
+not rewritten.
+
+Transport diagnostics retain only fixed classifications, operation/phase,
+bounded numeric codes and applicable sizes. Item-lifecycle failures additionally
+record a finite check/event/type and bounded started/completed counts, never item
+or thread identifiers. Missing, duplicate and mismatched item completions still
+fail closed; diagnostic detail does not relax the protocol. Raw provider error prose, prompts
+and authentication details are not saved. Unknown failed-call usage stays
+incomplete even when no token count was returned.
+
 ### One-time sign-in (user-run)
 
 Use the official stable Codex CLI **0.153.4 or newer** on macOS/Linux and a dedicated runtime outside this
-repository. The default is `~/.tradingagents/codex`. Do not copy authentication files
+repository. This is the protocol floor; **0.156.1 or newer is recommended** for
+the GPT-6 Sol/Luna catalog. The default runtime is `~/.tradingagents/codex`. Do not copy authentication files
 from the normal Codex home or put credentials in this repository.
 
 This integration uses the isolation controls verified on CLI 0.153.4. Older, prerelease, or
@@ -313,6 +367,7 @@ tests establish routing, validation and recovery, not model quality or profitabi
 ## Sources
 
 - [Official app-server protocol](https://learn.chatgpt.com/docs/app-server)
+- [Official Codex changelog](https://learn.chatgpt.com/docs/changelog)
 - [Official authentication](https://learn.chatgpt.com/docs/auth)
 
 ### Report exports and market-data availability

@@ -132,7 +132,8 @@ def calculation_appendix(calculations, language):
     return "\n".join(lines).encode()
 
 
-def case_model_appendix(calculations, language, *, has_operating_scenarios=False):
+def case_model_appendix(calculations, language, *, has_operating_scenarios=False,
+                        has_cashflow_bridge=False):
     """The complete code-owned case appendix, shared by export and preview QA."""
     result = (
         b"# Financial model appendix\n\n"
@@ -154,6 +155,16 @@ def case_model_appendix(calculations, language, *, has_operating_scenarios=False
             b"revenue/gross-profit/operating-income bridge. Only independently reviewed "
             b"packages expose calculated references in the reader; draft or stale reviews "
             b"withhold these numbers. Operating profit is not cash flow or funding clearance.\n"
+        )
+    if has_cashflow_bridge:
+        result += (
+            b"\n## Conditional fiscal cash-flow bridge\n\n"
+            b"See cashflow_bridge_package.json, cashflow_bridge_context.json and "
+            b"cashflow_bridge_result.json for reported anchors, explicit analyst tax, D&A, "
+            b"capex and working-capital assumptions, and commitment-overlap treatments. "
+            b"Only a separately reviewed package exposes reader calculation references. "
+            b"Cash flows use stated fiscal dates; there is no implied interim roll-forward, "
+            b"economic approval, valuation, equity bridge or funding clearance.\n"
         )
     if calculations:
         result += calculation_appendix(calculations, language)

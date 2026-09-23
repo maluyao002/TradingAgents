@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import defaultdict
+from copy import deepcopy
 from dataclasses import asdict, fields
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,7 +16,11 @@ from zoneinfo import ZoneInfo
 
 from pydantic import TypeAdapter
 
-from tradingagents.codex.adapter import codex_failure_reason
+from tradingagents.codex.adapter import (
+    codex_failure_diagnostic,
+    codex_failure_reason,
+    safe_failure_type,
+)
 
 from .admission import evaluate_admission
 from .budget import BudgetExhausted, BudgetTracker
@@ -57,6 +62,7 @@ from .report_review import (
     requires_reader_coverage,
     validated_disposition_ids,
 )
+from .research_questions import QUESTION_LED_REQUIREMENTS
 from .result_scope import scope_calculation
 from .review_batches import (
     CoverageBatchResult,
@@ -444,6 +450,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
         stop_reason = "completed_needs_review"
         failure_type = None
         failure_reason = None
+        failure_diagnostic = None
         failed_stage = None
 
         def aggregate_usage():
@@ -473,7 +480,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 "elapsed_seconds": tracker.elapsed_seconds,
                 "dispatched": dispatch_unsettled if dispatched is None else dispatched,
                 "active_stage": active_stage if (dispatch_unsettled if dispatched is None else dispatched) else None,
-                "failure_reason": failure_reason, "failed_stage": failed_stage,
+                "failure_reason": failure_reason, "failure_diagnostic": failure_diagnostic,
+                "failed_stage": failed_stage,
                 "by_stage": usage_by_stage,
                 "call_timings": call_timings,
             }
@@ -544,6 +552,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             if case_context is not None and not coverage_only and stage not in {"planner", "independent_challenge"}:
                 payload["financial_case"] = case_context.model_context()
                 payload["case_reader_delivery"] = case_reader_delivery(case_context)
+                payload["decision_led_research"] = deepcopy(QUESTION_LED_REQUIREMENTS)
                 if role == "editor":
                     writer_issues = split_compound_obligations(
                         limitation_packet(data.get("limitations", ())),
@@ -1181,13 +1190,44 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     break
                 if bounded_review:
                     inventory = limitation_packet(required_limitations())
-                    context_bytes = (len(canonical_json(_prompt_evidence(snapshot)))
-                                     + 2 * len(canonical_json(outputs)) + len(canonical_json(proposal)))
-                    if case_context is not None:
-                        context_bytes += (len(canonical_json(case_context.model_context()))
-                                          + len(CASE_READER_REQUIREMENTS.encode("utf-8")))
+                    prospective_values = calculation_catalog(proposal, valuation)
+                    if case_context is not None and case_context.operating_scenarios is not None:
+                        prospective_values = (*prospective_values, *case_context.operating_scenarios.calculated_values)
+                    if case_context is not None and case_context.cashflow_bridge is not None:
+                        prospective_values = (*prospective_values, *case_context.cashflow_bridge.calculated_values)
+                    prospective_data = {
+                        "analyses": outputs, "limitations": required_limitations(), "valuation": valuation,
+                        "valuation_inputs": proposal.model_dump(mode="json"),
+                        "calculated_values": [item.model_dump(mode="json") for item in prospective_values],
+                        "claim_verification": VerificationOutput().model_dump(mode="json"),
+                    }
+                    prospective_evidence = evidence_catalog(
+                        snapshot, prospective_values, eligible_ids=_known_ids(snapshot), case_context=case_context)
+                    # Build through the dispatch constructor so new policies, schemas,
+                    # case delivery and compound guidance cannot disappear from reserves.
+                    # Reader/provenance and future output growth remain planning allowances;
+                    # actual later calls still undergo exact-boundary admission.
+                    prospective_payloads = {
+                        "editor": ("editor", model_payload("editor", "editor", prospective_data, draft_schema)),
+                        "factual": ("verifier", model_payload("verify_report", "verifier", {
+                            **prospective_data, "rendered_reader": "", "inherited_issues": inventory,
+                            "resolution_evidence": prospective_evidence, "issue_resolution_policy": LIFECYCLE_POLICY,
+                            "resolution_witness_contract": resolution_witness_contract(prospective_evidence, ""),
+                            "conclusion_scope": case_context.scope.model_dump(mode="json") if case_context else None,
+                        }, LifecycleVerification)),
+                    }
+                    prospective_sizes = {name: model_input_bytes(payload, role=role, output_token_envelope=16_000,
+                                                                 valuation_method=request.valuation_method)
+                                         for name, (role, payload) in prospective_payloads.items()}
+                    # Generous, explicit heuristics, not a mathematical token/byte
+                    # maximum or a guarantee against an advisory provider overrun.
+                    future_output_calls, advisory_output_tokens, bytes_per_token = 8, 16_000, 16
+                    reader_bytes_allowance = advisory_output_tokens * bytes_per_token
+                    growth_allowance = future_output_calls * reader_bytes_allowance
+                    context_bytes = max(prospective_sizes.values()) + growth_allowance
                     allowance = finalization_allowance(
                         inventory, context_bytes=context_bytes,
+                        reader_bytes=reader_bytes_allowance,
                         coverage_batch_policy=request.coverage_batch_policy,
                         call_timeout_seconds=request.budget.call_timeout_seconds,
                         language_count=1 + len(request.additional_report_languages),
@@ -1205,6 +1245,15 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     store.save_stage(f"finalization-plan-{cycle}", {
                         "issue_ids": [item["issue_id"] for item in inventory],
                     }, {**allowance, "optional_cycle_skipped": skip,
+                        "prospective_context_bytes": prospective_sizes,
+                        "future_output_growth_bytes_planning_allowance": growth_allowance,
+                        "future_output_growth_assumptions": {
+                            "calls": future_output_calls, "advisory_output_tokens_per_call": advisory_output_tokens,
+                            "bytes_per_token_heuristic": bytes_per_token,
+                        },
+                        "provider_output_cap_is_hard": False,
+                        "per_call_admission_remains_mandatory": True,
+                        "context_bytes_planning_assumption": context_bytes,
                         "optional_cycle_token_envelope": next_cycle_token_envelope,
                         "optional_cycle_call_seconds": next_cycle_call_seconds,
                         "reason": "Preserve mandatory drafting, factual review, per-issue coverage and one repair capacity."})
@@ -1337,6 +1386,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 calculated_values = calculation_catalog(proposal, valuation)
                 if case_context is not None and case_context.operating_scenarios is not None:
                     calculated_values = (*calculated_values, *case_context.operating_scenarios.calculated_values)
+                if case_context is not None and case_context.cashflow_bridge is not None:
+                    calculated_values = (*calculated_values, *case_context.cashflow_bridge.calculated_values)
                 editor_data["claim_verification"] = review.model_dump(mode="json")
                 editor_data["valuation_inputs"] = proposal.model_dump(mode="json")
                 editor_data["calculated_values"] = [value.model_dump(mode="json") for value in calculated_values]
@@ -1490,8 +1541,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
         except Exception as exc:
             # Do not emit provider errors or arbitrary validation inputs into reports.
             stop_reason = str(exc) if isinstance(exc, BudgetExhausted) else "stage_failed"
-            failure_type = type(exc).__name__
+            failure_type = safe_failure_type(exc)
             failure_reason = codex_failure_reason(exc)
+            failure_diagnostic = codex_failure_diagnostic(exc)
             failed_stage = active_stage
             gaps.append(f"Research stopped: {stop_reason}; inspect saved valid stages.")
         finally:
@@ -1524,6 +1576,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 operating_scenarios_reviewed=bool(case_context is not None
                     and case_context.operating_scenarios is not None
                     and case_context.operating_scenarios.reviewed),
+                cashflow_bridge_reviewed=bool(case_context is not None
+                    and case_context.cashflow_bridge is not None
+                    and case_context.cashflow_bridge.reviewed),
             )
             assessment = Assessment(status=admission.assessment_status, findings=tuple(reviews))
             if admission.report_completion != "complete" and stop_reason == "completed_needs_review":
@@ -1555,7 +1610,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 "usage_by_stage": usage_by_stage,
                 "total_tokens": aggregate_usage().total_tokens, "stop_reason": stop_reason,
                 "failure_type": failure_type,
-                "failure_reason": failure_reason, "failed_stage": failed_stage,
+                "failure_reason": failure_reason, "failure_diagnostic": failure_diagnostic,
+                "failed_stage": failed_stage,
                 "call_timings": call_timings,
                 "elapsed_seconds": tracker.elapsed_seconds, "production_accepted": False}),
         }
@@ -1629,6 +1685,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             artifacts["model_appendix.md"] = case_model_appendix(
                 calculated_values, request.report_language,
                 has_operating_scenarios=case_context is not None and case_context.operating_scenarios is not None,
+                has_cashflow_bridge=case_context is not None and case_context.cashflow_bridge is not None,
             )
         if recovery is not None:
             recovery_provenance = {

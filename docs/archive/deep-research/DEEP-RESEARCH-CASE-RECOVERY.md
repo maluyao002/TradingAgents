@@ -1,5 +1,10 @@
 # Same-case checkpoint recovery
 
+> Historical delivery / validation record. Preserve its evidence and decisions;
+> dated next steps and run allowances are not current instructions or reusable approval.
+> Use the [current roadmap](../../DEEP-RESEARCH-STATUS.md) for active work and
+> the [archive index](README.md) to navigate history.
+
 September 19, 2026. Development tooling on PR #13, based on
 `codex/deep-research-v2`. This is not an automatic retry or release mechanism.
 

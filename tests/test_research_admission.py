@@ -61,6 +61,21 @@ def test_operating_review_attestation_requires_a_real_boolean(value):
         _evaluate(operating_scenarios_reviewed=value)
 
 
+@pytest.mark.parametrize("value", ["true", 1, None])
+def test_cashflow_review_attestation_requires_a_real_boolean(value):
+    with pytest.raises(TypeError, match="booleans"):
+        _evaluate(cashflow_bridge_reviewed=value)
+
+
+def test_cashflow_review_does_not_clear_valuation_funding_or_missing_reader():
+    result = _evaluate(cashflow_bridge_reviewed=True,
+                       scope=_scope(operating="blocked", equity="blocked", funding="blocked"))
+    assert result.cashflow_bridge.status == "conditional"
+    assert result.model_conclusions.operating_asset_value.status == "blocked"
+    assert result.acceptance_eligibility.status == "blocked"
+    assert _evaluate(cashflow_bridge_reviewed=True, reader_exported=False).cashflow_bridge.status == "blocked"
+
+
 def test_operating_scenario_review_is_separate_from_valuation_and_report_completion():
     result = _evaluate(operating_scenarios_reviewed=True,
                        scope=_scope(operating="blocked", equity="blocked", funding="blocked"))

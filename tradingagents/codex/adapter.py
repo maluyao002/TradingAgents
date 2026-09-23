@@ -15,10 +15,12 @@ from pathlib import Path
 
 from tradingagents.codex.transport import (
     DEFAULT_TIMEOUT_SECONDS,
+    TRANSPORT_DIAGNOSTIC_METHODS,
     CodexAppServerTransport,
     TransportClosed,
     TransportError,
     TransportTimeout,
+    transport_failure_diagnostic,
 )
 
 CODEX_FAILURE_REASONS = frozenset({
@@ -30,9 +32,16 @@ CODEX_FAILURE_REASONS = frozenset({
     "provider_transient",
     "provider_model_rerouted",
     "provider_incomplete_turn",
+    "provider_context_limit",
     "transport_timeout",
     "transport_closed",
     "transport_error",
+    "transport_input_length_limit",
+    "local_prompt_size_limit",
+    "transport_request_size_limit",
+    "transport_response_size_limit",
+    "transport_protocol_error",
+    "transport_rpc_rejected",
     "protocol_invalid_turn",
     "protocol_invalid_notification",
     "protocol_invalid_stream",
@@ -56,6 +65,10 @@ CODEX_FAILURE_REASONS = frozenset({
 })
 """Finite, safe machine-readable reasons for Codex inference failures."""
 
+# A conservative prompt-only UTF-8 bound from the observed CLI 0.156.1
+# turn/start input-length rejection. The server's reported unit is unknown.
+_MAX_PROMPT_UTF8_BYTES = 1_048_576
+
 
 def _allowlisted_failure_reason(reason: object) -> str:
     """Return a bounded reason code without preserving untrusted input."""
@@ -74,12 +87,126 @@ def codex_failure_reason(error: BaseException) -> str:
     return _allowlisted_failure_reason(object.__getattribute__(error, "__dict__").get("_reason"))
 
 
+_DIAGNOSTIC_KINDS = frozenset({
+    "request_size_limit", "response_size_limit", "malformed_json",
+    "invalid_message", "invalid_response", "invalid_notification",
+    "unexpected_server_request", "protocol_error", "rpc_rejection",
+    "input_length_limit",
+    "local_prompt_size_limit",
+    "timeout", "closed", "transport_error", "item_lifecycle",
+})
+_DIAGNOSTIC_PHASES = frozenset({"preflight", "thread_start", "turn_start", "turn_wait"})
+_ITEM_LIFECYCLE_CHECK_EVENTS = {
+    "invalid_item_shape": frozenset({"item/started", "item/completed"}),
+    "completion_without_start": frozenset({"item/completed"}),
+    "duplicate_completion": frozenset({"item/completed"}),
+    "type_mismatch": frozenset({"item/completed"}),
+    "unfinished_item": frozenset({"turn/completed"}),
+    "duplicate_start": frozenset({"item/started"}),
+}
+
+
+def _allowlisted_failure_diagnostic(value: object) -> dict[str, str | int] | None:
+    """Copy only fixed diagnostic fields; ignore all other exception data."""
+    if type(value) is not dict:
+        return None
+    kind = value.get("kind")
+    phase = value.get("phase")
+    if type(kind) is not str or kind not in _DIAGNOSTIC_KINDS:
+        return None
+    if type(phase) is not str or phase not in _DIAGNOSTIC_PHASES:
+        return None
+    if phase == "preflight" and kind != "local_prompt_size_limit":
+        return None
+    result: dict[str, str | int] = {"kind": kind, "phase": phase}
+    if kind == "local_prompt_size_limit":
+        request_bytes = value.get("request_bytes")
+        limit_bytes = value.get("limit_bytes")
+        if (phase != "preflight" or type(request_bytes) is not int
+                or not _MAX_PROMPT_UTF8_BYTES < request_bytes <= 2**31
+                or type(limit_bytes) is not int or limit_bytes != _MAX_PROMPT_UTF8_BYTES):
+            return None
+        result.update(request_bytes=request_bytes, limit_bytes=limit_bytes)
+    elif kind == "item_lifecycle":
+        check = value.get("check")
+        event = value.get("event")
+        item_type = value.get("item_type")
+        started_count = value.get("started_count")
+        completed_count = value.get("completed_count")
+        if (phase != "turn_wait" or type(check) is not str
+                or check not in _ITEM_LIFECYCLE_CHECK_EVENTS
+                or type(event) is not str
+                or event not in _ITEM_LIFECYCLE_CHECK_EVENTS[check]
+                or type(item_type) is not str
+                or item_type not in _PASSIVE_ITEM_TYPES | {"unknown"}
+                or type(started_count) is not int
+                or type(completed_count) is not int
+                or not 0 <= completed_count <= started_count <= 10_000):
+            return None
+        result.update(check=check, event=event, item_type=item_type,
+                      started_count=started_count, completed_count=completed_count)
+    elif kind == "request_size_limit":
+        request_bytes = value.get("request_bytes")
+        limit_bytes = value.get("limit_bytes")
+        if (type(request_bytes) is int and type(limit_bytes) is int
+                and 0 <= request_bytes <= 2**31 and 0 <= limit_bytes <= 2**31):
+            result.update(request_bytes=request_bytes, limit_bytes=limit_bytes)
+    elif kind in {"rpc_rejection", "input_length_limit"}:
+        method = value.get("method")
+        code = value.get("code")
+        if kind == "input_length_limit":
+            limit = value.get("reported_max_length")
+            if (method != "turn/start" or type(code) is not int or code != -32602
+                    or type(limit) is not int or not 0 < limit <= 2**31):
+                return None
+            result["reported_max_length"] = limit
+        if type(method) is str and method in TRANSPORT_DIAGNOSTIC_METHODS:
+            result["method"] = method
+        if type(code) is int and -(2**31) <= code < 2**31:
+            result["code"] = code
+    return result
+
+
+def codex_failure_diagnostic(error: BaseException) -> dict[str, str | int] | None:
+    """Return a fresh safe transport diagnostic for research persistence."""
+    if not isinstance(error, CodexAdapterError):
+        return None
+    return _allowlisted_failure_diagnostic(
+        object.__getattribute__(error, "__dict__").get("_diagnostic")
+    )
+
+
+def valid_codex_failure_diagnostic(value: object) -> bool:
+    """Require an exact persisted shape, including absence of extra fields."""
+    sanitized = _allowlisted_failure_diagnostic(value)
+    return (type(value) is dict and sanitized is not None
+            and value.keys() == sanitized.keys()
+            and all(type(value[key]) is type(expected) and value[key] == expected
+                    for key, expected in sanitized.items()))
+
+
+_SAFE_FAILURE_TYPES = frozenset({
+    "BudgetExhausted", "CodexAdapterError", "CodexAuthenticationError",
+    "CodexInferenceError", "CodexSelectionError", "CodexStructuredOutputError",
+    "CodexTransientError", "CodexUsageLimitError", "ModelCallTimeout",
+    "OSError", "TimeoutError", "TypeError", "ValueError", "ValidationError",
+})
+
+
+def safe_failure_type(error: BaseException) -> str:
+    """Return a finite exception type label suitable for persisted diagnostics."""
+    name = type(error).__name__
+    return name if name in _SAFE_FAILURE_TYPES else "Exception"
+
+
 class CodexAdapterError(RuntimeError):
     """A safe-to-display adapter, authentication, or protocol failure."""
 
-    def __init__(self, *args: object, reason: object = "unknown") -> None:
+    def __init__(self, *args: object, reason: object = "unknown",
+                 diagnostic: object = None) -> None:
         super().__init__(*args)
         self._reason = _allowlisted_failure_reason(reason)
+        self._diagnostic = _allowlisted_failure_diagnostic(diagnostic)
 
     @property
     def reason(self) -> str:
@@ -126,6 +253,11 @@ def _turn_error(error: object) -> CodexAdapterError:
         )
     info = error.get("codexErrorInfo") if isinstance(error, dict) else None
     if isinstance(info, str):
+        if info == "contextWindowExceeded":
+            return CodexInferenceError(
+                "Codex reported a context limit; details redacted",
+                reason="provider_context_limit",
+            )
         if info in {"usageLimitExceeded", "sessionBudgetExceeded"}:
             return CodexUsageLimitError(
                 "Codex usage limit reached; resume when capacity is available",
@@ -876,6 +1008,19 @@ class CodexAdapter:
             raise ValueError("instructions must be non-empty text")
         if not _valid_text(prompt, limit=4_000_000):
             raise ValueError("prompt must be non-empty text")
+        try:
+            prompt_bytes = len(prompt.encode("utf-8"))
+        except UnicodeEncodeError:
+            raise ValueError("prompt must be UTF-8 encodable text") from None
+        if prompt_bytes > _MAX_PROMPT_UTF8_BYTES:
+            raise CodexInferenceError(
+                "Codex prompt exceeds the conservative local size limit",
+                reason="local_prompt_size_limit",
+                # request_bytes counts the prompt alone, before JSON-RPC encoding.
+                diagnostic={"kind": "local_prompt_size_limit", "phase": "preflight",
+                            "request_bytes": prompt_bytes,
+                            "limit_bytes": _MAX_PROMPT_UTF8_BYTES},
+            )
         normalized_schema: dict[str, object] | None = None
         if output_schema is not None:
             if not isinstance(output_schema, dict) or not output_schema:
@@ -906,10 +1051,12 @@ class CodexAdapter:
         turn_completed = False
         result: CodexCompletion | None = None
         failure: BaseException | None = None
+        phase = "thread_start"
         try:
             phase_start = time.perf_counter()
             thread_id = self._start_thread(instructions, model, deadline)
             timings["thread_start_seconds"] = time.perf_counter() - phase_start
+            phase = "turn_start"
             phase_start = time.perf_counter()
             turn_id, turn_is_valid = self._start_turn(
                 thread_id,
@@ -922,6 +1069,7 @@ class CodexAdapter:
             if not turn_is_valid:
                 raise CodexInferenceError("turn/start returned an invalid active turn", reason="protocol_invalid_turn")
             timings["turn_start_seconds"] = time.perf_counter() - phase_start
+            phase = "turn_wait"
             phase_start = time.perf_counter()
             result = self._wait_for_turn(thread_id, turn_id, deadline, model=model, effort=effort)
             timings["turn_wait_seconds"] = time.perf_counter() - phase_start
@@ -946,12 +1094,26 @@ class CodexAdapter:
             self._invalidate()
             if isinstance(failure, CodexAdapterError):
                 raise failure
+            diagnostic = {**transport_failure_diagnostic(failure), "phase": phase}
             if isinstance(failure, TransportTimeout):
-                raise CodexTransientError("Codex inference did not complete before its deadline", reason="transport_timeout") from None
+                raise CodexTransientError("Codex inference did not complete before its deadline",
+                                          reason="transport_timeout", diagnostic=diagnostic) from None
             if isinstance(failure, TransportClosed):
-                raise CodexTransientError("Codex connection closed before inference completed", reason="transport_closed") from None
+                raise CodexTransientError("Codex connection closed before inference completed",
+                                          reason="transport_closed", diagnostic=diagnostic) from None
             if isinstance(failure, TransportError):
-                raise CodexInferenceError(str(failure), reason="transport_error") from None
+                kind = diagnostic["kind"]
+                reason = {
+                    "input_length_limit": "transport_input_length_limit",
+                    "request_size_limit": "transport_request_size_limit",
+                    "response_size_limit": "transport_response_size_limit",
+                    "rpc_rejection": "transport_rpc_rejected",
+                }.get(kind, "transport_protocol_error" if kind in {
+                    "protocol_error", "malformed_json", "invalid_message", "invalid_response",
+                    "invalid_notification", "unexpected_server_request",
+                } else "transport_error")
+                raise CodexInferenceError("Codex transport or protocol failed; details redacted",
+                                          reason=reason, diagnostic=diagnostic) from None
             raise failure
         if cleanup_error is not None:
             self._invalidate()
@@ -1063,6 +1225,21 @@ class CodexAdapter:
         usage: CodexTokenUsage | None = None
         usage_is_invalid = False
         control_events = stream_events = stream_chars = 0
+
+        def item_failure(message: str, reason: str, check: str, event: str,
+                         item_type: object = None) -> CodexInferenceError:
+            safe_type = (item_type if type(item_type) is str
+                         and item_type in _PASSIVE_ITEM_TYPES else "unknown")
+            return CodexInferenceError(
+                message, reason=reason,
+                diagnostic={
+                    "kind": "item_lifecycle", "phase": "turn_wait",
+                    "check": check, "event": event, "item_type": safe_type,
+                    "started_count": len(started_items),
+                    "completed_count": len(completed_items),
+                },
+            )
+
         while True:
             notification = transport.wait_notification(timeout=self._remaining(deadline))
             method = notification.get("method")
@@ -1176,20 +1353,35 @@ class CodexAdapter:
             elif method in {"item/started", "item/completed"}:
                 item = params.get("item")
                 if not isinstance(item, dict):
-                    raise CodexInferenceError("Codex emitted an invalid item event", reason="protocol_invalid_item")
+                    raise item_failure("Codex emitted an invalid item event",
+                                       "protocol_invalid_item", "invalid_item_shape", method)
                 item_id = _safe_identifier(item.get("id"))
                 item_type = item.get("type")
-                if item_id is None or item_type not in _PASSIVE_ITEM_TYPES:
+                if item_id is None or type(item_type) is not str:
+                    raise item_failure("Codex attempted an unexpected tool or item",
+                                       "protocol_unexpected_item", "invalid_item_shape",
+                                       method, item_type)
+                if item_type not in _PASSIVE_ITEM_TYPES:
                     raise CodexInferenceError("Codex attempted an unexpected tool or item", reason="protocol_unexpected_item")
                 if method == "item/started":
                     if item_id in started_items:
-                        raise CodexInferenceError("Codex emitted a duplicate item start event", reason="protocol_duplicate_item")
+                        raise item_failure("Codex emitted a duplicate item start event",
+                                           "protocol_duplicate_item", "duplicate_start",
+                                           method, item_type)
                     started_items.add(item_id)
                     item_types[item_id] = item_type
                 else:
-                    if (item_id not in started_items or item_id in completed_items
-                            or item_types[item_id] != item_type):
-                        raise CodexInferenceError("Codex emitted an invalid item completion event", reason="protocol_invalid_item")
+                    if item_id not in started_items:
+                        check = "completion_without_start"
+                    elif item_id in completed_items:
+                        check = "duplicate_completion"
+                    elif item_types[item_id] != item_type:
+                        check = "type_mismatch"
+                    else:
+                        check = None
+                    if check is not None:
+                        raise item_failure("Codex emitted an invalid item completion event",
+                                           "protocol_invalid_item", check, method, item_type)
                     completed_items.add(item_id)
                     if item_type == "agentMessage":
                         text = item.get("text")
@@ -1226,7 +1418,13 @@ class CodexAdapter:
                         raise _turn_error(turn["error"])
                     raise CodexInferenceError("Codex turn did not complete successfully", reason="provider_incomplete_turn")
                 if started_items != completed_items:
-                    raise CodexInferenceError("Codex completed with unfinished output items", reason="protocol_invalid_item")
+                    unfinished_types = {item_types[item_id]
+                                        for item_id in started_items - completed_items}
+                    unfinished_type = (next(iter(unfinished_types))
+                                       if len(unfinished_types) == 1 else None)
+                    raise item_failure("Codex completed with unfinished output items",
+                                       "protocol_invalid_item", "unfinished_item",
+                                       method, unfinished_type)
                 messages = final_messages or unphased_messages
                 if not messages or not any(message.strip() for message in messages):
                     raise CodexInferenceError("Codex completed without a final text response", reason="missing_output")

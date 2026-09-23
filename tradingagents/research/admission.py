@@ -78,6 +78,7 @@ class ReportAdmission(Contract):
     recommendation_status: Literal["withheld"] = "withheld"
     target_status: Literal["withheld"] = "withheld"
     operating_scenarios: ModelConclusionAdmission | None = None
+    cashflow_bridge: ModelConclusionAdmission | None = None
 
 
 class _VerificationAttestation(Contract):
@@ -200,7 +201,8 @@ def evaluate_admission(*, stop_reason: str, reader_exported: bool, reader_sha256
                        findings: tuple[ReviewFinding, ...],
                        scope: ModelResultScope | None,
                        case_reviewed: bool = False,
-                       operating_scenarios_reviewed: bool = False) -> ReportAdmission:
+                       operating_scenarios_reviewed: bool = False,
+                       cashflow_bridge_reviewed: bool = False) -> ReportAdmission:
     """Evaluate Stage 3 admission from engine-owned, already-frozen evidence.
 
     The ``reader_exported`` argument is an independent engine attestation.  It
@@ -211,8 +213,8 @@ def evaluate_admission(*, stop_reason: str, reader_exported: bool, reader_sha256
     if not isinstance(stop_reason, str) or not stop_reason.strip():
         raise ValueError("stop_reason must be a nonblank string")
     if (type(reader_exported) is not bool or type(case_reviewed) is not bool
-            or type(operating_scenarios_reviewed) is not bool):
-        raise TypeError("reader_exported, case_reviewed and operating_scenarios_reviewed must be booleans")
+            or type(operating_scenarios_reviewed) is not bool or type(cashflow_bridge_reviewed) is not bool):
+        raise TypeError("reader_exported and review flags must be booleans")
     if not isinstance(reader_sha256, str):
         raise TypeError("reader_sha256 must be a string")
     if not isinstance(findings, tuple):
@@ -278,5 +280,12 @@ def evaluate_admission(*, stop_reason: str, reader_exported: bool, reader_sha256
             reasons=("Reviewed conditional operating scenarios; not cash flows, valuation or targets.",)
             if completed and operating_scenarios_reviewed else
             ("Operating scenarios need a source-bound independent review and a completed verified reader.",),
+        ),
+        cashflow_bridge=ModelConclusionAdmission(
+            status="conditional" if completed and cashflow_bridge_reviewed else "blocked",
+            reasons=("Separately reviewed conditional fiscal cash-flow bridge; not economic approval, "
+                     "valuation, equity value or funding clearance.",)
+            if completed and cashflow_bridge_reviewed else
+            ("Cash-flow bridge needs a source-bound independent review and a completed verified reader.",),
         ),
     )

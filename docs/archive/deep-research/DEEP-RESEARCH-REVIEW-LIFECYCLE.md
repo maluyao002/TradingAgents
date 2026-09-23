@@ -1,5 +1,10 @@
 # Reader-review lifecycle repair
 
+> Historical delivery / validation record. Preserve its evidence and decisions;
+> dated next steps and run allowances are not current instructions or reusable approval.
+> Use the [current roadmap](../../DEEP-RESEARCH-STATUS.md) for active work and
+> the [archive index](README.md) to navigate history.
+
 September 19, 2026. Branch: `codex/research-review-lifecycle`, targeting
 `codex/deep-research-v2`, never main. The PR #14 case-editor wire prerequisite
 merged as `261fe98` after a fresh independent review and 69 focused tests.

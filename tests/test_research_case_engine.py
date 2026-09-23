@@ -123,6 +123,8 @@ def test_case_replay_delivers_material_without_unbound_valuation(tmp_path):
             assert "financial_case" not in payload
         else:
             assert payload["financial_case"] == case_context
+            assert payload["decision_led_research"]["policy"] == "decision-led-research-v1"
+            assert "future_uncertainty" in payload["decision_led_research"]["unknowns"]
             assert delivered[payload["stage"]]["case_context_sha256"] == digest(case_context)
             without_runtime = {k: v for k, v in payload.items() if k not in {"timeout_seconds", "max_output_tokens"}}
             assert delivered[payload["stage"]]["payload_sha256"] == digest(without_runtime)
@@ -249,7 +251,7 @@ def test_duplicate_case_section_purpose_is_rejected():
 def test_new_followup_evidence_stops_before_using_stale_case(tmp_path):
     request, services = case_setup(tmp_path)
     request = request.model_copy(update={"budget": request.budget.model_copy(update={
-        "followup_cycles": 1, "wall_seconds": 30000, "total_tokens": 30000000})})
+        "followup_cycles": 1, "wall_seconds": 30000, "total_tokens": 100000000})})
 
     class NewEvidence(SnapshotEvidenceService):
         def followup(self, request, snapshot, questions):
@@ -259,6 +261,36 @@ def test_new_followup_evidence_stops_before_using_stale_case(tmp_path):
     assert result.stop_reason == "stage_failed"
     assert result.assessment.status == "incomplete"
     assert not any(payload["stage"].startswith("revision-") for _, payload in services.models.calls)
+
+
+def test_followup_reserve_counts_complete_case_delivery_and_decision_policy(tmp_path, monkeypatch):
+    from tradingagents.research import engine
+
+    def planned(name):
+        request, services = case_setup(tmp_path / name)
+        request = request.model_copy(update={"budget": request.budget.model_copy(update={
+            "followup_cycles": 1, "wall_seconds": 30000, "total_tokens": 30000000})})
+        run_research(request, services)
+        return read_json(request.output_dir / "stages/finalization-plan-0.json")["output"]
+
+    baseline = planned("base")
+    assert baseline["future_output_growth_bytes_planning_allowance"] == 8 * 16000 * 16
+    assert baseline["reader_bytes_planning_assumption"] == 16000 * 16
+    assert baseline["provider_output_cap_is_hard"] is False
+    assert baseline["per_call_admission_remains_mandatory"] is True
+    original = engine.case_reader_delivery
+
+    def larger_delivery(context):
+        return {**original(context), "future_delivery_extension": "exact material " * 10000}
+
+    monkeypatch.setattr(engine, "case_reader_delivery", larger_delivery)
+    monkeypatch.setattr(engine, "QUESTION_LED_REQUIREMENTS", {"extended_policy": "new instructions " * 10000})
+    extended = planned("extended")
+    for role in ("editor", "factual"):
+        assert extended["prospective_context_bytes"][role] > baseline["prospective_context_bytes"][role] + 200000
+    assert extended["estimated_tokens"] > baseline["estimated_tokens"]
+    assert extended["optional_cycle_token_envelope"] > baseline["optional_cycle_token_envelope"]
+    assert extended["future_output_growth_bytes_planning_allowance"] == baseline["future_output_growth_bytes_planning_allowance"]
 
 
 def test_historical_prefix_import_is_not_a_case_recovery_path(tmp_path):

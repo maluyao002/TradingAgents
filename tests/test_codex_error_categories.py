@@ -12,6 +12,7 @@ from tradingagents.codex.adapter import (
     CodexTransientError,
     CodexUsageLimitError,
     _turn_error,
+    codex_failure_reason,
 )
 
 
@@ -38,6 +39,14 @@ def test_codes_control_retry_policy_without_leaking_details(info, expected):
     assert type(error) is expected
     assert "PRIVATE_KEY" not in str(error)
     assert "private-value" not in str(error)
+
+
+def test_explicit_provider_context_limit_code_is_redacted_and_finite():
+    error = _turn_error({"codexErrorInfo": "contextWindowExceeded",
+                         "message": "private-provider-prompt-SECRET"})
+    assert type(error) is CodexInferenceError
+    assert codex_failure_reason(error) == "provider_context_limit"
+    assert "SECRET" not in str(error)
 
 
 @pytest.mark.parametrize("event", ["error", "turn/completed"])

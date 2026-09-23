@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from tradingagents.codex.adapter import (
+    _MAX_PROMPT_UTF8_BYTES,
     CodexAdapter,
     CodexAdapterError,
     CodexAuthenticationError,
@@ -14,7 +15,11 @@ from tradingagents.codex.adapter import (
     CodexInferenceError,
     CodexSelectionError,
     CodexTokenUsage,
+    codex_failure_diagnostic,
+    codex_failure_reason,
+    valid_codex_failure_diagnostic,
 )
+from tradingagents.research.resource_diagnostics import valid_source_resource_shape
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="Codex adapter is POSIX-only")
 
@@ -88,6 +93,15 @@ for line in sys.stdin:
     method = request["method"]
     request_id = request["id"]
     params = request.get("params", {})
+
+    if scenario == "rpc-turn-start" and method == "turn/start":
+        send({"id": request_id, "error": {"code": -32000,
+              "message": "private-provider-prompt-SECRET"}})
+        continue
+    if scenario == "rpc-input-length" and method == "turn/start":
+        send({"id": request_id, "error": {"code": -32602,
+              "message": "Input exceeds the maximum length of 272000 private-provider-prompt-SECRET"}})
+        continue
 
     if method == "initialize":
         codex_home = os.environ["CODEX_HOME"]
@@ -237,10 +251,45 @@ for line in sys.stdin:
         send({"id": request_id, "result": result})
         if scenario in {"timeout", "malformed-turn-start"}:
             continue
+        if scenario == "malformed-json-after-turn":
+            print("private-provider-prompt-SECRET", flush=True)
+            continue
         send({
             "method": "turn/started",
             "params": {"threadId": thread_id, "turn": {"id": turn_id, "status": "inProgress", "items": []}},
         })
+        if scenario.startswith("lifecycle-"):
+            item = {"id": "private-item-SECRET", "type": "agentMessage",
+                    "text": "private-message-SECRET", "phase": "final_answer"}
+            def item_event(method, payload):
+                send({"method": method, "params": {
+                    "threadId": thread_id, "turnId": turn_id, "item": payload,
+                }})
+            if scenario == "lifecycle-invalid-shape":
+                item_event("item/completed", "private-item-SECRET")
+            elif scenario == "lifecycle-bad-type":
+                item_event("item/completed", {"id": item["id"], "type": ["private-type-SECRET"]})
+            elif scenario == "lifecycle-object-type":
+                item_event("item/completed", {"id": item["id"], "type": {"private": "SECRET"}})
+            elif scenario == "lifecycle-no-start":
+                item_event("item/completed", item)
+            elif scenario == "lifecycle-duplicate-completion":
+                item_event("item/started", item)
+                item_event("item/completed", item)
+                item_event("item/completed", item)
+            elif scenario == "lifecycle-type-mismatch":
+                item_event("item/started", item)
+                item_event("item/completed", {**item, "type": "plan"})
+            elif scenario == "lifecycle-unfinished":
+                item_event("item/started", item)
+                send({"method": "turn/completed", "params": {
+                    "threadId": thread_id,
+                    "turn": {"id": turn_id, "status": "completed", "items": []},
+                }})
+            elif scenario == "lifecycle-duplicate-start":
+                item_event("item/started", item)
+                item_event("item/started", item)
+            continue
         first_usage = usage_breakdown(10, 5, 4, 2)
         if scenario == "usage-cumulative":
             send_usage(
@@ -454,6 +503,146 @@ def test_complete_uses_isolated_fresh_threads_and_explicit_text_context(tmp_path
     assert turn_params["model"] == "gpt-test-terra"
     assert turn_params["effort"] == "medium"
     assert len([request for request in requests if request.get("method") == "thread/unsubscribe"]) == 2
+
+
+def test_rpc_rejection_retains_only_safe_method_code_and_phase(tmp_path):
+    adapter, _ = _adapter(tmp_path, "rpc-turn-start")
+    with adapter, pytest.raises(CodexInferenceError) as caught:
+        adapter.complete_with_usage("Role", "private-prompt-SECRET", "gpt-test-terra", "medium")
+    assert codex_failure_reason(caught.value) == "transport_rpc_rejected"
+    assert codex_failure_diagnostic(caught.value) == {
+        "kind": "rpc_rejection", "phase": "turn_start",
+        "method": "turn/start", "code": -32000,
+    }
+    assert "SECRET" not in str(caught.value)
+
+
+def test_input_length_rejection_retains_only_bounded_limit_and_phase(tmp_path):
+    adapter, _ = _adapter(tmp_path, "rpc-input-length")
+    with adapter, pytest.raises(CodexInferenceError) as caught:
+        adapter.complete_with_usage("Role", "private-prompt-SECRET", "gpt-test-terra", "medium")
+    assert codex_failure_reason(caught.value) == "transport_input_length_limit"
+    assert codex_failure_diagnostic(caught.value) == {
+        "kind": "input_length_limit", "phase": "turn_start", "method": "turn/start",
+        "code": -32602, "reported_max_length": 272000,
+    }
+    assert "SECRET" not in str(caught.value)
+
+
+@pytest.mark.parametrize(("prompt", "expected_bytes"), [
+    ("x" * (_MAX_PROMPT_UTF8_BYTES + 1), _MAX_PROMPT_UTF8_BYTES + 1),
+    ("é" * (_MAX_PROMPT_UTF8_BYTES // 2 + 1), _MAX_PROMPT_UTF8_BYTES + 2),
+])
+def test_oversized_prompt_fails_preflight_without_any_new_rpc(tmp_path, prompt, expected_bytes):
+    adapter, log = _adapter(tmp_path)
+    with adapter:
+        before = _requests(log)
+        with pytest.raises(CodexInferenceError) as caught:
+            adapter.complete_with_usage("Role", prompt, "gpt-test-terra", "medium")
+        assert _requests(log) == before
+    assert codex_failure_reason(caught.value) == "local_prompt_size_limit"
+    assert codex_failure_diagnostic(caught.value) == {
+        "kind": "local_prompt_size_limit", "phase": "preflight",
+        "request_bytes": expected_bytes, "limit_bytes": _MAX_PROMPT_UTF8_BYTES,
+    }
+    assert prompt[:100] not in str(caught.value)
+
+
+def test_prompt_at_utf8_byte_limit_is_allowed_to_reach_offline_turn(tmp_path):
+    adapter, log = _adapter(tmp_path, timeout=5.0)
+    prompt = "é" * (_MAX_PROMPT_UTF8_BYTES // 2)
+    assert len(prompt.encode("utf-8")) == _MAX_PROMPT_UTF8_BYTES
+    with adapter:
+        completion = adapter.complete_with_usage("Role", prompt, "gpt-test-terra", "medium")
+    assert completion.text == "final analysis"
+    assert any(request.get("method") == "turn/start" for request in _requests(log))
+
+
+def test_local_turn_request_size_reports_encoded_count_and_phase(tmp_path):
+    adapter, log = _adapter(tmp_path)
+    with adapter:
+        adapter.validate_selection("gpt-test-terra", "medium")
+        adapter._verify_inference_isolation()
+        adapter._transport.message_limit = 2048
+        with pytest.raises(CodexInferenceError) as caught:
+            adapter.complete_with_usage("Role", "private-prompt-SECRET" * 150,
+                                        "gpt-test-terra", "medium")
+    assert codex_failure_reason(caught.value) == "transport_request_size_limit"
+    diagnostic = codex_failure_diagnostic(caught.value)
+    assert diagnostic["kind"] == "request_size_limit"
+    assert diagnostic["phase"] == "turn_start"
+    assert diagnostic["request_bytes"] > diagnostic["limit_bytes"] == 2048
+    assert set(diagnostic) == {"kind", "phase", "request_bytes", "limit_bytes"}
+    assert "SECRET" not in str(diagnostic)
+    assert not any(request.get("method") == "turn/start" for request in _requests(log))
+
+
+def test_invalid_wire_response_retains_protocol_kind_and_wait_phase(tmp_path):
+    adapter, _ = _adapter(tmp_path, "malformed-json-after-turn", timeout=0.3)
+    with adapter, pytest.raises(CodexInferenceError) as caught:
+        adapter.complete_with_usage("Role", "Evidence", "gpt-test-terra", "medium")
+    assert codex_failure_reason(caught.value) == "transport_protocol_error"
+    assert codex_failure_diagnostic(caught.value) == {
+        "kind": "malformed_json", "phase": "turn_wait",
+    }
+    assert "SECRET" not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    ("scenario", "reason", "check", "event", "item_type", "started", "completed"),
+    [
+        ("lifecycle-invalid-shape", "protocol_invalid_item", "invalid_item_shape",
+         "item/completed", "unknown", 0, 0),
+        ("lifecycle-bad-type", "protocol_unexpected_item", "invalid_item_shape",
+         "item/completed", "unknown", 0, 0),
+        ("lifecycle-object-type", "protocol_unexpected_item", "invalid_item_shape",
+         "item/completed", "unknown", 0, 0),
+        ("lifecycle-no-start", "protocol_invalid_item", "completion_without_start",
+         "item/completed", "agentMessage", 0, 0),
+        ("lifecycle-duplicate-completion", "protocol_invalid_item", "duplicate_completion",
+         "item/completed", "agentMessage", 1, 1),
+        ("lifecycle-type-mismatch", "protocol_invalid_item", "type_mismatch",
+         "item/completed", "plan", 1, 0),
+        ("lifecycle-unfinished", "protocol_invalid_item", "unfinished_item",
+         "turn/completed", "agentMessage", 1, 0),
+        ("lifecycle-duplicate-start", "protocol_duplicate_item", "duplicate_start",
+         "item/started", "agentMessage", 1, 0),
+    ],
+)
+def test_item_lifecycle_failures_are_finite_private_and_resource_compatible(
+    tmp_path, scenario, reason, check, event, item_type, started, completed,
+):
+    adapter, log = _adapter(tmp_path, scenario)
+    with adapter, pytest.raises(CodexInferenceError) as caught:
+        adapter.complete_with_usage("Role", "private-prompt-SECRET", "gpt-test-terra", "medium")
+
+    diagnostic = codex_failure_diagnostic(caught.value)
+    assert codex_failure_reason(caught.value) == reason
+    assert diagnostic == {
+        "kind": "item_lifecycle", "phase": "turn_wait", "check": check,
+        "event": event, "item_type": item_type,
+        "started_count": started, "completed_count": completed,
+    }
+    assert valid_codex_failure_diagnostic(diagnostic)
+    resource = {
+        "usage": None, "elapsed_seconds": 0.0, "dispatched": True,
+        "by_stage": {}, "failure_reason": reason, "failure_diagnostic": diagnostic,
+    }
+    assert valid_source_resource_shape(resource)
+    assert not valid_source_resource_shape({
+        **resource, "failure_diagnostic": {**diagnostic, "private": "SECRET"},
+    })
+    assert not valid_codex_failure_diagnostic({**diagnostic, "event": "private-event-SECRET"})
+    assert not valid_codex_failure_diagnostic({**diagnostic, "check": "private-check-SECRET"})
+    assert not valid_codex_failure_diagnostic({**diagnostic, "item_type": "private-type-SECRET"})
+    assert not valid_codex_failure_diagnostic({**diagnostic, "started_count": 10_001})
+    assert not valid_codex_failure_diagnostic({**diagnostic, "started_count": -1})
+    assert not valid_codex_failure_diagnostic({**diagnostic, "completed_count": started + 1})
+    assert not valid_codex_failure_diagnostic({**diagnostic, "completed_count": True})
+    assert "SECRET" not in str(caught.value)
+    assert "SECRET" not in json.dumps(resource)
+    methods = [request["method"] for request in _requests(log)]
+    assert methods[-2:] == ["turn/interrupt", "thread/unsubscribe"]
 
 
 def test_complete_forwards_a_copied_output_schema_only_to_turn_start(tmp_path):

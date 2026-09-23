@@ -561,3 +561,62 @@ def test_request_must_be_explicit_bounded_fcff_opt_in(tmp_path):
     wrong_method = _request(tmp_path).model_copy(update={"valuation_method": "equity_fcfe"})
     with pytest.raises(ValidationError, match="bounded evidence-led FCFF"):
         load_case_context(content, wrong_method, snapshot)
+
+
+@pytest.mark.parametrize("cashflow_reviewed", [False, True])
+def test_optional_cashflow_bridge_preserves_review_gating_and_legacy_scope(
+    tmp_path, cashflow_reviewed
+):
+    from tests.test_research_cashflow_bridge import bridge_setup
+
+    snapshot, case, operating, bridge = bridge_setup(
+        tmp_path / "bridge", reviewed=cashflow_reviewed
+    )
+    request = _request(
+        tmp_path,
+        cutoff=snapshot.cutoff,
+        timezone=case.timezone,
+    )
+    content = canonical_json(
+        {
+            "case": case,
+            "operating_scenarios": operating,
+            "cashflow_bridge": bridge,
+        }
+    )
+    context = load_case_context(content, request, snapshot)
+
+    assert context.cashflow_bridge is not None
+    assert context.cashflow_bridge.reviewed is cashflow_reviewed
+    assert bool(context.cashflow_bridge.calculated_values) is cashflow_reviewed
+    delivered = context.model_context()["cashflow_bridge"]
+    assert delivered["context_kind"] == (
+        "reviewed_conditional_cash_flow_bridge"
+        if cashflow_reviewed
+        else "cash_flow_bridge_audit_only"
+    )
+    assert ("scenarios" in delivered) is cashflow_reviewed
+    assert "cashflow_bridge_result.json" in context.artifacts
+    assert all(
+        getattr(context.scope, name).status == "blocked"
+        for name in (
+            "operating_asset_value",
+            "equity_per_share_value",
+            "funding_assessment",
+            "opening_date_alignment",
+        )
+    )
+
+
+def test_absent_cashflow_bridge_keeps_historical_context_shape_exact(tmp_path):
+    snapshot = _snapshot()
+    case = _case(snapshot)
+    context = load_case_context(_content(case), _request(tmp_path), snapshot)
+
+    assert context.cashflow_bridge is None
+    assert "cashflow_bridge" not in context.model_context()
+    assert set(context.artifacts) == {
+        "financial_case.json",
+        "financial_reconciliation.json",
+        "case_context.json",
+    }
