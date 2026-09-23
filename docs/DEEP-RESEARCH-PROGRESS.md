@@ -29,14 +29,58 @@ changed historical artifact hashes, and four reused source rows needed explicit
 cross-checks against existing facts. Actual saved preview-11 provenance now
 revalidates without modifying the saved run. **96 targeted tests**, lint and
 whitespace checks passed; no actionable code-review findings remain in the
-reviewed scope. Source/operating review of the new nine-fact packet passed;
-separate cash-flow review and bounded live validation are still pending here.
+reviewed scope. Fresh source/operating and separate cash-flow reviews passed and
+were attached to `reviewed_inputs_2`, admitting 36 operating and 65 cash-flow
+calculation references while leaving the financial case draft and valuation/
+equity/funding conclusions blocked. PR #26 is open against the integration branch.
 
 The full-path budget includes factual, all coverage batches, possible repair and
 rechecks. The unchanged 3m-token / 5,400-second / 600-second-per-call bounds may
 cover one pass but do not guarantee a complete repair path. A new attempt must
 stop safely at its limits, not omit checks or silently renew the allowance.
-No new report or live-call success is claimed by these preparation steps.
+Attempt 3 launched around 16:53 UTC on September 23 from frozen revision
+`d65b3ba`; its exact request, 24-file input manifest check, runtime fingerprint and
+model preflight are in `fresh_validation_plan_3`. It completed 28 model calls,
+including fresh analysis/writing, factual review and all 18 coverage batches,
+then stopped at `repair_path_budget_insufficient` before dispatching repair.
+Usage was **1,463,703 input + 179,030 output = 1,642,733 tokens**, complete for
+this attempt; elapsed **3,593.84 seconds (59m54s)**. Cached input and reasoning
+counts are subsets, not extra tokens. Earlier incomplete attempts remain unchanged.
+
+The repair path reserved 3,157,123 tokens versus 1,357,267 remaining and estimated
+4,504.80 seconds versus 1,806.30 remaining. The stop is budget admission, not a
+source or provider-transport failure. The reader is not exported: 167 of 200
+required limitation IDs were engine-validated; the combined review retains
+58 findings (including 34 deterministic disposition findings, not 58 distinct
+substantive defects). The generated `reader_report.md` file contains only a
+diagnostic placeholder, not a completed research reader. Financial acceptance
+and production activation remain blocked.
+
+The offline `finalization_plan_3` binds the exact candidate and all 28 completed
+calls for reuse, with a proposed incremental 4m-token / 5,400-second /
+600-second-per-call cap. Preparation passed; user approval is pending and no
+authorization file or live continuation was created. See the
+[dated validation record](archive/deep-research/DEEP-RESEARCH-FRESH-VALIDATION.md)
+for exact identities and next gates. All six hosted checks passed on `d65b3ba`;
+PR #26 remains open and no new merge is claimed.
+
+An independent Astra/high editorial comparison is bound to attempt 3's exact
+first reader candidate in `fresh_validation_plan_3/reader_comparison_draft.md`.
+It finds better cash definitions, residual attribution and two-sided reasoning,
+but underused supplied evidence, weak scenario interpretation/observation plans,
+dense tables and a missing local issuer-FCF citation. This is provisional
+candidate review, not exported-reader inspection or acceptance. Reassess it
+against any repaired/exported reader before declaring those findings closed.
+The follow-up scope review identifies audit lineage and unused valuation
+conventions being routed into mandatory reader caveats; it preserves all live
+findings and gates. Separately, **34 targeted finalization recovery/engine tests**
+passed before considering any continuation. This is offline evidence, not new
+authorization or proof that a live continuation will complete.
+
+Integration cleanup removed the fully merged local/remote
+`codex/research-substantive-closure` branch after checking its exact `00de1dd`
+tip and ancestry in `bb580cb`. Its commits remain recoverable through the
+integration merge; the running branch, main and report artifacts were unchanged.
 
 ## Previous completed increment — PR #24
 
