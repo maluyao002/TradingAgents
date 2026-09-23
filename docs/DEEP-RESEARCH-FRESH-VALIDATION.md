@@ -185,3 +185,68 @@ at 2026-09-23 04:45:55 UTC. Bounds remain 3m tokens best-effort, 90 minutes tota
 600 seconds per call, including the existing finalization/repair reserves. No old
 analysis response is imported. Attempt 1 and its incomplete telemetry remain
 unchanged; attempt-2 usage must not be described as complete campaign usage.
+
+## Attempt 2 terminal outcome
+
+The attempt stopped after **2,195.77 seconds (36m36s)** with `stage_failed` at
+`verify_report`. The safe recorded classification is `transport_error`, exception
+type `CodexInferenceError`; this is **not** a recurrence of the unsupported-model
+selection error. The precise transport cause is not established by these records.
+
+Nine stages completed with accepted outputs: independent challenge, planner,
+business, accounting, expectations, management, reconciled challenge, claim
+verification and editor. The failed exact-reader factual-verification call ran
+for approximately 0.52 seconds and supplied no settled usage. No coverage batch
+or repair ran. Neither the 90-minute overall deadline nor the 3m known-token
+allowance was the recorded stop reason.
+
+Known reported usage is **1,091,847 input + 68,064 output = 1,159,911 tokens**,
+including 23,681 reasoning tokens within output, not additional to it. Cached
+input is reported as zero. Overall attempt usage is **incomplete** because the
+failed call has unknown usage; these numbers are not a complete total or proof
+that the failed call cost nothing. Earlier attempt/campaign unknown usage remains
+unchanged as well.
+
+`reader_verification.json` records `exported=false`, `reviewed_report=false` and
+zero coverage batches; admission remains incomplete/blocked. An authored draft
+exists, but `reader_report.md` is not an admitted final reader. The retained
+candidate hash is
+`aea622fc67a4161b9c116ce5102d55ddd7f63e2b3efc0027ba922d156a0c9dd1`.
+No reader acceptance, financial acceptance or release conclusion is claimed.
+
+The temporary monitoring heartbeat is paused after this terminal notification.
+No retry, budget renewal, historical artifact edit, PR merge or production change
+was made. The next safe step is offline diagnosis of the transport boundary and
+recovery eligibility; any further paid attempt needs separate authorization and
+must preserve the unknown usage rather than reset it.
+
+## September 23 runtime alignment and authorized diagnosis
+
+The user authorized the recommended runtime/model-selection updates, safer
+diagnostics and bounded investigation without further supervision. Implementation
+is isolated on `codex/codex-runtime-model-alignment`; neither main nor the frozen
+`codex/deep-research-v2` checkout is changed by this work.
+
+The standalone research CLI was 0.153.4, separate from the desktop's coding-agent
+runtime. The official updater installed 0.156.1. A metadata-only check in the
+existing isolated research home now advertises GPT-6 Sol/high and xhigh,
+GPT-6 Luna/high, and GPT-6 Astra/high. No credentials were copied or reconfigured.
+The previous Sol 5.6 selections remain unchanged in historical run requests.
+
+Offline reconstruction of attempt 2 matched all eight pre-editor input hashes,
+the saved reader candidate, and its rendering provenance. The factual-review
+boundary contains 1,173,651 input bytes; its serialized turn request is about
+1.27 MB, below the local 4 MiB transport limit. An in-memory transport test passes
+serialization without sending a request. This rules out that local outbound
+limit, not every possible server/runtime rejection. The historical error lacks
+the underlying subtype and cannot establish an external outage.
+
+The existing finalization-continuation admission correctly rejects this source:
+the candidate has no completed factual review, and source usage is incomplete.
+Do not weaken this gate or turn an offline fixture into a validated continuation.
+Instead, the next diagnostic makes only one fresh factual call on the exact
+saved reader using GPT-6 Sol/xhigh, with a 600-second call limit, a 660-second
+overall budget and a 1.5m-token best-effort ceiling (conservative byte-based
+admission plus post-call accounting, not a provider-hard output cap). It must
+use a fresh, hash-bound capsule, preserve historical unknown usage, and cannot
+export a final report, reuse its result as a recovery attestation, or retry itself.
