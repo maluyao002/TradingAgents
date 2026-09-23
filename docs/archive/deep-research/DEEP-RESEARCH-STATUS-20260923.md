@@ -205,7 +205,7 @@ At roadmap reconciliation, full non-live verification was **1,982 passed**. The
 approved baseline-review head passed **2,015 tests**. Stage 1 passes **2,091 tests, 1 skip,
 1 integration test deselected, 18 existing warnings and 65 subtests**. This is
 evidence of tested behavior, not report-quality certification. The review changes
-and publication status are recorded in the [progress log](../../DEEP-RESEARCH-PROGRESS.md);
+and publication status are recorded in the [progress log](DEEP-RESEARCH-PROGRESS-20260923.md);
 no research-model calls were used for that code review.
 
 ### Original milestone reconciliation
@@ -559,7 +559,7 @@ Document ownership:
 - **This file:** current state, priorities, ownership and artifact navigation.
 - [Design](../../DEEP-RESEARCH-DESIGN.md): durable target architecture and scope.
 - [Plan](../../DEEP-RESEARCH-PLAN.md): original milestone and acceptance requirements.
-- [Progress](../../DEEP-RESEARCH-PROGRESS.md): historical implementation/run evidence;
+- [Progress](DEEP-RESEARCH-PROGRESS-20260923.md): historical implementation/run evidence;
   older “next” or “not yet” statements describe their checkpoints, not today's queue.
 - [Usage](../../DEEP-RESEARCH-USAGE.md): commands, contracts and operational boundaries.
 - [Weekly reports](../../WEEKLY-REPORTS.md): unchanged legacy application and Chinese TODO.
