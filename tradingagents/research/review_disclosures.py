@@ -8,7 +8,7 @@ from .storage import canonical_json, digest, parse_json
 DISCLOSURE_POLICY = "validated-case-review-scope-v1"
 
 
-def review_disclosure(request, snapshot, context, language):
+def review_disclosure(request, snapshot, context, language, *, include_cashflow_inputs=False):
     """Recompute review state; never trust a serialized status or authored claim."""
     if not isinstance(context, CaseContext):
         raise ValueError("review disclosure requires a validated case context")
@@ -82,6 +82,12 @@ def review_disclosure(request, snapshot, context, language):
         )
     heading = "复核状态与模型范围" if chinese else "Review status and model scope"
     text = f"## {heading}\n\n{financial_text} {operating_text}\n\n{scope_text}"
+    inputs = {}
+    if include_cashflow_inputs:
+        from .cashflow_presentation import cashflow_assumptions
+        presentation = cashflow_assumptions(bridge, language)
+        inputs = {"cashflow_assumptions_text": presentation,
+                  "cashflow_assumptions_sha256": sha256(presentation.encode()).hexdigest()}
     return {"schema_version": 1, "policy": DISCLOSURE_POLICY,
         "classification": "code_owned_case_state_not_issuer_evidence_or_acceptance",
         "financial_status": "reviewed" if checked.reviewed else "draft_unreviewed",
@@ -96,5 +102,5 @@ def review_disclosure(request, snapshot, context, language):
             "cashflow_bridge_package_sha256": sha256(
                 checked.artifacts["cashflow_bridge_package.json"]).hexdigest()}
            if bridge is not None else {}),
-        "text": text, "text_sha256": sha256(text.encode()).hexdigest(),
+        **inputs, "text": text, "text_sha256": sha256(text.encode()).hexdigest(),
         "financial_sentence": financial_text, "scope_sentence": scope_text}

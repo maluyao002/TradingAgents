@@ -83,7 +83,7 @@ def test_engine_11_rejects_completed_engine_10_invalid_commitment_cache(tmp_path
         )
         assert replay_models.calls == []
 
-    assert storage.ENGINE_VERSION == engine.ENGINE_VERSION == "research-v2-preview-11"
+    assert storage.ENGINE_VERSION == engine.ENGINE_VERSION == "research-v2-preview-12"
     current_models = CashFixture()
     with pytest.raises(ValueError, match="incompatible research checkpoint"):
         run_research(request, ResearchServices(SnapshotEvidenceService(snapshot), current_models))

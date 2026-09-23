@@ -531,6 +531,7 @@ def render_reader(
     *,
     compact: bool = False,
     bind_case_state: bool = False,
+    bind_cashflow_inputs: bool = False,
     case_context=None,
 ) -> ReaderRender:
     """Render a reader report and a complete limitations/source audit.
@@ -622,7 +623,8 @@ def render_reader(
         else:
             from .review_disclosures import review_disclosure
             try:
-                disclosure = review_disclosure(request, snapshot, case_context, language)
+                disclosure = review_disclosure(request, snapshot, case_context, language,
+                                               include_cashflow_inputs=bind_cashflow_inputs)
             except (ValueError, TypeError, KeyError):
                 if draft is not None:
                     raise
@@ -730,6 +732,9 @@ def render_reader(
                     }
                 )
             text.extend(["", f"## {_markdown_label(section.title)}", "", body])
+            if (disclosure and getattr(section, "purpose", None) == "scenarios"
+                    and disclosure.get("cashflow_assumptions_text")):
+                text.extend(["", disclosure["cashflow_assumptions_text"]])
             if fallback_line is not None:
                 text.extend(["", fallback_line])
 
