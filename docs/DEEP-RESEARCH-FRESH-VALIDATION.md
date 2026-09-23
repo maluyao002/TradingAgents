@@ -314,3 +314,54 @@ The integrated affected tests pass (96 tests and 66 subtests); separate adapter
 and resource-diagnostic tests pass (136). No local full-suite rerun was needed.
 No full report, reader acceptance, financial approval or release is established
 by this diagnostic.
+
+### Successful exact-reader transport and factual diagnostic
+
+After independent review of the finite lifecycle diagnostics,
+`factual_diagnostic_sol6_lifecycle_1` completed successfully at code revision
+`eef39815faca691ba30cda537d7ab5d892ad54a7`, with plan SHA-256
+`97cf58cd60ffc9f7a6840809c2227830812f04984e3aadc4126c19054cda8e69`.
+It used **GPT-6 Sol/xhigh**, the same exact reader and payload as the preceding
+packed attempt, and the same 600-second call limit. No protocol gate was relaxed.
+Elapsed time was **237.17 seconds (3m57s)**. Neither the input-size rejection nor
+the lifecycle failure recurred. This establishes one successful repaired-boundary
+call, not that transient connection failures are impossible. The preceding
+lifecycle failure's precise cause remains unproven.
+
+Reported usage for this call is **271,498 input + 10,806 output = 282,304 tokens**,
+with **complete telemetry**; 7,299 reasoning tokens are included in output and
+cached input is zero. Earlier failed-call usage and campaign totals remain
+incomplete. Do not combine this success with historical unknowns into a claimed
+complete campaign total.
+
+The structured verifier returned `reviewed_report=true`, no contradicted claim
+IDs, and one warning: `verify_report-incomplete_cashflow_sensitivity_inputs`.
+It asks the reader to expose the supplied scenario tax rates (19%/18%/17%),
+quarterly working-capital assumptions (USD 10.0/8.5/7.0 billion), and the
+1.2%-of-revenue depreciation/amortization assumption. These are conditional
+analyst inputs, not issuer forecasts or evidence of economic likelihood.
+The response also proposes retiring obsolete reader warnings while retaining
+the protected issuer-FCF reconciliation and independent-evidence limitations.
+These are model-proposed dispositions, **not engine-applied lifecycle closures**.
+
+Artifacts are in
+`reports/RESEARCH_SUBSTANTIVE_20260922/factual_diagnostic_sol6_lifecycle_1/run_1/`:
+`diagnostic.json` records scope/usage and `factual_reply.json` preserves the reply.
+The capsule cannot export a final report or be reused as a recovery attestation.
+It reconstructs historical analysis inputs only to diagnose the factual boundary;
+it is **not a fresh end-to-end analysis or final exported-reader acceptance run**.
+
+All six hosted checks passed on `eef3981` (Python 3.10–3.13, locked install and
+container privacy/import). The hosted API model-effort finding is fixed and
+resolved. Hosted re-review of `eef3981` completed at 08:26:17 UTC with no new
+inline findings; the only review thread is resolved. This final outcome entry
+changes documentation only, not the validated implementation.
+
+Next delivery sequence remains: complete PR review/integration through the
+feature branches; carry the explicit cash-flow assumption presentation into the
+next reader; budget the complete fresh analysis, writing, factual, coverage and
+repair path and inspect its actual exported English reader. Then close typed
+financial reconciliation and targeted independent evidence gaps with dependent
+review before proving HOOD generality. Do not transplant this diagnostic into an
+admitted continuation. User reader acceptance and production release remain
+separate gates. No additional live run or PR merge is initiated by this success.
