@@ -175,3 +175,40 @@ unique tests on top of the prior checkpoint. Ruff and whitespace checks passed.
 An independent Sol/high read-only re-review found no actionable findings in
 the correction. That reviewer could not run pytest in its shell; the targeted
 test results above were run by the coordinator using the project environment.
+
+## Subsequent commitment review corrections
+
+Three new inline findings on `fcfcd52` are addressed:
+
+- Incremental deductions require contractual cash, compatible incremental source
+  treatment and no source overlap. Gross maximum-exposure guarantees and
+  unassessed/already-reflected obligations cannot become expected cash deductions.
+- Every in-horizon commitment must have USD units and USD currency, including
+  nondeducted rows included in treatment totals. No implicit FX conversion occurs.
+- An explicitly supplied empty assumptions tuple is valid when the in-horizon
+  source set is empty. Exact coverage remains mandatory for a nonempty set, and
+  omitting the assumptions field entirely remains invalid.
+
+The updated routing guide was applied: Sol/high authored isolated regressions;
+Sol/xhigh independently reviewed the consequential validation change. That review
+also found completed-result reuse occurs before case revalidation. Advancing to
+`research-v2-preview-11` invalidates old completed-run/checkpoint identities;
+reader preview supports the new revision without relaxing its integrity checks.
+The real frozen NVDA bridge reevaluates to byte-identical numerical results.
+
+The first combined verification selection passed **95 targeted tests** covering
+commitment eligibility/empty coverage, bridge/review/NVDA paths, reader delivery,
+preview compatibility and finalization recovery. Historical inputs and reports
+were not rewritten, and these tests made no live model calls.
+
+Re-review also tested changing the horizon to an unmatched label with empty
+assumptions. Keeping the existing review correctly yields `reviewed=false` and
+zero calculated values; a new regression protects this. The reviewer withdrew
+the bypass finding after confirming its positive reproduction issued a fresh
+synthetic review. Horizon labels remain author-supplied, hash-bound scope, not
+verified date semantics or proof that the company has no other obligations.
+
+Final correction validation: **97 targeted tests passed**, including a synthetic
+completed preview-10 result that the current preview-11 engine rejects before
+any model call. Ruff and whitespace checks passed. No unresolved actionable
+finding remains from this bounded re-review.

@@ -401,6 +401,19 @@ def test_working_capital_current_fact_cannot_be_swapped_across_metrics(tmp_path)
         _historical_result(anchor, _eligible_fact_map(snapshot))
 
 
+def test_empty_horizon_cannot_inherit_a_review_for_different_commitments(tmp_path):
+    snapshot, case, operating_package, package = bridge_setup(tmp_path, reviewed=True)
+    operating = evaluate_operating_scenarios(operating_package, case, snapshot)
+    changed = package.model_copy(update={
+        "commitment_horizon": "unmatched-label",
+        "commitment_assumptions": (),
+    })
+    result = evaluate_cashflow_bridge(changed, case, snapshot, operating)
+    assert not result.reviewed
+    assert not result.calculated_values
+    assert any("review package hash" in item for item in result.limitations)
+
+
 def test_decimal_context_cannot_change_tax_or_cash_flow_arithmetic(tmp_path):
     snapshot, case, operating_package, package = bridge_setup(tmp_path)
     operating = evaluate_operating_scenarios(operating_package, case, snapshot)

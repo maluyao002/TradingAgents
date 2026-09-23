@@ -85,9 +85,9 @@ def preview_saved_reader(source: Path, request, destination: Path):
         contents[name] = _read_source(source, name)
     contents["run_metadata.json"] = _read_source(source, "run_metadata.json")
     engine = parse_json(contents["run_metadata.json"]).get("engine")
-    if engine not in {f"research-v2-preview-{n}" for n in range(1, 11)}:
+    if engine not in {f"research-v2-preview-{n}" for n in range(1, 12)}:
         raise ValueError("unsupported preview engine revision")
-    requires_provenance = engine in {f"research-v2-preview-{n}" for n in range(6, 11)}
+    requires_provenance = engine in {f"research-v2-preview-{n}" for n in range(6, 12)}
     provenance_name = f"stages/{reader_stage}-rendering-provenance.json"
     cite_calculations = False
     provenance = None
@@ -102,7 +102,7 @@ def preview_saved_reader(source: Path, request, destination: Path):
         if cite_calculations:
             contents["model_appendix.md"] = _read_source(source, "model_appendix.md")
             contents["case_context.json"] = _read_source(source, "case_context.json")
-    if engine in {f"research-v2-preview-{n}" for n in range(7, 11)}:
+    if engine in {f"research-v2-preview-{n}" for n in range(7, 12)}:
         contents["case_input.json"] = _read_source(source, "case_input.json")
         contents["case_context.json"] = _read_source(source, "case_context.json")
     records = {
@@ -115,14 +115,14 @@ def preview_saved_reader(source: Path, request, destination: Path):
     snapshot = validate_snapshot(EvidenceSnapshot.model_validate(records["evidence.json"]), request)
     calculations = tuple(CalculatedValue.model_validate(item) for item in records["calculated_values.json"])
     case_context = None
-    if engine in {f"research-v2-preview-{n}" for n in range(7, 11)}:
+    if engine in {f"research-v2-preview-{n}" for n in range(7, 12)}:
         case_context = load_case_context(contents["case_input.json"], request, snapshot)
         if digest(case_context.model_context()) != digest(records["case_context.json"]):
             raise ValueError("saved case context differs from validated frozen inputs")
         expected_calculations = (case_context.operating_scenarios.calculated_values
                                  if case_context.operating_scenarios is not None else ())
         if case_context.cashflow_bridge is not None:
-            if engine not in {"research-v2-preview-9", "research-v2-preview-10"}:
+            if engine not in {f"research-v2-preview-{n}" for n in range(9, 12)}:
                 raise ValueError("cash-flow bridge requires preview-9 or later")
             expected_calculations = (*expected_calculations, *case_context.cashflow_bridge.calculated_values)
         if calculations != expected_calculations:
@@ -171,7 +171,7 @@ def preview_saved_reader(source: Path, request, destination: Path):
         expected = reader_provenance(authored, draft, eligible_facts, calculations,
                                      request.report_language, prior, cite=cite_calculations,
                                      request=request, snapshot=snapshot, issues=issues, case_context=case_context,
-                                     bind_case_state=engine in {f"research-v2-preview-{n}" for n in range(8, 11)})
+                                     bind_case_state=engine in {f"research-v2-preview-{n}" for n in range(8, 12)})
         if digest(expected) != digest(provenance):
             raise ValueError("saved rendering provenance binding mismatch")
         if cite_calculations:
@@ -183,7 +183,7 @@ def preview_saved_reader(source: Path, request, destination: Path):
                 raise ValueError("saved calculation appendix mismatch")
     preview = render_reader(request, draft, snapshot, issues, request.report_language, compact=True,
                             case_context=case_context,
-                            bind_case_state=engine in {f"research-v2-preview-{n}" for n in range(8, 11)})
+                            bind_case_state=engine in {f"research-v2-preview-{n}" for n in range(8, 12)})
     binding = "initial_candidate"
     if exported_reader_sha256 is not None:
         final_reader = contents["reader_report.md"]
