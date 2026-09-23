@@ -188,8 +188,8 @@ locally; existing hosted CI requirements remain unchanged.
 | Approved priority | Delivered in this increment | Still required |
 | --- | --- | --- |
 | Actionable unknowns | Nine lossless work packages, ownership, completion criteria and search boundaries | Execute the substantive work; grouping itself closes no issue |
-| Financial model | Dated conditional cash-flow calculator, engine-to-reader integration and narrow case-3 source/arithmetic review | Current bound review in the newly assembled case, residual attribution, longer-horizon valuation, equity/funding closure |
-| Independent evidence | Targeted source review, three guidance/actual pairs; all seven intended documents captured, plus Meta filing index, with verified raw/text bindings | New eligible packet, exact-passage review, additional guidance-series source texts and targeted unresolved operating evidence |
+| Financial model | Dated conditional cash-flow calculator, engine-to-reader integration; current operating and case-4 cash-flow reviews attached to the new packet; source-level residual attribution | Typed residual reconciliation, economic underwriting, longer-horizon valuation, equity/funding closure |
+| Independent evidence | Targeted source review, three guidance/actual pairs; seven intended documents captured; fresh eligible packet with 12 reviewed exact passages from six selected sources | Additional guidance-series source texts, revision chronology and targeted unresolved operating evidence |
 | Judgment-led writing | Shared analyst/writer/verifier contract and separate cash-flow scope disclosure | Validate the actual enriched English reader, not merely prompt compliance |
 | Integrated verification | Targeted synthetic end-to-end mechanics and regression checks | Fresh bounded NVDA validation, actual-reader acceptance, then HOOD generality |
 
@@ -198,6 +198,18 @@ without committing it. Captures 3/4 complete the seven-document acquisition;
 the Meta URL correction and preserved failures are recorded in the
 [evidence follow-up](DEEP-RESEARCH-EVIDENCE-FOLLOWUP.md). All new material remains
 post-cutoff and needs a fresh eligible packet before engine delivery.
+
+The next offline increment has now assembled that targeted extension at
+`reports/RESEARCH_SUBSTANTIVE_20260922/eligible_packet_1/`: six selected sources,
+12 exact passages (5,225 characters), and a new cutoff of
+`2026-09-22T23:58:49Z`. It clears inherited reviews rather than copying their
+approval to changed evidence. Subsequent independent operating and cash-flow
+reviews are now attached in `reviewed_inputs_1/`; the actual delivery preflight
+confirms all 12 added passages and 93 controlled operating/cash-flow values.
+Financial, valuation and funding acceptance remain blocked. The
+[packet and readiness record](DEEP-RESEARCH-FOLLOWUP-PACKET.md)
+tracks these separate reviews and remaining live-validation gates. This is not a
+complete current-data refresh or acceptance of the previous reader.
 
 All six hosted CI checks passed on code commit `3d14249` (Python 3.10–3.13,
 locked install, container privacy/import). The acquisition follow-up reran all

@@ -14,6 +14,22 @@ or pull request is implicit.
 
 ### Substantive research closure — September 22, 2026
 
+Follow-up checkpoint: the [targeted evidence packet](DEEP-RESEARCH-FOLLOWUP-PACKET.md)
+now contains six selected new sources and 12 exact passages (5,225 characters),
+under a fresh September 22 cutoff. Independent operating and cash-flow reviews
+were performed on the new hashes and attached into `reviewed_inputs_1/`. Read-back
+confirmed all 12 passages plus 36 operating and 57 cash-flow calculated values in
+the delivered case context. Source-level attribution of the historical residual
+is recorded, but typed reconciliation and economic underwriting remain open.
+The financial case stays draft; valuation, equity/per-share and funding stay
+blocked. No new live research or accepted reader is claimed.
+
+The follow-up adds bounded immutable packet assembly and an offline cash-flow
+review-attachment adapter. Independent code review found three P2 guardrail issues;
+all were fixed, and re-review found no remaining findings in scope. The final
+affected test selection passed 127 tests, with Ruff and whitespace checks clean.
+Code checkpoints: `4c6d72a` (packet assembly) and `b21c703` (cash-flow review attachment).
+
 Following PR #22 integration, the approved five-priority work moved to
 `codex/research-substantive-closure`. See the
 [delivery and remaining-work record](DEEP-RESEARCH-SUBSTANTIVE-CLOSURE.md).

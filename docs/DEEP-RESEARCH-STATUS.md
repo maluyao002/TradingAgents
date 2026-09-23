@@ -19,8 +19,13 @@ gates. Newly acquired sources require a fresh eligible packet and dependent revi
 The SEC contact blocker is resolved: all seven intended follow-up documents are
 now captured with checked raw/text bindings (plus Meta's filing index). The Meta
 URL correction and historical failures are preserved in the
-[evidence follow-up](DEEP-RESEARCH-EVIDENCE-FOLLOWUP.md). Next is eligible-packet
-assembly and exact-passage review, not automatic acceptance of the old reader.
+[evidence follow-up](DEEP-RESEARCH-EVIDENCE-FOLLOWUP.md). A fresh targeted packet
+now contains 12 exact passages from six selected sources; see the
+[packet and review-readiness record](DEEP-RESEARCH-FOLLOWUP-PACKET.md).
+Current independent operating and cash-flow source/arithmetic reviews are attached,
+and input-delivery preflight passed. Fresh bounded analysis, financial acceptance
+and actual-reader validation remain separate from these reviews and do not approve
+the old reader.
 
 The requested [retrospective PR review and bound-disclosure increment](DEEP-RESEARCH-REVIEW-DISCLOSURES.md)
 found five defects missed by the earlier independent reviews of PRs #20/#21.
