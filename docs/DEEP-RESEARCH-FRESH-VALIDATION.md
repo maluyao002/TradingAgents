@@ -68,3 +68,58 @@ would require its own settled-usage, exact-input and budget checks.
    regulatory capital and obligations. Do not impose an industrial FCFF template.
 5. Present the actual readers and remaining limits for user acceptance; do not
    activate schedules or release to production.
+
+## Preflight outcome and explicit execution blocker
+
+All 25 source-bundle artifact hashes passed verification. The financial case
+remains draft; operating and cash-flow source/arithmetic reviews are current.
+All six hosted PR #23 checks passed. No code implementation was changed for
+this preflight, so the prior targeted regressions remain applicable.
+
+Execution permission was denied **before process startup**: auto-review requires
+explicit user consent to transmit the frozen NVDA evidence and internal case
+materials to OpenAI's external Codex model service. The new run directory does
+not exist; this attempt made zero research-model calls and exported no reader.
+No alternate transport, indirect execution or retry bypass was attempted.
+The 3m-token/90-minute allowance is unspent, not a renewed historical budget.
+The preflight binds code `fcfcd52`; the subsequent `d9f4baf` commit is this
+budget document only, with no runtime changes.
+
+## Offline residual implementation handoff
+
+Independent Sol/high inspection found that the previously described standalone
+`nvda_cashflow_case_4_review/attribution.json` is absent. Its existing review notes
+state the exact residual, but do not contain that claimed full attribution file.
+Preserve them; do not manufacture a historical reviewer artifact. Newly checked
+exact source spans and recomputed arithmetic are instead recorded as
+`fresh_validation_plan_1/residual_source_mapping.json`, explicitly **not** typed
+reconciliation or independent approval.
+
+The source-statement split of bridge less reported FCF, in USD billions, is:
+operating-tax proxy versus net income **−20.145402729651…**; the negative of
+omitted noncash/other CFO adjustments **+18.549**; balance-sheet working-capital
+proxy versus reported cash-flow movements **−2.354**. The sum is the unchanged
+**−3.950402729651…** residual. Capex cancels. These are mechanical differences,
+not a calibrated forward cash forecast or a single causal working-capital story.
+
+Implementation after the baseline attempt:
+
+- Add nine signed, H1-duration, USD-million `FinancialFact` records from exact
+  filing rows: deferred tax, equity gains, other adjustment and six reported
+  cash-flow movements. Reuse existing net income, SBC and D&A with filing checks.
+- Add an optional typed historical reconciliation selector with complete-role
+  validation. Rebuild reported CFO, retain the three residual components and
+  fact ancestry, and distinguish `mechanically_attributed` from economic approval.
+  Do not zero the existing residual or overwrite the proxy bridge.
+- Reject missing/duplicate/swapped rows, wrong sign/basis/period, source changes
+  and CFO subtotal mismatch; test fixed-precision decomposition and old packages.
+- Produce a new immutable packet, clear obsolete dependent reviews, and obtain
+  fresh operating/cash-flow reviews before controlled reader delivery.
+
+Remaining financial work includes operating-tax economics, mixed working capital,
+opening-to-cutoff roll-forward, commitment rights/timing, investment cash use,
+guarantees, available liquidity and longer-horizon valuation/capitalization.
+Independent evidence still needs counterparty utilization/collections/renewals,
+guidance revisions and comparable competitive economics. HOOD needs corporate
+versus customer assets, required regulatory capital, common-equity income and
+dated dilution inputs; existing calculator mechanics do not establish generality.
