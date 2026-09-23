@@ -26,6 +26,15 @@ def test_legacy_and_current_resources_have_strict_supported_shapes():
         failure_reason="transport_rpc_rejected",
         failure_diagnostic={"kind": "rpc_rejection", "phase": "turn_start",
                             "method": "turn/start", "code": -32000}))
+    assert valid_source_resource_shape(resources(
+        failure_reason="transport_input_length_limit",
+        failure_diagnostic={"kind": "input_length_limit", "phase": "turn_start",
+                            "method": "turn/start", "code": -32602,
+                            "reported_max_length": 272000}))
+    assert valid_source_resource_shape(resources(
+        failure_reason="local_prompt_size_limit",
+        failure_diagnostic={"kind": "local_prompt_size_limit", "phase": "preflight",
+                            "request_bytes": 1_048_577, "limit_bytes": 1_048_576}))
     assert not valid_source_resource_shape(resources(unknown_field="no"))
 
 
@@ -38,6 +47,24 @@ def test_legacy_and_current_resources_have_strict_supported_shapes():
                              "method": "turn/start", "code": "-32000"}},
     {"failure_diagnostic": {"kind": "rpc_rejection", "phase": "turn_start",
                              "method": "turn/start", "code": 2**64}},
+    {"failure_diagnostic": {"kind": "rpc_rejection", "phase": "preflight",
+                             "method": "turn/start", "code": -32602}},
+    {"failure_diagnostic": {"kind": "input_length_limit", "phase": "turn_start",
+                             "method": "thread/start", "code": -32602,
+                             "reported_max_length": 272000}},
+    {"failure_diagnostic": {"kind": "input_length_limit", "phase": "turn_start",
+                             "method": "turn/start", "code": -32602,
+                             "reported_max_length": "272000"}},
+    {"failure_diagnostic": {"kind": "input_length_limit", "phase": "turn_start",
+                             "method": "turn/start", "code": -32602,
+                             "reported_max_length": 2**64}},
+    {"failure_diagnostic": {"kind": "local_prompt_size_limit", "phase": "turn_start",
+                             "request_bytes": 1_048_577, "limit_bytes": 1_048_576}},
+    {"failure_diagnostic": {"kind": "local_prompt_size_limit", "phase": "preflight",
+                             "request_bytes": 1_048_576, "limit_bytes": 1_048_576}},
+    {"failure_diagnostic": {"kind": "local_prompt_size_limit", "phase": "preflight",
+                             "request_bytes": 1_048_577, "limit_bytes": 1_048_576,
+                             "prompt": "private-prompt-SECRET"}},
     {"failure_diagnostic": {"kind": "request_size_limit", "phase": "turn_start",
                              "request_bytes": 100, "limit_bytes": 99,
                              "raw_error": "private-prompt-SECRET"}},

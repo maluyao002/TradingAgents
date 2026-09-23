@@ -75,6 +75,58 @@ def test_safe_transport_diagnostic_reaches_metadata_and_resource_without_leak(tm
             assert b"private-provider-prompt-SECRET" not in path.read_bytes()
 
 
+def test_input_length_limit_reaches_both_artifacts_without_server_message(tmp_path):
+    class FailedCoverage(BoundedFixture):
+        def complete(self, role, payload, request):
+            if payload["stage"] == "verify_report-coverage-1":
+                raise CodexInferenceError(
+                    "private-provider-prompt-SECRET", reason="transport_input_length_limit",
+                    diagnostic={"kind": "input_length_limit", "phase": "turn_start",
+                                "method": "turn/start", "code": -32602,
+                                "reported_max_length": 272000,
+                                "server_error": "private-provider-prompt-SECRET"},
+                )
+            return super().complete(role, payload, request)
+
+    request, _, result = run_fixture(tmp_path, FailedCoverage())
+    assert result.stop_reason == "stage_failed" and not result.usage.complete
+    expected = {"kind": "input_length_limit", "phase": "turn_start",
+                "method": "turn/start", "code": -32602, "reported_max_length": 272000}
+    metadata = read_json(request.output_dir / "run_metadata.json")
+    resources = read_json(request.output_dir / "stages/resources.json")["output"]
+    assert metadata["failure_reason"] == resources["failure_reason"] == "transport_input_length_limit"
+    assert metadata["failure_diagnostic"] == resources["failure_diagnostic"] == expected
+    assert resources["dispatched"] is True and resources["usage"]["complete"] is False
+    for path in request.output_dir.rglob("*"):
+        if path.is_file():
+            assert b"private-provider-prompt-SECRET" not in path.read_bytes()
+
+
+def test_local_prompt_preflight_failure_keeps_usage_unknown(tmp_path):
+    class FailedCoverage(BoundedFixture):
+        def complete(self, role, payload, request):
+            if payload["stage"] == "verify_report-coverage-1":
+                raise CodexInferenceError(
+                    "private-prompt-SECRET", reason="local_prompt_size_limit",
+                    diagnostic={"kind": "local_prompt_size_limit", "phase": "preflight",
+                                "request_bytes": 1_048_578, "limit_bytes": 1_048_576},
+                )
+            return super().complete(role, payload, request)
+
+    request, _, result = run_fixture(tmp_path, FailedCoverage())
+    metadata = read_json(request.output_dir / "run_metadata.json")
+    resources = read_json(request.output_dir / "stages/resources.json")["output"]
+    expected = {"kind": "local_prompt_size_limit", "phase": "preflight",
+                "request_bytes": 1_048_578, "limit_bytes": 1_048_576}
+    assert result.stop_reason == "stage_failed" and result.usage.complete is False
+    assert metadata["failure_reason"] == resources["failure_reason"] == "local_prompt_size_limit"
+    assert metadata["failure_diagnostic"] == resources["failure_diagnostic"] == expected
+    assert resources["dispatched"] is True and resources["usage"]["complete"] is False
+    for path in request.output_dir.rglob("*"):
+        if path.is_file():
+            assert b"private-prompt-SECRET" not in path.read_bytes()
+
+
 def test_arbitrary_exception_class_name_is_not_persisted(tmp_path):
     PrivatePromptSECRET = type("PrivatePromptSECRET", (RuntimeError,), {})
 

@@ -37,6 +37,7 @@ CODEX_FAILURE_REASONS = frozenset({
     "transport_closed",
     "transport_error",
     "transport_input_length_limit",
+    "local_prompt_size_limit",
     "transport_request_size_limit",
     "transport_response_size_limit",
     "transport_protocol_error",
@@ -64,6 +65,10 @@ CODEX_FAILURE_REASONS = frozenset({
 })
 """Finite, safe machine-readable reasons for Codex inference failures."""
 
+# A conservative prompt-only UTF-8 bound from the observed CLI 0.156.1
+# turn/start input-length rejection. The server's reported unit is unknown.
+_MAX_PROMPT_UTF8_BYTES = 1_048_576
+
 
 def _allowlisted_failure_reason(reason: object) -> str:
     """Return a bounded reason code without preserving untrusted input."""
@@ -87,9 +92,10 @@ _DIAGNOSTIC_KINDS = frozenset({
     "invalid_message", "invalid_response", "invalid_notification",
     "unexpected_server_request", "protocol_error", "rpc_rejection",
     "input_length_limit",
+    "local_prompt_size_limit",
     "timeout", "closed", "transport_error",
 })
-_DIAGNOSTIC_PHASES = frozenset({"thread_start", "turn_start", "turn_wait"})
+_DIAGNOSTIC_PHASES = frozenset({"preflight", "thread_start", "turn_start", "turn_wait"})
 
 
 def _allowlisted_failure_diagnostic(value: object) -> dict[str, str | int] | None:
@@ -102,8 +108,18 @@ def _allowlisted_failure_diagnostic(value: object) -> dict[str, str | int] | Non
         return None
     if type(phase) is not str or phase not in _DIAGNOSTIC_PHASES:
         return None
+    if phase == "preflight" and kind != "local_prompt_size_limit":
+        return None
     result: dict[str, str | int] = {"kind": kind, "phase": phase}
-    if kind == "request_size_limit":
+    if kind == "local_prompt_size_limit":
+        request_bytes = value.get("request_bytes")
+        limit_bytes = value.get("limit_bytes")
+        if (phase != "preflight" or type(request_bytes) is not int
+                or not _MAX_PROMPT_UTF8_BYTES < request_bytes <= 2**31
+                or type(limit_bytes) is not int or limit_bytes != _MAX_PROMPT_UTF8_BYTES):
+            return None
+        result.update(request_bytes=request_bytes, limit_bytes=limit_bytes)
+    elif kind == "request_size_limit":
         request_bytes = value.get("request_bytes")
         limit_bytes = value.get("limit_bytes")
         if (type(request_bytes) is int and type(limit_bytes) is int
@@ -966,6 +982,19 @@ class CodexAdapter:
             raise ValueError("instructions must be non-empty text")
         if not _valid_text(prompt, limit=4_000_000):
             raise ValueError("prompt must be non-empty text")
+        try:
+            prompt_bytes = len(prompt.encode("utf-8"))
+        except UnicodeEncodeError:
+            raise ValueError("prompt must be UTF-8 encodable text") from None
+        if prompt_bytes > _MAX_PROMPT_UTF8_BYTES:
+            raise CodexInferenceError(
+                "Codex prompt exceeds the conservative local size limit",
+                reason="local_prompt_size_limit",
+                # request_bytes counts the prompt alone, before JSON-RPC encoding.
+                diagnostic={"kind": "local_prompt_size_limit", "phase": "preflight",
+                            "request_bytes": prompt_bytes,
+                            "limit_bytes": _MAX_PROMPT_UTF8_BYTES},
+            )
         normalized_schema: dict[str, object] | None = None
         if output_schema is not None:
             if not isinstance(output_schema, dict) or not output_schema:

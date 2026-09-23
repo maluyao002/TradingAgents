@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from tradingagents.codex.adapter import (
+    _MAX_PROMPT_UTF8_BYTES,
     CodexAdapter,
     CodexAdapterError,
     CodexAuthenticationError,
@@ -492,6 +493,35 @@ def test_input_length_rejection_retains_only_bounded_limit_and_phase(tmp_path):
         "code": -32602, "reported_max_length": 272000,
     }
     assert "SECRET" not in str(caught.value)
+
+
+@pytest.mark.parametrize(("prompt", "expected_bytes"), [
+    ("x" * (_MAX_PROMPT_UTF8_BYTES + 1), _MAX_PROMPT_UTF8_BYTES + 1),
+    ("é" * (_MAX_PROMPT_UTF8_BYTES // 2 + 1), _MAX_PROMPT_UTF8_BYTES + 2),
+])
+def test_oversized_prompt_fails_preflight_without_any_new_rpc(tmp_path, prompt, expected_bytes):
+    adapter, log = _adapter(tmp_path)
+    with adapter:
+        before = _requests(log)
+        with pytest.raises(CodexInferenceError) as caught:
+            adapter.complete_with_usage("Role", prompt, "gpt-test-terra", "medium")
+        assert _requests(log) == before
+    assert codex_failure_reason(caught.value) == "local_prompt_size_limit"
+    assert codex_failure_diagnostic(caught.value) == {
+        "kind": "local_prompt_size_limit", "phase": "preflight",
+        "request_bytes": expected_bytes, "limit_bytes": _MAX_PROMPT_UTF8_BYTES,
+    }
+    assert prompt[:100] not in str(caught.value)
+
+
+def test_prompt_at_utf8_byte_limit_is_allowed_to_reach_offline_turn(tmp_path):
+    adapter, log = _adapter(tmp_path, timeout=5.0)
+    prompt = "é" * (_MAX_PROMPT_UTF8_BYTES // 2)
+    assert len(prompt.encode("utf-8")) == _MAX_PROMPT_UTF8_BYTES
+    with adapter:
+        completion = adapter.complete_with_usage("Role", prompt, "gpt-test-terra", "medium")
+    assert completion.text == "final analysis"
+    assert any(request.get("method") == "turn/start" for request in _requests(log))
 
 
 def test_local_turn_request_size_reports_encoded_count_and_phase(tmp_path):
