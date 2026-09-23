@@ -15,10 +15,12 @@ from pathlib import Path
 
 from tradingagents.codex.transport import (
     DEFAULT_TIMEOUT_SECONDS,
+    TRANSPORT_DIAGNOSTIC_METHODS,
     CodexAppServerTransport,
     TransportClosed,
     TransportError,
     TransportTimeout,
+    transport_failure_diagnostic,
 )
 
 CODEX_FAILURE_REASONS = frozenset({
@@ -30,9 +32,14 @@ CODEX_FAILURE_REASONS = frozenset({
     "provider_transient",
     "provider_model_rerouted",
     "provider_incomplete_turn",
+    "provider_context_limit",
     "transport_timeout",
     "transport_closed",
     "transport_error",
+    "transport_request_size_limit",
+    "transport_response_size_limit",
+    "transport_protocol_error",
+    "transport_rpc_rejected",
     "protocol_invalid_turn",
     "protocol_invalid_notification",
     "protocol_invalid_stream",
@@ -74,12 +81,82 @@ def codex_failure_reason(error: BaseException) -> str:
     return _allowlisted_failure_reason(object.__getattribute__(error, "__dict__").get("_reason"))
 
 
+_DIAGNOSTIC_KINDS = frozenset({
+    "request_size_limit", "response_size_limit", "malformed_json",
+    "invalid_message", "invalid_response", "invalid_notification",
+    "unexpected_server_request", "protocol_error", "rpc_rejection",
+    "timeout", "closed", "transport_error",
+})
+_DIAGNOSTIC_PHASES = frozenset({"thread_start", "turn_start", "turn_wait"})
+
+
+def _allowlisted_failure_diagnostic(value: object) -> dict[str, str | int] | None:
+    """Copy only fixed diagnostic fields; ignore all other exception data."""
+    if type(value) is not dict:
+        return None
+    kind = value.get("kind")
+    phase = value.get("phase")
+    if type(kind) is not str or kind not in _DIAGNOSTIC_KINDS:
+        return None
+    if type(phase) is not str or phase not in _DIAGNOSTIC_PHASES:
+        return None
+    result: dict[str, str | int] = {"kind": kind, "phase": phase}
+    if kind == "request_size_limit":
+        request_bytes = value.get("request_bytes")
+        limit_bytes = value.get("limit_bytes")
+        if (type(request_bytes) is int and type(limit_bytes) is int
+                and 0 <= request_bytes <= 2**31 and 0 <= limit_bytes <= 2**31):
+            result.update(request_bytes=request_bytes, limit_bytes=limit_bytes)
+    elif kind == "rpc_rejection":
+        method = value.get("method")
+        code = value.get("code")
+        if type(method) is str and method in TRANSPORT_DIAGNOSTIC_METHODS:
+            result["method"] = method
+        if type(code) is int and -(2**31) <= code < 2**31:
+            result["code"] = code
+    return result
+
+
+def codex_failure_diagnostic(error: BaseException) -> dict[str, str | int] | None:
+    """Return a fresh safe transport diagnostic for research persistence."""
+    if not isinstance(error, CodexAdapterError):
+        return None
+    return _allowlisted_failure_diagnostic(
+        object.__getattribute__(error, "__dict__").get("_diagnostic")
+    )
+
+
+def valid_codex_failure_diagnostic(value: object) -> bool:
+    """Require an exact persisted shape, including absence of extra fields."""
+    sanitized = _allowlisted_failure_diagnostic(value)
+    return (type(value) is dict and sanitized is not None
+            and value.keys() == sanitized.keys()
+            and all(type(value[key]) is type(expected) and value[key] == expected
+                    for key, expected in sanitized.items()))
+
+
+_SAFE_FAILURE_TYPES = frozenset({
+    "BudgetExhausted", "CodexAdapterError", "CodexAuthenticationError",
+    "CodexInferenceError", "CodexSelectionError", "CodexStructuredOutputError",
+    "CodexTransientError", "CodexUsageLimitError", "ModelCallTimeout",
+    "OSError", "TimeoutError", "TypeError", "ValueError", "ValidationError",
+})
+
+
+def safe_failure_type(error: BaseException) -> str:
+    """Return a finite exception type label suitable for persisted diagnostics."""
+    name = type(error).__name__
+    return name if name in _SAFE_FAILURE_TYPES else "Exception"
+
+
 class CodexAdapterError(RuntimeError):
     """A safe-to-display adapter, authentication, or protocol failure."""
 
-    def __init__(self, *args: object, reason: object = "unknown") -> None:
+    def __init__(self, *args: object, reason: object = "unknown",
+                 diagnostic: object = None) -> None:
         super().__init__(*args)
         self._reason = _allowlisted_failure_reason(reason)
+        self._diagnostic = _allowlisted_failure_diagnostic(diagnostic)
 
     @property
     def reason(self) -> str:
@@ -126,6 +203,11 @@ def _turn_error(error: object) -> CodexAdapterError:
         )
     info = error.get("codexErrorInfo") if isinstance(error, dict) else None
     if isinstance(info, str):
+        if info == "contextWindowExceeded":
+            return CodexInferenceError(
+                "Codex reported a context limit; details redacted",
+                reason="provider_context_limit",
+            )
         if info in {"usageLimitExceeded", "sessionBudgetExceeded"}:
             return CodexUsageLimitError(
                 "Codex usage limit reached; resume when capacity is available",
@@ -906,10 +988,12 @@ class CodexAdapter:
         turn_completed = False
         result: CodexCompletion | None = None
         failure: BaseException | None = None
+        phase = "thread_start"
         try:
             phase_start = time.perf_counter()
             thread_id = self._start_thread(instructions, model, deadline)
             timings["thread_start_seconds"] = time.perf_counter() - phase_start
+            phase = "turn_start"
             phase_start = time.perf_counter()
             turn_id, turn_is_valid = self._start_turn(
                 thread_id,
@@ -922,6 +1006,7 @@ class CodexAdapter:
             if not turn_is_valid:
                 raise CodexInferenceError("turn/start returned an invalid active turn", reason="protocol_invalid_turn")
             timings["turn_start_seconds"] = time.perf_counter() - phase_start
+            phase = "turn_wait"
             phase_start = time.perf_counter()
             result = self._wait_for_turn(thread_id, turn_id, deadline, model=model, effort=effort)
             timings["turn_wait_seconds"] = time.perf_counter() - phase_start
@@ -946,12 +1031,25 @@ class CodexAdapter:
             self._invalidate()
             if isinstance(failure, CodexAdapterError):
                 raise failure
+            diagnostic = {**transport_failure_diagnostic(failure), "phase": phase}
             if isinstance(failure, TransportTimeout):
-                raise CodexTransientError("Codex inference did not complete before its deadline", reason="transport_timeout") from None
+                raise CodexTransientError("Codex inference did not complete before its deadline",
+                                          reason="transport_timeout", diagnostic=diagnostic) from None
             if isinstance(failure, TransportClosed):
-                raise CodexTransientError("Codex connection closed before inference completed", reason="transport_closed") from None
+                raise CodexTransientError("Codex connection closed before inference completed",
+                                          reason="transport_closed", diagnostic=diagnostic) from None
             if isinstance(failure, TransportError):
-                raise CodexInferenceError(str(failure), reason="transport_error") from None
+                kind = diagnostic["kind"]
+                reason = {
+                    "request_size_limit": "transport_request_size_limit",
+                    "response_size_limit": "transport_response_size_limit",
+                    "rpc_rejection": "transport_rpc_rejected",
+                }.get(kind, "transport_protocol_error" if kind in {
+                    "protocol_error", "malformed_json", "invalid_message", "invalid_response",
+                    "invalid_notification", "unexpected_server_request",
+                } else "transport_error")
+                raise CodexInferenceError("Codex transport or protocol failed; details redacted",
+                                          reason=reason, diagnostic=diagnostic) from None
             raise failure
         if cleanup_error is not None:
             self._invalidate()

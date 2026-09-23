@@ -194,6 +194,28 @@ def test_recovery_service_requires_explicit_api_authorization(recovery_source):
         RecoveryModelService(plan, CurrentModels())
 
 
+def test_legacy_recovery_accepts_safe_diagnostic_and_rejects_extra_fields(recovery_source):
+    request, source_run, home = recovery_source
+    path = source_run / "stages/resources.json"
+    record = read_json(path)
+    assert validate_recovery_source(request, source_run, home)
+
+    record["output"]["failure_reason"] = "transport_request_size_limit"
+    record["output"]["failure_diagnostic"] = {
+        "kind": "request_size_limit", "phase": "turn_start",
+        "request_bytes": 5_000_000, "limit_bytes": 4_194_304,
+    }
+    record["output_hash"] = digest(record["output"])
+    atomic_write(path, canonical_json(record))
+    assert validate_recovery_source(request, source_run, home)
+
+    record["output"]["failure_diagnostic"]["raw_error"] = "private-provider-SECRET"
+    record["output_hash"] = digest(record["output"])
+    atomic_write(path, canonical_json(record))
+    with pytest.raises(ValueError, match="resources checkpoint shape"):
+        validate_recovery_source(request, source_run, home)
+
+
 def test_recovery_imports_prefix_without_live_calls_and_preserves_unknown_usage(
     recovery_source, tmp_path
 ):

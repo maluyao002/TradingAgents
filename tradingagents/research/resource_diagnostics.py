@@ -5,10 +5,14 @@ These records are not proof of paid usage and do not relax recovery admission.
 
 from math import isfinite
 
-from tradingagents.codex.adapter import CODEX_FAILURE_REASONS
+from tradingagents.codex.adapter import (
+    CODEX_FAILURE_REASONS,
+    valid_codex_failure_diagnostic,
+)
 
 _REQUIRED = {"usage", "elapsed_seconds", "dispatched", "by_stage"}
-_DIAGNOSTICS = {"call_timings", "active_stage", "failure_reason", "failed_stage"}
+_DIAGNOSTICS = {"call_timings", "active_stage", "failure_reason",
+                "failure_diagnostic", "failed_stage"}
 _TIMING_FIELDS = {"stage", "role", "model", "effort", "usage_origin", "service_kind",
                   "completed", "stage_accepted", "duration_seconds"}
 
@@ -23,6 +27,9 @@ def valid_source_resource_shape(resources):
             return False
     reason = resources.get("failure_reason")
     if reason is not None and (type(reason) is not str or reason not in CODEX_FAILURE_REASONS):
+        return False
+    diagnostic = resources.get("failure_diagnostic")
+    if diagnostic is not None and not valid_codex_failure_diagnostic(diagnostic):
         return False
     timings = resources.get("call_timings", [])
     if not isinstance(timings, list):

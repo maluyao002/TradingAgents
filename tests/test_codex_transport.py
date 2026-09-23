@@ -19,6 +19,7 @@ from tradingagents.codex.transport import (
     UnexpectedServerRequest,
     build_app_server_command,
     build_child_env,
+    transport_failure_diagnostic,
 )
 
 
@@ -60,6 +61,8 @@ else:
             print(json.dumps({"id": request["id"], "result": dict(os.environ)}), flush=True)
         elif mode == "malformed":
             print("not-json", flush=True)
+        elif mode == "oversized":
+            print("x" * 256, flush=True)
         elif mode == "wrong-id":
             print(json.dumps({"id": 999, "result": {}}), flush=True)
         elif mode == "server-request":
@@ -332,17 +335,24 @@ def test_injected_test_server_command_bypasses_version_detection(tmp_path, monke
 
 
 @pytest.mark.parametrize(
-    ("mode", "error_type"),
+    ("mode", "error_type", "kind"),
     [
-        ("malformed", ProtocolError),
-        ("wrong-id", ProtocolError),
-        ("server-request", UnexpectedServerRequest),
-        ("eof", TransportClosed),
+        ("malformed", ProtocolError, "malformed_json"),
+        ("wrong-id", ProtocolError, "invalid_response"),
+        ("server-request", UnexpectedServerRequest, "unexpected_server_request"),
+        ("eof", TransportClosed, "closed"),
     ],
 )
-def test_protocol_failures_are_bounded_and_typed(tmp_path, mode, error_type):
-    with _transport(tmp_path, mode) as transport, pytest.raises(error_type):
+def test_protocol_failures_are_bounded_and_typed(tmp_path, mode, error_type, kind):
+    with _transport(tmp_path, mode) as transport, pytest.raises(error_type) as caught:
         transport.request("test")
+    assert transport_failure_diagnostic(caught.value) == {"kind": kind}
+
+
+def test_oversized_server_message_is_classified_without_payload(tmp_path):
+    with _transport(tmp_path, "oversized", message_limit=128) as transport, pytest.raises(ProtocolError) as caught:
+        transport.request("test")
+    assert transport_failure_diagnostic(caught.value) == {"kind": "response_size_limit"}
 
 
 def test_server_errors_and_stderr_do_not_expose_raw_details(tmp_path):
@@ -352,6 +362,30 @@ def test_server_errors_and_stderr_do_not_expose_raw_details(tmp_path):
         assert "TOP-SECRET" not in str(caught.value)
         assert "TOP-SECRET" not in transport.stderr_summary
         assert len(transport._stderr_capture._buffer) <= 32
+
+
+def test_transport_diagnostics_are_finite_and_exclude_server_prose(tmp_path):
+    with _transport(tmp_path, "error", stderr_limit=32) as transport, pytest.raises(ServerError) as caught:
+        transport.request("turn/start", {"secret": "private-prompt-SECRET"})
+    assert transport_failure_diagnostic(caught.value) == {
+        "kind": "rpc_rejection", "method": "turn/start", "code": -32000,
+    }
+    assert transport_failure_diagnostic(ServerError("private-method-SECRET", 2**64)) == {
+        "kind": "rpc_rejection",
+    }
+    assert transport_failure_diagnostic(ServerError("turn/start", "private-code-SECRET")) == {
+        "kind": "rpc_rejection", "method": "turn/start",
+    }
+
+
+def test_request_size_diagnostic_counts_serialized_bytes_without_payload(tmp_path):
+    with _transport(tmp_path, "normal", message_limit=128) as transport, pytest.raises(ProtocolError) as caught:
+        transport.request("turn/start", {"text": "private-prompt-SECRET" * 10})
+    diagnostic = transport_failure_diagnostic(caught.value)
+    assert diagnostic["kind"] == "request_size_limit"
+    assert diagnostic["request_bytes"] > diagnostic["limit_bytes"] == 128
+    assert set(diagnostic) == {"kind", "request_bytes", "limit_bytes"}
+    assert "SECRET" not in str(diagnostic)
 
 
 def test_request_deadline_includes_blocked_pipe_write(tmp_path):

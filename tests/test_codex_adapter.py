@@ -14,6 +14,8 @@ from tradingagents.codex.adapter import (
     CodexInferenceError,
     CodexSelectionError,
     CodexTokenUsage,
+    codex_failure_diagnostic,
+    codex_failure_reason,
 )
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="Codex adapter is POSIX-only")
@@ -88,6 +90,11 @@ for line in sys.stdin:
     method = request["method"]
     request_id = request["id"]
     params = request.get("params", {})
+
+    if scenario == "rpc-turn-start" and method == "turn/start":
+        send({"id": request_id, "error": {"code": -32000,
+              "message": "private-provider-prompt-SECRET"}})
+        continue
 
     if method == "initialize":
         codex_home = os.environ["CODEX_HOME"]
@@ -236,6 +243,9 @@ for line in sys.stdin:
             result["turn"]["items"] = None
         send({"id": request_id, "result": result})
         if scenario in {"timeout", "malformed-turn-start"}:
+            continue
+        if scenario == "malformed-json-after-turn":
+            print("private-provider-prompt-SECRET", flush=True)
             continue
         send({
             "method": "turn/started",
@@ -454,6 +464,48 @@ def test_complete_uses_isolated_fresh_threads_and_explicit_text_context(tmp_path
     assert turn_params["model"] == "gpt-test-terra"
     assert turn_params["effort"] == "medium"
     assert len([request for request in requests if request.get("method") == "thread/unsubscribe"]) == 2
+
+
+def test_rpc_rejection_retains_only_safe_method_code_and_phase(tmp_path):
+    adapter, _ = _adapter(tmp_path, "rpc-turn-start")
+    with adapter, pytest.raises(CodexInferenceError) as caught:
+        adapter.complete_with_usage("Role", "private-prompt-SECRET", "gpt-test-terra", "medium")
+    assert codex_failure_reason(caught.value) == "transport_rpc_rejected"
+    assert codex_failure_diagnostic(caught.value) == {
+        "kind": "rpc_rejection", "phase": "turn_start",
+        "method": "turn/start", "code": -32000,
+    }
+    assert "SECRET" not in str(caught.value)
+
+
+def test_local_turn_request_size_reports_encoded_count_and_phase(tmp_path):
+    adapter, log = _adapter(tmp_path)
+    with adapter:
+        adapter.validate_selection("gpt-test-terra", "medium")
+        adapter._verify_inference_isolation()
+        adapter._transport.message_limit = 2048
+        with pytest.raises(CodexInferenceError) as caught:
+            adapter.complete_with_usage("Role", "private-prompt-SECRET" * 150,
+                                        "gpt-test-terra", "medium")
+    assert codex_failure_reason(caught.value) == "transport_request_size_limit"
+    diagnostic = codex_failure_diagnostic(caught.value)
+    assert diagnostic["kind"] == "request_size_limit"
+    assert diagnostic["phase"] == "turn_start"
+    assert diagnostic["request_bytes"] > diagnostic["limit_bytes"] == 2048
+    assert set(diagnostic) == {"kind", "phase", "request_bytes", "limit_bytes"}
+    assert "SECRET" not in str(diagnostic)
+    assert not any(request.get("method") == "turn/start" for request in _requests(log))
+
+
+def test_invalid_wire_response_retains_protocol_kind_and_wait_phase(tmp_path):
+    adapter, _ = _adapter(tmp_path, "malformed-json-after-turn", timeout=0.3)
+    with adapter, pytest.raises(CodexInferenceError) as caught:
+        adapter.complete_with_usage("Role", "Evidence", "gpt-test-terra", "medium")
+    assert codex_failure_reason(caught.value) == "transport_protocol_error"
+    assert codex_failure_diagnostic(caught.value) == {
+        "kind": "malformed_json", "phase": "turn_wait",
+    }
+    assert "SECRET" not in str(caught.value)
 
 
 def test_complete_forwards_a_copied_output_schema_only_to_turn_start(tmp_path):
