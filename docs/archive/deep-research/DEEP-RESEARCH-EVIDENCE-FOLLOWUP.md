@@ -1,5 +1,10 @@
 # Deep research evidence follow-up
 
+> Historical delivery / validation record. Preserve its evidence and decisions;
+> dated next steps and run allowances are not current instructions or reusable approval.
+> Use the [current roadmap](../../DEEP-RESEARCH-STATUS.md) for active work and
+> the [archive index](README.md) to navigate history.
+
 ## Purpose and boundary
 
 This document records a discrete public-source follow-up for NVDA performed on

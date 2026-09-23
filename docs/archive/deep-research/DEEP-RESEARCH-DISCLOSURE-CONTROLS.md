@@ -1,5 +1,10 @@
 # Disclosure controls — bounded follow-up, September 22, 2026
 
+> Historical delivery / validation record. Preserve its evidence and decisions;
+> dated next steps and run allowances are not current instructions or reusable approval.
+> Use the [current roadmap](../../DEEP-RESEARCH-STATUS.md) for active work and
+> the [archive index](README.md) to navigate history.
+
 Follow-up: the [retrospective review and bound-disclosure repair](DEEP-RESEARCH-REVIEW-DISCLOSURES.md)
 records issues found after this PR's initial review. Stricter read-only rescoring
 preserves the live observations below; new diagnostic plans bind the corrected

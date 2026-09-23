@@ -121,6 +121,12 @@ is also supported, but resolves dependency ranges independently of `uv.lock`.
 See [Codex integration and release status](docs/CODEX-INTEGRATION.md) for backend
 setup, accepted/degraded research outputs, and acceptance limitations.
 
+### Project documentation
+
+Start with the [documentation index](docs/README.md). For deep-research progress
+and next steps, use the [current roadmap](docs/DEEP-RESEARCH-STATUS.md);
+the original design/plan and historical validation records are linked separately.
+
 ### Docker
 
 Alternatively, run the API backend with Docker (the image does not bundle Codex):

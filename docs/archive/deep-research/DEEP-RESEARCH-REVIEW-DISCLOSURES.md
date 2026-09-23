@@ -1,5 +1,10 @@
 # Bound review disclosures and retrospective PR review — September 22, 2026
 
+> Historical delivery / validation record. Preserve its evidence and decisions;
+> dated next steps and run allowances are not current instructions or reusable approval.
+> Use the [current roadmap](../../DEEP-RESEARCH-STATUS.md) for active work and
+> the [archive index](README.md) to navigate history.
+
 ## Scope and review record
 
 PRs [#20](https://github.com/maluyao002/TradingAgents/pull/20) and

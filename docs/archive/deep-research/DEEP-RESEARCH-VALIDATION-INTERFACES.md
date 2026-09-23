@@ -1,5 +1,10 @@
 # Offline repair after the September 20 NVDA validation
 
+> Historical delivery / validation record. Preserve its evidence and decisions;
+> dated next steps and run allowances are not current instructions or reusable approval.
+> Use the [current roadmap](../../DEEP-RESEARCH-STATUS.md) for active work and
+> the [archive index](README.md) to navigate history.
+
 ## Scope and baseline
 
 The bounded English NVDA validation on `c397176` consumed 2,106,837 measured

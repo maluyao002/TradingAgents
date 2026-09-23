@@ -1,5 +1,10 @@
 # Coverage efficiency — bounded offline increment
 
+> Historical delivery / validation record. Preserve its evidence and decisions;
+> dated next steps and run allowances are not current instructions or reusable approval.
+> Use the [current roadmap](../../DEEP-RESEARCH-STATUS.md) for active work and
+> the [archive index](README.md) to navigate history.
+
 Delivery: [PR #19](https://github.com/maluyao002/TradingAgents/pull/19).
 Integration target: `codex/deep-research-v2`, never main. Work branch:
 `codex/research-coverage-efficiency`. This supersedes the proposed 180-minute

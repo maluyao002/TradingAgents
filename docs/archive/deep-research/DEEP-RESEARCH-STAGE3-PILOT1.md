@@ -1,5 +1,10 @@
 # Stage 3 English NVDA pilot 1 — failed supervision, preserved research
 
+> Historical delivery / validation record. Preserve its evidence and decisions;
+> dated next steps and run allowances are not current instructions or reusable approval.
+> Use the [current roadmap](../../DEEP-RESEARCH-STATUS.md) for active work and
+> the [archive index](README.md) to navigate history.
+
 September 19, 2026. Code: `a36d69c`, branch `codex/research-stage-3`, PR #13
 against `codex/deep-research-v2`. No merge or production activation.
 

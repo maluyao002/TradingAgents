@@ -1,5 +1,10 @@
 # Stage 3 — case-backed reader engineering checkpoint
 
+> Historical delivery / validation record. Preserve its evidence and decisions;
+> dated next steps and run allowances are not current instructions or reusable approval.
+> Use the [current roadmap](../../DEEP-RESEARCH-STATUS.md) for active work and
+> the [archive index](README.md) to navigate history.
+
 September 19, 2026. PR #13 merged into `codex/deep-research-v2`; the Stage 3
 subbranch was deleted. The case-editor fix merged through PR #14 as `261fe98`
 into that integration branch, never `main`. PR #15 delivers the subsequent
