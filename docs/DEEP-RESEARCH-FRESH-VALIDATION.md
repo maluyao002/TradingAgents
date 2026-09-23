@@ -161,3 +161,27 @@ OpenAI Docs was used to check the capability-discovery route against the
 [official App Server documentation](https://learn.chatgpt.com/docs/app-server);
 the account/runtime availability conclusion above comes from the actual local
 catalog, not from assuming that a documented model is available to this runtime.
+
+## Authorized attempt 2 after updated routing and review fixes
+
+The user requested review resolution first, updated subagent routing, and a retry.
+PR #23's three new commitment comments are fixed in `28838dd` and resolved. A
+Sol/high test worker and Sol/xhigh reviewer followed the updated local guide;
+97 targeted tests pass. The reviewer also caught old completed-result reuse,
+so this attempt uses engine preview-11. Validation branch execution revision is
+`997eb08f6281d2bf4579de4290edac8ef0b854b0` (review fixes integrated locally,
+not merged into `codex/deep-research-v2` or main).
+
+`fresh_validation_plan_2/` records explicit authorization, the new request and
+a successful read-only runtime preflight. Every selected model/effort pair was
+advertised and all 25 input manifest entries passed hashing before dispatch.
+Runtime fallback: Sol 5.6/high for routine analysis, Sol 5.6/xhigh for consequential
+verification, Astra/high for challenge/writing; the unused events role maps to
+available Luna 5.6/high. Coding subagents use their separately available GPT-6 IDs.
+
+Request SHA-256: `503f2cd9c9721f2e86a66e8b798f7447f3355a0cb9ed0fd2a6098d578dc6ec59`.
+The supervisor launched `fresh_validation_run_2/` after the successful preflight
+at 2026-09-23 04:45:55 UTC. Bounds remain 3m tokens best-effort, 90 minutes total,
+600 seconds per call, including the existing finalization/repair reserves. No old
+analysis response is imported. Attempt 1 and its incomplete telemetry remain
+unchanged; attempt-2 usage must not be described as complete campaign usage.
