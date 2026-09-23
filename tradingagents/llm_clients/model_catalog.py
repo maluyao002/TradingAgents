@@ -101,6 +101,8 @@ MODEL_OPTIONS: ProviderModeOptions = {
     "openai": {
         "quick": [
             ("GPT-6 Astra - Most capable reasoning", "gpt-6-astra"),
+            ("GPT-6 Sol - Coding and everyday reasoning", "gpt-6-sol"),
+            ("GPT-6 Luna - Fast reasoning", "gpt-6-luna"),
             ("GPT-5.6 Sol - Frontier reasoning", "gpt-5.6-sol"),
             ("GPT-5.6 Terra - Balances intelligence and cost", "gpt-5.6-terra"),
             ("GPT-5.6 Luna - Fast, cost-efficient frontier", "gpt-5.6-luna"),
@@ -109,6 +111,8 @@ MODEL_OPTIONS: ProviderModeOptions = {
         ],
         "deep": [
             ("GPT-6 Astra - Most capable reasoning", "gpt-6-astra"),
+            ("GPT-6 Sol - Coding and everyday reasoning", "gpt-6-sol"),
+            ("GPT-6 Luna - Fast reasoning", "gpt-6-luna"),
             ("GPT-5.6 Sol - Frontier reasoning", "gpt-5.6-sol"),
             ("GPT-5.6 Terra - Balances intelligence and cost", "gpt-5.6-terra"),
             ("GPT-5.5 - Previous-gen frontier, 1M context", "gpt-5.5"),

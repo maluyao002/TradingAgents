@@ -24,7 +24,7 @@ class DummyLLMClient(BaseLLMClient):
 @pytest.mark.unit
 class ModelValidationTests(unittest.TestCase):
     def test_sol_explicit_id_and_alias_are_recognized(self):
-        for model in ("gpt-5.6-sol", "gpt-5.6", "gpt-6-astra"):
+        for model in ("gpt-5.6-sol", "gpt-5.6", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna"):
             with self.subTest(model=model), warnings.catch_warnings(record=True) as caught:
                 DummyLLMClient("openai", model).get_llm()
                 self.assertEqual(caught, [])
