@@ -17,7 +17,9 @@ from tradingagents.codex.adapter import (
     CodexTokenUsage,
     codex_failure_diagnostic,
     codex_failure_reason,
+    valid_codex_failure_diagnostic,
 )
+from tradingagents.research.resource_diagnostics import valid_source_resource_shape
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="Codex adapter is POSIX-only")
 
@@ -256,6 +258,38 @@ for line in sys.stdin:
             "method": "turn/started",
             "params": {"threadId": thread_id, "turn": {"id": turn_id, "status": "inProgress", "items": []}},
         })
+        if scenario.startswith("lifecycle-"):
+            item = {"id": "private-item-SECRET", "type": "agentMessage",
+                    "text": "private-message-SECRET", "phase": "final_answer"}
+            def item_event(method, payload):
+                send({"method": method, "params": {
+                    "threadId": thread_id, "turnId": turn_id, "item": payload,
+                }})
+            if scenario == "lifecycle-invalid-shape":
+                item_event("item/completed", "private-item-SECRET")
+            elif scenario == "lifecycle-bad-type":
+                item_event("item/completed", {"id": item["id"], "type": ["private-type-SECRET"]})
+            elif scenario == "lifecycle-object-type":
+                item_event("item/completed", {"id": item["id"], "type": {"private": "SECRET"}})
+            elif scenario == "lifecycle-no-start":
+                item_event("item/completed", item)
+            elif scenario == "lifecycle-duplicate-completion":
+                item_event("item/started", item)
+                item_event("item/completed", item)
+                item_event("item/completed", item)
+            elif scenario == "lifecycle-type-mismatch":
+                item_event("item/started", item)
+                item_event("item/completed", {**item, "type": "plan"})
+            elif scenario == "lifecycle-unfinished":
+                item_event("item/started", item)
+                send({"method": "turn/completed", "params": {
+                    "threadId": thread_id,
+                    "turn": {"id": turn_id, "status": "completed", "items": []},
+                }})
+            elif scenario == "lifecycle-duplicate-start":
+                item_event("item/started", item)
+                item_event("item/started", item)
+            continue
         first_usage = usage_breakdown(10, 5, 4, 2)
         if scenario == "usage-cumulative":
             send_usage(
@@ -552,6 +586,63 @@ def test_invalid_wire_response_retains_protocol_kind_and_wait_phase(tmp_path):
         "kind": "malformed_json", "phase": "turn_wait",
     }
     assert "SECRET" not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    ("scenario", "reason", "check", "event", "item_type", "started", "completed"),
+    [
+        ("lifecycle-invalid-shape", "protocol_invalid_item", "invalid_item_shape",
+         "item/completed", "unknown", 0, 0),
+        ("lifecycle-bad-type", "protocol_unexpected_item", "invalid_item_shape",
+         "item/completed", "unknown", 0, 0),
+        ("lifecycle-object-type", "protocol_unexpected_item", "invalid_item_shape",
+         "item/completed", "unknown", 0, 0),
+        ("lifecycle-no-start", "protocol_invalid_item", "completion_without_start",
+         "item/completed", "agentMessage", 0, 0),
+        ("lifecycle-duplicate-completion", "protocol_invalid_item", "duplicate_completion",
+         "item/completed", "agentMessage", 1, 1),
+        ("lifecycle-type-mismatch", "protocol_invalid_item", "type_mismatch",
+         "item/completed", "plan", 1, 0),
+        ("lifecycle-unfinished", "protocol_invalid_item", "unfinished_item",
+         "turn/completed", "agentMessage", 1, 0),
+        ("lifecycle-duplicate-start", "protocol_duplicate_item", "duplicate_start",
+         "item/started", "agentMessage", 1, 0),
+    ],
+)
+def test_item_lifecycle_failures_are_finite_private_and_resource_compatible(
+    tmp_path, scenario, reason, check, event, item_type, started, completed,
+):
+    adapter, log = _adapter(tmp_path, scenario)
+    with adapter, pytest.raises(CodexInferenceError) as caught:
+        adapter.complete_with_usage("Role", "private-prompt-SECRET", "gpt-test-terra", "medium")
+
+    diagnostic = codex_failure_diagnostic(caught.value)
+    assert codex_failure_reason(caught.value) == reason
+    assert diagnostic == {
+        "kind": "item_lifecycle", "phase": "turn_wait", "check": check,
+        "event": event, "item_type": item_type,
+        "started_count": started, "completed_count": completed,
+    }
+    assert valid_codex_failure_diagnostic(diagnostic)
+    resource = {
+        "usage": None, "elapsed_seconds": 0.0, "dispatched": True,
+        "by_stage": {}, "failure_reason": reason, "failure_diagnostic": diagnostic,
+    }
+    assert valid_source_resource_shape(resource)
+    assert not valid_source_resource_shape({
+        **resource, "failure_diagnostic": {**diagnostic, "private": "SECRET"},
+    })
+    assert not valid_codex_failure_diagnostic({**diagnostic, "event": "private-event-SECRET"})
+    assert not valid_codex_failure_diagnostic({**diagnostic, "check": "private-check-SECRET"})
+    assert not valid_codex_failure_diagnostic({**diagnostic, "item_type": "private-type-SECRET"})
+    assert not valid_codex_failure_diagnostic({**diagnostic, "started_count": 10_001})
+    assert not valid_codex_failure_diagnostic({**diagnostic, "started_count": -1})
+    assert not valid_codex_failure_diagnostic({**diagnostic, "completed_count": started + 1})
+    assert not valid_codex_failure_diagnostic({**diagnostic, "completed_count": True})
+    assert "SECRET" not in str(caught.value)
+    assert "SECRET" not in json.dumps(resource)
+    methods = [request["method"] for request in _requests(log)]
+    assert methods[-2:] == ["turn/interrupt", "thread/unsubscribe"]
 
 
 def test_complete_forwards_a_copied_output_schema_only_to_turn_start(tmp_path):

@@ -275,3 +275,42 @@ not complete zero usage. No coverage, repair, final report export, acceptance or
 financial approval occurred. The follow-up repair uses lossless table encoding
 for repeated object fields and a local conservative input-size check, rather than
 truncating evidence, changing the reader or increasing the transport limit.
+
+### Packed-request diagnostic outcome
+
+At revision `89dd630`, lossless shared-context/table encoding reduced the exact
+prompt to **998,865 UTF-8 bytes** (1,003,899 bytes including the complete model
+input boundary). Decoding reproduces the original domain payload, reader and
+provenance exactly; all eight reconstructed prefix input hashes still match.
+The Codex service identity includes the new encoding version so old completed
+responses cannot silently satisfy the changed provider boundary.
+
+`factual_diagnostic_sol6_packed_1` used plan hash
+`72e4cd937b314d92e9b3541172a25f01d868f890b7c98491e1c21b8522627d72`.
+It passed the earlier immediate input-length rejection, but stopped after
+**213.38 seconds** with `protocol_invalid_item` in the adapter's item-lifecycle
+validation. The saved failure does not distinguish a malformed item, mismatched
+completion or unfinished item; those possibilities must not be presented as a
+confirmed cause. No structured factual reply was admitted. Reported tokens are
+zero with **incomplete telemetry**, not zero cost.
+
+Read-only inspection of the isolated runtime's timestamp-bounded logs found an
+internal provider-stream reconnect at 08:09:20 UTC after a WebSocket connection
+reset. This is external transport evidence, unlike the earlier input-admission
+defect, but does not establish that it caused the later item-lifecycle failure.
+No raw event payloads, provider text or credentials are added to these records.
+The next offline change records finite lifecycle subtypes and counts while
+preserving strict rejection, allowing any separately bounded follow-up to
+distinguish integration incompatibility from malformed runtime events.
+
+PR #24 is stacked on PR #23. Initial hosted CI exposed stale fundamentals model
+fixtures and coverage tests whose fixed byte-budget/wire-hash assumptions changed
+with encoding. The repairs retain the old v1 boundary hash as a content-equivalence
+check, measure the current coverage reserve to test real pre-dispatch rejection,
+and use the active fundamentals model. Hosted review also found that the native
+API reasoning-model allowlist omitted GPT-6 Sol/Luna; `9261fd5` fixes effort
+forwarding and known-model menus, with a regression for every profile pair.
+The integrated affected tests pass (96 tests and 66 subtests); separate adapter
+and resource-diagnostic tests pass (136). No local full-suite rerun was needed.
+No full report, reader acceptance, financial approval or release is established
+by this diagnostic.

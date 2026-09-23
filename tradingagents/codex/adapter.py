@@ -93,9 +93,17 @@ _DIAGNOSTIC_KINDS = frozenset({
     "unexpected_server_request", "protocol_error", "rpc_rejection",
     "input_length_limit",
     "local_prompt_size_limit",
-    "timeout", "closed", "transport_error",
+    "timeout", "closed", "transport_error", "item_lifecycle",
 })
 _DIAGNOSTIC_PHASES = frozenset({"preflight", "thread_start", "turn_start", "turn_wait"})
+_ITEM_LIFECYCLE_CHECK_EVENTS = {
+    "invalid_item_shape": frozenset({"item/started", "item/completed"}),
+    "completion_without_start": frozenset({"item/completed"}),
+    "duplicate_completion": frozenset({"item/completed"}),
+    "type_mismatch": frozenset({"item/completed"}),
+    "unfinished_item": frozenset({"turn/completed"}),
+    "duplicate_start": frozenset({"item/started"}),
+}
 
 
 def _allowlisted_failure_diagnostic(value: object) -> dict[str, str | int] | None:
@@ -119,6 +127,24 @@ def _allowlisted_failure_diagnostic(value: object) -> dict[str, str | int] | Non
                 or type(limit_bytes) is not int or limit_bytes != _MAX_PROMPT_UTF8_BYTES):
             return None
         result.update(request_bytes=request_bytes, limit_bytes=limit_bytes)
+    elif kind == "item_lifecycle":
+        check = value.get("check")
+        event = value.get("event")
+        item_type = value.get("item_type")
+        started_count = value.get("started_count")
+        completed_count = value.get("completed_count")
+        if (phase != "turn_wait" or type(check) is not str
+                or check not in _ITEM_LIFECYCLE_CHECK_EVENTS
+                or type(event) is not str
+                or event not in _ITEM_LIFECYCLE_CHECK_EVENTS[check]
+                or type(item_type) is not str
+                or item_type not in _PASSIVE_ITEM_TYPES | {"unknown"}
+                or type(started_count) is not int
+                or type(completed_count) is not int
+                or not 0 <= completed_count <= started_count <= 10_000):
+            return None
+        result.update(check=check, event=event, item_type=item_type,
+                      started_count=started_count, completed_count=completed_count)
     elif kind == "request_size_limit":
         request_bytes = value.get("request_bytes")
         limit_bytes = value.get("limit_bytes")
@@ -1199,6 +1225,21 @@ class CodexAdapter:
         usage: CodexTokenUsage | None = None
         usage_is_invalid = False
         control_events = stream_events = stream_chars = 0
+
+        def item_failure(message: str, reason: str, check: str, event: str,
+                         item_type: object = None) -> CodexInferenceError:
+            safe_type = (item_type if type(item_type) is str
+                         and item_type in _PASSIVE_ITEM_TYPES else "unknown")
+            return CodexInferenceError(
+                message, reason=reason,
+                diagnostic={
+                    "kind": "item_lifecycle", "phase": "turn_wait",
+                    "check": check, "event": event, "item_type": safe_type,
+                    "started_count": len(started_items),
+                    "completed_count": len(completed_items),
+                },
+            )
+
         while True:
             notification = transport.wait_notification(timeout=self._remaining(deadline))
             method = notification.get("method")
@@ -1312,20 +1353,35 @@ class CodexAdapter:
             elif method in {"item/started", "item/completed"}:
                 item = params.get("item")
                 if not isinstance(item, dict):
-                    raise CodexInferenceError("Codex emitted an invalid item event", reason="protocol_invalid_item")
+                    raise item_failure("Codex emitted an invalid item event",
+                                       "protocol_invalid_item", "invalid_item_shape", method)
                 item_id = _safe_identifier(item.get("id"))
                 item_type = item.get("type")
-                if item_id is None or item_type not in _PASSIVE_ITEM_TYPES:
+                if item_id is None or type(item_type) is not str:
+                    raise item_failure("Codex attempted an unexpected tool or item",
+                                       "protocol_unexpected_item", "invalid_item_shape",
+                                       method, item_type)
+                if item_type not in _PASSIVE_ITEM_TYPES:
                     raise CodexInferenceError("Codex attempted an unexpected tool or item", reason="protocol_unexpected_item")
                 if method == "item/started":
                     if item_id in started_items:
-                        raise CodexInferenceError("Codex emitted a duplicate item start event", reason="protocol_duplicate_item")
+                        raise item_failure("Codex emitted a duplicate item start event",
+                                           "protocol_duplicate_item", "duplicate_start",
+                                           method, item_type)
                     started_items.add(item_id)
                     item_types[item_id] = item_type
                 else:
-                    if (item_id not in started_items or item_id in completed_items
-                            or item_types[item_id] != item_type):
-                        raise CodexInferenceError("Codex emitted an invalid item completion event", reason="protocol_invalid_item")
+                    if item_id not in started_items:
+                        check = "completion_without_start"
+                    elif item_id in completed_items:
+                        check = "duplicate_completion"
+                    elif item_types[item_id] != item_type:
+                        check = "type_mismatch"
+                    else:
+                        check = None
+                    if check is not None:
+                        raise item_failure("Codex emitted an invalid item completion event",
+                                           "protocol_invalid_item", check, method, item_type)
                     completed_items.add(item_id)
                     if item_type == "agentMessage":
                         text = item.get("text")
@@ -1362,7 +1418,13 @@ class CodexAdapter:
                         raise _turn_error(turn["error"])
                     raise CodexInferenceError("Codex turn did not complete successfully", reason="provider_incomplete_turn")
                 if started_items != completed_items:
-                    raise CodexInferenceError("Codex completed with unfinished output items", reason="protocol_invalid_item")
+                    unfinished_types = {item_types[item_id]
+                                        for item_id in started_items - completed_items}
+                    unfinished_type = (next(iter(unfinished_types))
+                                       if len(unfinished_types) == 1 else None)
+                    raise item_failure("Codex completed with unfinished output items",
+                                       "protocol_invalid_item", "unfinished_item",
+                                       method, unfinished_type)
                 messages = final_messages or unphased_messages
                 if not messages or not any(message.strip() for message in messages):
                     raise CodexInferenceError("Codex completed without a final text response", reason="missing_output")

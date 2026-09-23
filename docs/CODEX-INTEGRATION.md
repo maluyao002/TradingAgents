@@ -122,6 +122,11 @@ exact model and effort in `model_selections`; the existing effort-only
 `model_roles` field remains for compatible consumers. A dry run performs no
 model or market-data calls.
 
+The shared native OpenAI API client also recognizes GPT-6 Sol and Luna as
+reasoning models and forwards the profile's selected effort. Offline tests cover
+every distinct named-profile model/effort pair; API menus recognize both new IDs
+without changing Custom's legacy default choices.
+
 ### Text-input admission and exact research context
 
 The runtime's text-input limit is separate from the JSON-RPC transport's 4 MiB
@@ -143,7 +148,10 @@ cache identity. Historical reports, requests and earlier encoding records are
 not rewritten.
 
 Transport diagnostics retain only fixed classifications, operation/phase,
-bounded numeric codes and applicable sizes. Raw provider error prose, prompts
+bounded numeric codes and applicable sizes. Item-lifecycle failures additionally
+record a finite check/event/type and bounded started/completed counts, never item
+or thread identifiers. Missing, duplicate and mismatched item completions still
+fail closed; diagnostic detail does not relax the protocol. Raw provider error prose, prompts
 and authentication details are not saved. Unknown failed-call usage stays
 incomplete even when no token count was returned.
 
