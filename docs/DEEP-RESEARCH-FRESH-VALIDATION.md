@@ -123,3 +123,41 @@ Independent evidence still needs counterparty utilization/collections/renewals,
 guidance revisions and comparable competitive economics. HOOD needs corporate
 versus customer assets, required regulatory capital, common-equity income and
 dated dilution inputs; existing calculator mechanics do not establish generality.
+
+## Authorized attempt 1 outcome: model preflight failure
+
+The user explicitly approved transmission of the frozen evidence and internal
+case materials to OpenAI's Codex service. The ordinary supervised invocation
+then started, but stopped after **1.81 seconds** with `CodexSelectionError` in
+the initial `independent_challenge` stage. No analysis response, writer response,
+factual review or coverage disposition was produced. `reader_report.md` is only
+the engine's explicitly labeled diagnostic placeholder, not an exported reader.
+
+Read-only capability discovery, saved separately as
+`fresh_validation_plan_1/runtime_catalog_diagnostic.json`, confirms that the
+isolated runtime offers `gpt-6-astra`, `gpt-5.6-sol`, `gpt-5.6-terra`,
+`gpt-5.6-luna` and `gpt-5.5`; it does **not** offer the requested `gpt-6-sol`.
+The coordinator incorrectly used a model ID available to coding subagents as if
+it were also available to the research runtime. Those are separate catalogs.
+The supported fallback is `gpt-5.6-sol` at the same planned efforts; Astra/high
+can remain unchanged. No fallback or model substitution ran automatically.
+
+The model service validates all selected model/effort pairs before its first
+`complete_with_usage` call. Thus this exception path is a pre-inference selection
+failure, not a substantive model failure. However, the engine reserves and marks
+dispatch before entering provider preflight, so the immutable run records zero
+reported tokens **with `complete=false` and `dispatched=true`**. Do not rewrite
+that record as complete zero spend or import it into an accepted report. The
+read-only capability check makes no inference call and transmits no NVDA payload.
+
+Next execution should first validate every requested selection against this
+runtime, then use a fresh explicitly bound request/output and the supported Sol
+fallback. Resolve the conservative preflight/dispatch accounting distinction
+before automatic recovery; no silent budget reset or historical artifact edit.
+The baseline reader inspection, typed reconciliation and HOOD deliverables remain
+open. User acceptance and production release are unchanged gates.
+
+OpenAI Docs was used to check the capability-discovery route against the
+[official App Server documentation](https://learn.chatgpt.com/docs/app-server);
+the account/runtime availability conclusion above comes from the actual local
+catalog, not from assuming that a documented model is available to this runtime.
