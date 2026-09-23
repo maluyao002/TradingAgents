@@ -1,17 +1,39 @@
 """Artifact-level checks for the offline NVDA cash-flow builder."""
 
+from datetime import date, datetime, timezone
 from hashlib import sha256
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from scripts.research_nvda_cashflow_case import _require_unchanged_source, prepare
+from scripts.research_nvda_cashflow_case import (
+    _anchor_cutoff_limitation,
+    _require_unchanged_source,
+    prepare,
+)
 from tradingagents.research.storage import read_bytes, read_json
 
 SOURCE = (
     Path(__file__).resolve().parents[1]
     / "reports/NVDA_VALIDATION_20260921/run_1"
 )
+
+
+def test_anchor_cutoff_limitation_uses_current_case_dates_and_local_timezone():
+    case = SimpleNamespace(opening_date=date(2026, 7, 26), timezone="America/Los_Angeles")
+    snapshot = SimpleNamespace(cutoff=datetime(2026, 9, 23, 1, tzinfo=timezone.utc))
+    result = _anchor_cutoff_limitation(case, snapshot)
+    assert "2026-07-26" in result and "2026-09-22" in result
+    assert "September 18" not in result and "not rolled forward" in result
+
+
+def test_prepare_rejects_dangling_output_symlink_before_reading_sources(tmp_path):
+    link, target = tmp_path / "link", tmp_path / "redirected"
+    link.symlink_to(target, target_is_directory=True)
+    with pytest.raises(ValueError, match="symlink"):
+        prepare(tmp_path / "absent_source", link)
+    assert not target.exists()
 
 
 def test_source_recheck_detects_post_capture_change_before_publication(tmp_path):

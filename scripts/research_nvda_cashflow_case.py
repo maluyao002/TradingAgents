@@ -10,6 +10,7 @@ import argparse
 import hashlib
 from decimal import ROUND_HALF_EVEN, Context, Decimal, localcontext
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from tradingagents.research.cashflow_bridge import (
     AnalystCashFlowAssumption,
@@ -65,6 +66,15 @@ def _fixed_product(left: Decimal, right: Decimal) -> Decimal:
 def _fixed_divide(left: Decimal, right: Decimal) -> Decimal:
     with localcontext(_ARITHMETIC_CONTEXT):
         return left / right
+
+
+def _anchor_cutoff_limitation(case: FinancialCase, snapshot: EvidenceSnapshot) -> str:
+    local_cutoff = snapshot.cutoff.astimezone(ZoneInfo(case.timezone)).date()
+    return (
+        f"The {case.opening_date.isoformat()} reported anchor is not rolled forward to the "
+        f"{local_cutoff.isoformat()} local evidence-cutoff date; Q3 is a full conditional "
+        "fiscal period, not a cutoff-date balance-sheet update."
+    )
 
 
 def _require_unchanged_source(source: Path, captured: dict[str, bytes]) -> None:
@@ -286,8 +296,8 @@ def build_package(
             "Commitment overlap treatments prevent mechanical double counting but do not establish cancellation rights, exact payment dates, liquidity availability, or funding adequacy.",
             "The $18bn remainder-of-FY27 equity-investment commitment is excluded from operating FCFF but remains a material potential cash use outside this operating bridge.",
             "Gross guarantee exposure is not an expected cash outflow and is not inserted into FCFF; guarantee probability, timing, and funding consequences remain unresolved.",
-            "The July 26 reported anchor is not rolled forward to the September 18 local evidence-cutoff date; Q3 is a full conditional fiscal period, not a cutoff-date balance-sheet update.",
-            "The frozen operating package has an independent arithmetic/source review, but these cash-flow assumptions do not; no independent external evidence authenticates their economic likelihood.",
+            _anchor_cutoff_limitation(case, snapshot),
+            "Cash-flow assumptions are analyst-authored. A source/arithmetic review does not authenticate their economic likelihood; current independent-review status is reported separately.",
         ),
         review=None,
     )
@@ -354,6 +364,8 @@ def _summary(context: dict) -> bytes:
 def prepare(source: Path, output: Path) -> dict:
     """Authenticate the frozen local inputs and publish one new immutable bridge bundle."""
 
+    if output.is_symlink():
+        raise ValueError("output must not be a symlink")
     source, output = source.resolve(), output.resolve()
     if output.exists() or source in output.parents or output == source:
         raise ValueError("output must be a new directory outside the frozen source directory")
