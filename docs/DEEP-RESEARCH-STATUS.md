@@ -116,6 +116,15 @@ diagnostic or merged code increment is not a completed or accepted report.
   three malformed audit-only decisions. The first targeted delivery fix is reviewed
   and integrated as `01a662e`; no follow-up live run has started. No new external
   evidence is required for the identified source-supported corrections.
+- Follow-up offline closure is reviewed in PR #28 at `fa997fb` / `b1b2654`:
+  exact issue-linked source excerpts, versioned generation ownership, strict
+  fresh-coverage receipts for three proven response-format errors and indexed
+  lossless packing. The other nine findings retain factual follow-up. All 231
+  distinct targeted tests pass; independent review fixes are closed. Full replay
+  of 107 saved stages and synthetic sizing fit the unchanged prompt cap. The
+  separately bound `reader_repair_plan_2` allows 6m additional tokens / 90 minutes /
+  600 seconds per call, against a 5,034,886-token conservative reserve. Preparation
+  is not live completion; no admitted reader or financial approval is implied.
 
 See the [concise implementation record](DEEP-RESEARCH-PROGRESS.md) for completed
 checkpoints and the [latest validation evidence](archive/deep-research/DEEP-RESEARCH-FRESH-VALIDATION.md)
@@ -126,7 +135,7 @@ for exact attempts, bounds and usage.
 | Order | Deliverable | Completion evidence |
 | --- | --- | --- |
 | 1 — Done (engineering) | Integrate reviewed reader inputs and typed reconciliation | PRs #23 and #26 merged; reader assumption table, typed reconciliation and packet-validation fixes tested/reviewed. This is not final-reader delivery |
-| 2 — Offline closure before next bounded run | Complete bounded NVDA finalization | Latest attempt is `verification_failed`, 197/207. Finish targeted witness delivery, truthful historical/current scope and response-error repair with versioned exact replay; review/test and rehearse the full saved prefix before a fresh bounded plan |
+| 2 — Ready for bounded validation | Complete bounded NVDA finalization | Latest settled attempt is `verification_failed`, 197/207. Reviewed source delivery, versioned replay and response-error handling pass targeted tests and the full 107-stage rehearsal; `reader_repair_plan_2` binds the next writer/factual/complete-coverage attempt |
 | 3 | Inspect the actual exported English reader | Still open: the revised candidate was independently inspected and its footnotes/calculation links checked, but no admitted export exists. Verify exported bytes and reader usefulness before user review |
 | 4 | Close targeted financial and independent-evidence gaps | Typed issuer-FCF/residual reconciliation and fresh source/arithmetic reviews delivered in PR #26; dependent fresh analysis completed, but the reader is blocked and economic/independent-demand gaps remain |
 | 5 | Prove HOOD generality | Distinct broker-equity/funding workflow, English reader and comparator review using the same core contracts |

@@ -7,6 +7,35 @@ The [original implementation plan](DEEP-RESEARCH-PLAN.md) is preserved.
 
 ## Numbered reader repair and latest validation — September 24
 
+Latest offline increment is reviewed and committed in **`fa997fb` / `b1b2654`**
+on PR #28, not merged. It adds affected-issue source retrieval, per-generation
+contract ownership and narrowly deferred response-format reconciliation. The
+source's v3 payloads retain their exact identity; v4 uses indexed lossless packing
+and requires fresh complete coverage before superseding a proven audit-only span
+error. Nine substantive findings still require exact factual follow-up. No warning
+is globally downgraded and no historical response or usage record is rewritten.
+
+Review fixed fiscal-year/character-offset confusion, misclassification of a missing
+proposition as a response-format defect, and a missing new-generation receipt guard.
+Late-interruption and safe-resume tests preserve the pending audit ledger, prevent
+premature receipts and avoid redispatch of completed calls. **231 distinct targeted
+tests passed**: 119 recovery/lifecycle plus 114 context/wire/transport (19 overlap)
+and 17 source-witness tests. Ruff and whitespace checks pass; independent source,
+architecture and packing reviews have no remaining actionable findings in scope.
+Additional probes include 60 indexed roundtrips, 250 legacy byte comparisons and
+13 malformed decoder cases, not added to that total.
+
+The actual **107-stage no-provider rehearsal passes**: writer **854,922 bytes**,
+baseline factual **978,661** plus required 16,384-byte headroom, synthetic factual
+**979,028**, and 19 coverage prompts **34,964–42,465**. All fit the unchanged
+1,048,576-byte limit and roundtrip exactly. An earlier rehearsal stopped before any
+provider call for insufficient factual headroom; the new packing resolved it without
+truncating evidence. Complete-path reserve is **5,034,886 tokens / 21 calls**.
+`reader_repair_plan_2` therefore binds **6m additional tokens best-effort / 5,400
+seconds / 600 seconds per call**, zero investigation cycles, under the user's standing
+approval. Runtime metadata checks passed for Astra/high and Sol/xhigh. This is
+readiness, not live success or reader acceptance; the latest settled result is below.
+
 Follow-up offline work is implemented in **`2b60ba3`**, not a new live outcome. The numbered
 one-writer transition carries every terminal finding into mandatory evidence-backed
 follow-up, reopens full factual/atomic coverage and never redispatches analysts.

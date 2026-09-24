@@ -459,7 +459,7 @@ financial and production acceptance remain separate gates.
 
 ### Numbered, evidence-backed reader repair
 
-The same `--revise-reader` flag selects `frozen-candidate-revision-v3` when the
+The same `--revise-reader` flag selects `frozen-candidate-revision-v4` when the
 source is a terminal failed `verify_frozen_report` or numbered revised reader.
 Preparation binds the exact candidate, source writer, complete terminal review,
 policy contract, eligible exact source-passage witnesses and full saved prefix.
@@ -469,14 +469,30 @@ There is no automatic retry loop or analyst redispatch. Incomplete usage,
 missing coverage, inconsistent generation history and lost paid outputs fail
 closed. Original policies and historical payloads retain their identities.
 
+The plan binds per-generation policy/contract ownership to source provenance and
+exact saved stage hashes. Historical v3 generations execute their frozen contract;
+new v4 generations use their separately bound instructions, retrieval and packing.
+The immediate source can establish its own generation; subsequent provenance
+retains a cumulative ownership map. Missing or ambiguous older ownership is
+rejected, never inferred from the latest contract.
+
 One writer is followed by new factual review and full atomic coverage. Every
-terminal source finding needs an explicit follow-up; a corrected disposition
+substantive terminal source finding needs an explicit follow-up; a corrected disposition
 requires exact new-reader spans and exact evidence witnesses. Source passages
 bind their source content hash and character bounds. Availability of a table,
 arithmetic review and economic underwriting are distinct claims. A scoped
 `review:cashflow_bridge` witness does not grant valuation or funding approval.
 Old warnings remain immutable audit history, not automatic claims of current
 evidence absence. Unsupported or still-open findings continue to block export.
+
+V4 separately records only mechanically proven historical audit-only span errors
+in a hash-bound pending-coverage ledger. They are not factual correction claims.
+Only complete fresh coverage of the exact obligation and reader can issue a
+supersession receipt; missing, malformed, interrupted or wrong-generation coverage
+cannot close it. The original failure remains in the audit. Material caveats and
+all other findings retain their normal repair requirements. Indexed references
+shorten repeated context while retaining full original-value hashes; strict
+roundtrip, cycle, reference and unused-entry checks remain enforced.
 
 Pre-writer admission reserves the complete reopened verification path with
 growth allowances. The writer's exact prompt is checked before dispatch; once
