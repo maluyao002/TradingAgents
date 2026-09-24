@@ -33,8 +33,43 @@ code fingerprint are unchanged. Complete-path reserve is **5,900,148 tokens /
 best-effort / 5,400 seconds / 600 seconds per call, zero investigation cycles,
 with run 2 as source and run 1 as its explicit hash-verified pending origin.
 Runtime metadata checks passed for Astra/high and Sol/xhigh. Synthetic sizing is
-not research validation; no third live repair has launched. The latest settled
-outcome remains the failed v4 attempt below.
+not research validation. `reader_repair_run_3` launched around **12:35 UTC September
+24** on frozen HEAD `fdbb136` under its separately verified authorization. It settled
+at **`verification_failed` in 3,084.11 seconds / 51m24s**, with 129 imported and
+21 new calls (writer, factual, 19 coverage batches). New usage is **794,640 input +
+131,151 output = 925,791 tokens**, complete; selected-lineage usage is **6,791,264**,
+excluding the separate unknown-usage attempt and coordinator/team usage. All 30
+result artifact hashes and the original plan/source/origin identities were verified.
+All six hosted checks passed on `fdbb136`. No admitted reader was exported.
+
+The two carried pending obligations both received fresh valid coverage receipts;
+six accepted current factual correction contexts reached coverage. Coverage is
+**198/206** in the changed issue inventory. Eighteen combined findings comprise
+eight newly authored findings, one retained source-followup failure, and nine
+deterministic disposition findings—not eighteen independent reader defects.
+The latter include a missing/unknown pair caused by a malformed returned issue ID.
+The retained finding used a quote outside its exact referenced passage even though
+the current concentration issue was successfully superseded. Historical responses
+remain unchanged; neither typo repair nor quote normalization is applied.
+
+The remaining substantive subjects are proxy-passage delivery; explicit unquantified
+linked-intermediary/CoreWeave sales, revenue and receivables exposure; partial and
+potentially non-operating working-capital content; account-level cash/noncash/scope
+reconciliation; and the distinction between historical cash measures and distributable
+or unlevered cash. Independent diagnosis confirms that an earlier corrected proxy
+finding ceased seeding the next finding-bound catalog although the reader retained
+a broader inventory claim. The full frozen source contains support, but the current
+delivered passages do not establish that whole assertion. This is not an external
+source or runtime failure. Narrowing the unnecessary inventory claim to delivered
+support is preferred before expanding the evidence-context architecture.
+
+Candidate `8bcebb1f…600f3c` was inspected provisionally: 3,234 words, ten defined and
+used footnotes, sixteen valid calculation anchors, improved timing/concentration/DOE
+and reconciliation boundaries. Coverage still found compressed caveats incomplete.
+Explain Q3 actuals availability at the cutoff and prefer source-precise “credit
+rating”; simplify dense audit-oriented prose. The saved `reader_report.md` is a
+diagnostic placeholder, not that candidate or a final report. Further work starts
+offline with exact continuation applicability and delivery checks, not a blind retry.
 
 The preceding v4 increment was reviewed and committed in **`fa997fb` / `b1b2654`**
 on PR #28, not merged. It adds affected-issue source retrieval, per-generation

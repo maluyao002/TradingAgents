@@ -141,8 +141,16 @@ diagnostic or merged code increment is not a completed or accepted report.
   are closed. The full 129-stage no-provider rehearsal passes; writer/factual and
   all coverage prompts fit, with a 5,900,148-token complete-path reserve. The
   separately prepared `reader_repair_plan_3` binds 7m additional tokens / 90 minutes /
-  600 seconds per call. Runtime metadata checks pass; hosted CI and the last narrow
-  evidence-delivery check are pending. No third live repair or admitted export yet.
+  600 seconds per call. Runtime metadata and exact evidence-delivery checks pass.
+  `reader_repair_run_3` launched around **12:35 UTC September 24** on frozen
+  `fdbb136`. It settled **`verification_failed`**, **198/206** coverage, **925,791 new
+  tokens / 51m24s**, complete telemetry. All six hosted checks, thirty artifact
+  hashes and the original plan/source/origin integrity checks pass. Both pending
+  response errors received fresh valid receipts; six current factual contexts reached
+  coverage. Remaining findings concern one invalid source quote, one malformed
+  coverage ID, proxy-passage delivery and compressed financial/exposure caveats.
+  There is no admitted export. Continue offline applicability/delivery diagnosis;
+  no historical response normalization, acceptance override or blind retry.
 
 See the [concise implementation record](DEEP-RESEARCH-PROGRESS.md) for completed
 checkpoints and the [latest validation evidence](archive/deep-research/DEEP-RESEARCH-FRESH-VALIDATION.md)
@@ -153,7 +161,7 @@ for exact attempts, bounds and usage.
 | Order | Deliverable | Completion evidence |
 | --- | --- | --- |
 | 1 — Done (engineering) | Integrate reviewed reader inputs and typed reconciliation | PRs #23 and #26 merged; reader assumption table, typed reconciliation and packet-validation fixes tested/reviewed. This is not final-reader delivery |
-| 2 — Prepared bounded validation | Complete bounded NVDA finalization | `reader_repair_run_2` settled `verification_failed`, 202/211. V5 fixes are reviewed/tested and real-prefix readiness passes; complete the last delivery/CI checks, then execute the separately prepared plan and inspect its actual result |
+| 2 — Offline follow-up | Complete bounded NVDA finalization | `reader_repair_run_3` settled `verification_failed`, 198/206. Both pending receipts and current correction delivery work; investigate exact quote/ID failures, proxy delivery and compressed caveats before another separately bound attempt |
 | 3 | Inspect the actual exported English reader | Still open: the revised candidate was independently inspected and its footnotes/calculation links checked, but no admitted export exists. Verify exported bytes and reader usefulness before user review |
 | 4 | Close targeted financial and independent-evidence gaps | Typed issuer-FCF/residual reconciliation and fresh source/arithmetic reviews delivered in PR #26; dependent fresh analysis completed, but the reader is blocked and economic/independent-demand gaps remain |
 | 5 | Prove HOOD generality | Distinct broker-equity/funding workflow, English reader and comparator review using the same core contracts |
@@ -166,10 +174,15 @@ Do not run another probe unless it addresses a named residual risk.
 
 ### Immediate offline acceptance criteria
 
-The settled second reader repair requires a versioned contract fix before retry:
+The v5 third reader repair is settled and preserved. Its engineering fixes are
+validated, but the report is not admitted. The next check is offline continuation
+applicability and exact evidence delivery, before deciding whether further code is
+necessary. Prefer narrowing unsupported inventory assertions over adding unnecessary
+source-context machinery; preserve all material economic disclosures.
 
-The engineering items below are implemented and reviewed in v5, and the real-data
-rehearsal passes; actual new-reader corrections and verification remain open.
+The engineering items below are implemented and reviewed in v5. The real-data
+rehearsal passes; the latest live result confirms both pending receipts and delivery
+of six accepted factual correction contexts. Remaining reader corrections stay open.
 
 - Preserve v3/v4 replay and all 129 completed calls. Restrict lifecycle-resolution
   witnesses to the existing resolution catalog; finding-followup source witnesses
@@ -187,6 +200,14 @@ rehearsal passes; actual new-reader corrections and verification remain open.
 - Require focused negative tests, independent review and exact-prefix/no-provider
   prompt-and-budget admission before a new separately bounded live plan. No new
   external evidence or user decision is required for these scoped repairs.
+- Preserve literal witness quotations and exact issue identities. One returned
+  unknown ID must not be fuzzy-mapped to the missing ID; a historical quote outside
+  its referenced passage cannot be repaired in place.
+- Keep the remaining caveats explicit: unquantified linked-intermediary/CoreWeave
+  exposure, partial/mixed working capital, account-level cash/noncash/scope gaps,
+  and historical cash measures not establishing distributable or unlevered cash.
+  Reconcile the proxy inventory claim with passages actually delivered to this
+  generation. Full-source availability is not current-call delivery.
 
 ## Delivery stages: implementation versus acceptance
 

@@ -969,5 +969,55 @@ Request:
 `115725922a397404ae45a45cdb628975ae5b5eb0b21409cf97e1d936622be12c`.
 Contract:
 `08cfb6ff09b61a6f1c2f2518a331055bca5391006ccf7ad1d2675efd75760097`.
-Metadata-only runtime checks passed for Astra/high and Sol/xhigh. No third live
-attempt has launched at this checkpoint. Reader acceptance and release remain open.
+Metadata-only runtime checks passed for Astra/high and Sol/xhigh. The narrow delivery
+check confirms the timing table/contingencies and Q3-outlook passages are present in
+the factual resolution catalog. Authorization was transcribed from standing approval
+at **12:34:17 UTC**, not the time of a new user message. The supervised third repair
+launched around **12:35 UTC**, frozen at `fdbb136` (research `72f2495`, CLI `50983e9`).
+The terminal outcome is recorded below; reader acceptance and release remain open.
+
+### Third reader repair terminal outcome — September 24
+
+`reader_repair_run_3` settled at `verification_failed` after **3,084.11 seconds /
+51m24s**, with **129 imported + 21 new calls** (one writer, one factual, nineteen
+coverage batches; a retired empty slot required no new call). New usage:
+**794,640 input + 131,151 output = 925,791 tokens**, complete. Cached input 31,360
+and reasoning output 69,406 are subsets, not additions. Selected-lineage total:
+**6,791,264**; separate unknown-usage attempt and coordinator/team usage are excluded.
+No failed provider stage, transport failure, budget stop or prompt-size failure.
+All thirty result artifact hashes, the original plan and immutable source/origin
+identities pass verification. All six hosted checks passed on frozen `fdbb136`.
+
+Candidate SHA256:
+`8bcebb1f3c5cdb2c2c0ccf5ee7a125f6bdf9caf167e70ed7981589d283600f3c`.
+Coverage is **198/206**. Both pending obligations received fresh same-issue receipts;
+none remain unresolved. Six accepted factual correction contexts were delivered.
+Eighteen findings comprise eight authored findings, one retained source-followup
+failure and nine deterministic dispositions (seven unresolved, one missing, one
+unknown). The issue inventory changed; raw covered counts across attempts are not
+a like-for-like quality score.
+
+The retained source finding `3aeb0df9…59c845ab` is not a new failed concentration
+resolution: the current `44cb…ee2fd` issue is superseded. Its source-followup quoted
+`one direct customer` outside the referenced filing slice `70005:70905`, so that
+historical finding remains. The returned coverage ID beginning `150213…` was malformed,
+producing a missing/unknown pair. Preserve both responses; no normalization or fuzzy
+identity mapping. Fresh valid verification is required.
+
+Substantive remaining subjects: proxy inventory exceeds this call's selected passages;
+explicit unquantified NVIDIA/CoreWeave and linked-intermediary exposure; partial and
+potentially non-operating working-capital content; missing account-level cash/noncash/
+scope reconciliation; historical measures not establishing distributable/unlevered cash.
+The exact frozen proxy contains relevant rules, outcomes and tables, but the current
+21-reference catalog has no proxy entry. Its earlier corrected finding stopped seeding
+the catalog even while the reader retained its inventory assertion. This is a bounded
+delivery defect, not issuer nondisclosure. Narrow the inventory claim if not materially
+needed; assess a separate provenance-bound review-context design only if needed.
+
+Independent provisional inspection verified the timing, concentration, DOE and
+reconciliation distinctions. Candidate: 3,234 words, ten used/defined footnotes,
+sixteen valid calculation anchors. Improve Q3 cutoff explanation, use the filing's
+“credit rating” wording, split dense guarantees and reduce audit-oriented repetition.
+These checks do not waive the eight uncovered obligations. `reader_report.md` remains
+an explicit diagnostic placeholder; no final reader exists for acceptance. Further
+offline applicability/readiness work does not renew this settled attempt's budget.
