@@ -157,8 +157,13 @@ diagnostic or merged code increment is not a completed or accepted report.
   it never aliases a malformed ID or clears unrelated findings. Exact historical
   input reconstruction, carryover and safe resume are tested. **226 targeted
   tests** and scoped independent review pass; v3–v5 contracts remain unchanged.
-  The real 150-stage no-provider readiness check is in progress before any new
-  separately bounded live attempt. No new export or user acceptance is implied.
+  The real 150-stage no-provider replay/sizing passes, but an independent delivery
+  check found proxy incentive text absent from strict followup witness catalogs.
+  The initial plan 4 is held before authorization. The v6-only finding-bound
+  selector is now fixed and reviewed: 65 affected tests pass, the three exact
+  incentive passages and concentration witness validate, and all 13 legacy
+  references survive unchanged. Final real-prefix readiness is running before
+  authorizing a replacement plan. No new export or user acceptance is implied.
 
 See the [concise implementation record](DEEP-RESEARCH-PROGRESS.md) for completed
 checkpoints and the [latest validation evidence](archive/deep-research/DEEP-RESEARCH-FRESH-VALIDATION.md)
@@ -169,7 +174,7 @@ for exact attempts, bounds and usage.
 | Order | Deliverable | Completion evidence |
 | --- | --- | --- |
 | 1 — Done (engineering) | Integrate reviewed reader inputs and typed reconciliation | PRs #23 and #26 merged; reader assumption table, typed reconciliation and packet-validation fixes tested/reviewed. This is not final-reader delivery |
-| 2 — Offline follow-up | Complete bounded NVDA finalization | Run 3 remains `verification_failed`, 198/206. Exact quote/ID and delivery diagnosis is complete; narrow v6 inventory recovery is tested/reviewed. Finish real-prefix readiness, then run one separately bounded repair of the remaining reader caveats |
+| 2 — Offline follow-up | Complete bounded NVDA finalization | Run 3 remains `verification_failed`, 198/206. V6 inventory recovery and strict proxy-witness delivery are tested/reviewed; finish rebound real-prefix readiness, then run one separately bounded reader repair |
 | 3 | Inspect the actual exported English reader | Still open: the revised candidate was independently inspected and its footnotes/calculation links checked, but no admitted export exists. Verify exported bytes and reader usefulness before user review |
 | 4 | Close targeted financial and independent-evidence gaps | Typed issuer-FCF/residual reconciliation and fresh source/arithmetic reviews delivered in PR #26; dependent fresh analysis completed, but the reader is blocked and economic/independent-demand gaps remain |
 | 5 | Prove HOOD generality | Distinct broker-equity/funding workflow, English reader and comparator review using the same core contracts |

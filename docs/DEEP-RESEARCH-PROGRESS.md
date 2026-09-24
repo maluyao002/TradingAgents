@@ -26,8 +26,24 @@ tests pass** (214 recovery/contract/context/wire, seven v6 integration and five 
 including unresolved carryover, receipt partition, unrelated-warning preservation
 and interruption/resume. Ruff and whitespace checks pass; scoped independent review
 has no remaining actionable findings. Metadata-only runtime preflight passes for
-GPT-6 Astra/high and Sol/xhigh. Real 150-stage no-provider readiness is in progress;
-no v6 live attempt or admitted export is claimed at this checkpoint.
+GPT-6 Astra/high and Sol/xhigh. The real 150-stage no-provider replay passes:
+writer 859,360 bytes, synthetic factual 983,442, and twenty coverage prompts within
+the unchanged cap; conservative reserve 5,767,066 tokens / 22 calls. However,
+independent exact-delivery review found that the proxy incentive passages, although
+visible in validated operating source material, are absent from the strict factual
+followup catalogs. The initial `reader_repair_plan_4` is held before authorization.
+A narrow v6-only finding-bound selector is implemented in `c7313c0` and integrated
+in `b57469d` with validated frozen operating-source locators. The general resolution catalog
+and earlier contracts remain unchanged. **65 affected tests pass** (overlap with
+the earlier 226 is not added), and independent code review has no remaining
+actionable findings. Independent delivery review validates all three incentive
+passages under the exact proxy-finding hash and retains the correct concentration
+passage; all 13 legacy references remain byte-identical in the actual 19-reference /
+19,750-character catalog. All 237 inspected source/input/initial-plan files remain
+unchanged. The unissued v6 contract has been rebound; final real-prefix readiness
+is running before a replacement plan can be authorized. No v6 live attempt or
+admitted export is claimed at this checkpoint. All six hosted checks passed on
+the preceding `6794351`; the new increment's checks are separate.
 
 The subsequent v5 repair is implemented in **`72f2495`** with CLI support in
 **`50983e9`**, on PR #28 and not merged. It preserves v3/v4 replay, carries the
