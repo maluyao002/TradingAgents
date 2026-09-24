@@ -16,6 +16,7 @@ from .coverage_policy import packed_issue_context
 from .reader_revision import generation_stages
 from .report_review import ReaderVerification, check_dispositions, validated_disposition_ids
 from .review_lifecycle import compound_coverage_issues
+from .revision_correction_context import CORRECTION_CONTEXT_FIELD
 from .storage import canonical_json, digest
 
 INVENTORY_POLICY = "one_missing_one_foreign_full_batch_inventory_v1"
@@ -71,6 +72,7 @@ def _entry(entry):
             or not isinstance(issues, list) or len(issues) != len(expected)
             or [item.get("issue_id") for item in issues] != expected
             or any(item.get("status") != "open" for item in issues)
+            or any(CORRECTION_CONTEXT_FIELD in item for item in issues)
             or len(core.get("source_findings", ())) != 2
             or len({item.get("source_finding_sha256")
                     for item in core["source_findings"]}) != 2
@@ -191,6 +193,18 @@ def inventory_eligibility(verification, stages, reader_text, *, source_generatio
         if proved is None:
             continue
         missing, foreign, pair, counts = proved
+        correction_contexts = verification["issue_lifecycle"].get(
+            "current_factual_correction_contexts", ())
+        if (not isinstance(correction_contexts, (list, tuple))
+                or any(not isinstance(item, dict)
+                       or not isinstance(item.get("issue_id"), str)
+                       for item in correction_contexts)):
+            raise ValueError("source factual correction context audit is malformed")
+        correction_ids = {item["issue_id"] for item in correction_contexts}
+        if any(identifier in correction_ids
+               or CORRECTION_CONTEXT_FIELD in issues_by_id[identifier]
+               for identifier in expected):
+            raise ValueError("source inventory overlaps current factual correction context")
         if foreign in all_expected or any(terminal_counts[digest(item.model_dump(mode="json"))] != 1
                                        for item in pair):
             continue

@@ -12,6 +12,7 @@ from tradingagents.research.report_review import (
     ReaderVerification,
     check_dispositions,
 )
+from tradingagents.research.revision_correction_context import CORRECTION_CONTEXT_FIELD
 from tradingagents.research.revision_inventory import (
     assert_inventory_prefix_proof,
     inventory_eligibility,
@@ -269,6 +270,19 @@ def test_writer_omission_is_pinned_and_changed_context_rejected():
     changed[2]["reader_coverage_required"] = True
     with pytest.raises(ValueError, match="collides"):
         project_inventory_issues(changed, entries)
+
+
+@pytest.mark.parametrize("location", ["lifecycle_audit", "origin_issue"])
+def test_eligible_batch_rejects_current_factual_correction_context_overlap(location):
+    verification, stages = _source()
+    if location == "lifecycle_audit":
+        verification["issue_lifecycle"]["current_factual_correction_contexts"] = [
+            {"issue_id": IDS[2], "source_finding_sha256": "a" * 64}]
+    else:
+        verification["issue_lifecycle"]["issues"][2][CORRECTION_CONTEXT_FIELD] = [
+            {"issue_id": IDS[2], "source_finding_sha256": "a" * 64}]
+    with pytest.raises(ValueError, match="overlaps current factual correction context"):
+        _eligible(verification, stages)
 
 
 def test_prefix_proof_rejects_replaced_saved_reply_and_reader():
