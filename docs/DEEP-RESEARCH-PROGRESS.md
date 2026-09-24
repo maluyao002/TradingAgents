@@ -5,6 +5,39 @@ and validation checkpoints, **not a second work queue**. For current priorities,
 open gates and user decisions, use the [current roadmap](DEEP-RESEARCH-STATUS.md).
 The [original implementation plan](DEEP-RESEARCH-PLAN.md) is preserved.
 
+## Frozen-reader verification outcome — September 24
+
+`verification_run_2` completed on frozen **`2d20333`** (research fix `af367fd`):
+68 imported stages plus **19 new verifier calls**, **2,035.43 seconds / 33m55s**,
+**540,069 input + 104,565 output = 644,634 additional tokens**, complete telemetry.
+Its complete selected lineage totals **4,036,478 tokens**; this does not repair
+the separately retained incomplete ledger from `verification_run_1`, nor include
+coordinator/subagent usage. All six hosted checks passed on `2d20333`.
+
+All **five previously failed obligations now validate**, including the mixed
+dependency-review issue and four audit-only response errors. The candidate is
+unchanged (`7d9bfe93…3f06`), and source-plan/frozen-input integrity checks pass.
+Final coverage is **198/200**. Export remains withheld at **`verification_failed`**:
+three authored warnings plus two deterministic disposition failures concern three
+distinct subjects, not five independent report defects:
+
+- Material maximum gross guarantee scale is omitted from the otherwise qualified
+  guarantee discussion. The frozen filing supports USD 108.5bn (105bn SB Energy,
+  3.5bn AI-cloud); agreement dates/phasing must remain distinct from current debt
+  or expected losses.
+- The complete incentive-table prerequisite needs clearer scope relative to the
+  selected supplied compensation disclosures and withheld valuation/production.
+- The current reviewed typed residual calculation must be distinguished from the
+  missing historical attribution artifact and incomplete account-level economic
+  explanation; do not reassert that the current reviewed record is absent.
+
+No admitted reader exists and `reader_report.md` is diagnostic only. A versioned,
+separately authorized one-writer transition is being implemented in an isolated
+checkout; it must carry every terminal finding into evidence-backed follow-up,
+retain full new verification, and never redispatch analysts or renew itself.
+PR #28 remains open and unmerged; financial underwriting, reader acceptance,
+HOOD and production remain separate gates.
+
 ## Frozen-reader verification repair — September 24
 
 Follow-up in [PR #28](https://github.com/maluyao002/TradingAgents/pull/28), still

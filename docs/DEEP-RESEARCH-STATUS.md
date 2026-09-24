@@ -94,6 +94,15 @@ diagnostic or merged code increment is not a completed or accepted report.
   verification-only live outcome yet.
   Exact offline rehearsal confirms all 20 planned prompts fit, with the largest
   at 1,044,357 bytes and lossless canonical roundtrip equality; reserve 1,962,791.
+- `verification_run_2` completed on frozen `2d20333`: 19 new verifier calls,
+  **644,634 additional tokens / 33m55s**, complete telemetry. All six hosted checks
+  passed. All five earlier failed obligations now validate; the unchanged candidate
+  reaches **198/200** coverage IDs but remains **`verification_failed`**, without
+  export. Three subjects remain: omitted qualified guarantee scale, incentive-table
+  prerequisite scope, and current typed residual review versus historical/economic
+  limits. The latter two also produce deterministic disposition failures. A bounded
+  one-writer transition with explicit prior-finding follow-up is under development
+  in an isolated checkout; no new user data is needed for the guarantee finding.
 
 See the [concise implementation record](DEEP-RESEARCH-PROGRESS.md) for completed
 checkpoints and the [latest validation evidence](archive/deep-research/DEEP-RESEARCH-FRESH-VALIDATION.md)
@@ -104,7 +113,7 @@ for exact attempts, bounds and usage.
 | Order | Deliverable | Completion evidence |
 | --- | --- | --- |
 | 1 — Done (engineering) | Integrate reviewed reader inputs and typed reconciliation | PRs #23 and #26 merged; reader assumption table, typed reconciliation and packet-validation fixes tested/reviewed. This is not final-reader delivery |
-| 2 — Prompt-size fix reviewed; export blocked | Complete bounded NVDA finalization | Run bounded unchanged-reader factual/coverage checks under `verification_plan_2` after exact serialized-size rehearsal. Latest completed reader review has clean factual review and 195/200 coverage IDs. Preserve original responses and gates; no blind writer restart |
+| 2 — Original five issues closed; export still blocked | Complete bounded NVDA finalization | Review/test the separately authorized one-writer transition, clarify the three terminal finding subjects, then run fresh exact-reader factual/full coverage checks. Latest completed verification is 198/200; no analysts need rerunning |
 | 3 | Inspect the actual exported English reader | Still open: the revised candidate was independently inspected and its footnotes/calculation links checked, but no admitted export exists. Verify exported bytes and reader usefulness before user review |
 | 4 | Close targeted financial and independent-evidence gaps | Typed issuer-FCF/residual reconciliation and fresh source/arithmetic reviews delivered in PR #26; dependent fresh analysis completed, but the reader is blocked and economic/independent-demand gaps remain |
 | 5 | Prove HOOD generality | Distinct broker-equity/funding workflow, English reader and comparator review using the same core contracts |

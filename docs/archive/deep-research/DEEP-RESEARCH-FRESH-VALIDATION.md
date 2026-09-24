@@ -748,3 +748,48 @@ The exact no-provider rehearsal reimported all 68 calls and verified canonical
 roundtrip equality for the complete factual payload: **1,044,357 bytes**, **4,219
 bytes** under the local cap. All 20 planned factual/coverage prompts fit, with
 **1,962,791 tokens** reserved. This is readiness, not a semantic reader check.
+
+### Verification attempt 2 terminal outcome
+
+The separately approved `verification_run_2` launched around **07:38 UTC September
+24** on frozen `2d20333` (research code `af367fd`) under plan
+`af838427c47410d63e654ca0e7cf00233f3aa7c75703c15ec961172433b60573`.
+Bounds: 3m new tokens best-effort, 3,600 seconds overall, 600 seconds per call.
+All **68 imported + 19 new** stages completed; elapsed **2,035.4285 seconds**.
+New usage: **540,069 input + 104,565 output = 644,634 tokens**, complete; cached
+input 35,840 and reasoning output 59,639 are subsets, not additional tokens.
+Selected lineage: **3,543,195 input + 493,283 output = 4,036,478 tokens**, complete.
+This excludes coordinator/team usage and does not make the separate failed first
+verification attempt's telemetry complete. No previous usage record was edited.
+
+Terminal result: **`verification_failed`**, not a transport, prompt-size or budget
+stop. Candidate hash remains
+`7d9bfe93070a2dac0919fe6a66ad2bee4ea219a7b527acc17c3a88758d8f3f06`.
+All five failed obligations from `revision_run_1` now appear in validated IDs.
+Required/validated parent IDs: **200/198**; full coverage includes 201 atomic
+obligations. Three authored warnings plus two deterministic critical disposition
+findings remain:
+
+1. `verify_frozen_report-guarantee_scale_omitted`: source-grounded maximum gross
+   exposure of USD 108.5bn (105bn SB Energy + 3.5bn AI-cloud) is absent from the
+   reader. Preserve August-agreement/phased-commencement dates and distinguish
+   gross contingent exposure from current debt or expected loss.
+2. `verify_frozen_report-coverage-9.incentive_tables_gap`, issue `28123c…b73`:
+   clarify the full incentive-table prerequisite for withheld valuation/production
+   without claiming supplied compensation mechanics/outcomes are absent.
+3. `verify_frozen_report-coverage-10.residual_review_boundary`, issue `b2e59f…0b6`:
+   distinguish current typed source/arithmetic review from absent historical
+   attribution and incomplete economic explanation. The current reviewed typed
+   record must not be incorrectly described as missing.
+
+Items 2–3 each also produce a deterministic `limitation_disposition` finding.
+No audit-only response contains reader spans. Reader export is false; admission
+is incomplete/blocked, financial conclusions withheld and production false.
+`reader_report.md` explicitly says **Diagnostic only — no reader draft**.
+The source plan and frozen input bytes were revalidated after settlement.
+All six hosted CI checks passed on `2d20333`; PR #28 remains unmerged.
+
+Next work uses the same frozen evidence, not another analyst research run: a
+reviewed versioned one-writer transition, complete terminal-finding follow-up with
+exact evidence/reader witnesses, then fresh factual and full coverage validation.
+The reader text is not patched in historical artifacts, and no finding is waived.
