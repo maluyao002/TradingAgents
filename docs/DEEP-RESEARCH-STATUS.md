@@ -114,7 +114,7 @@ diagnostic or merged code increment is not a completed or accepted report.
   withheld at **197/207** coverage. Remaining blockers are outcome-passage delivery,
   material concentration/financing caveats, DOE historical/current source scope and
   three malformed audit-only decisions. The first targeted delivery fix is reviewed
-  and integrated as `01a662e`; no follow-up live run has started. No new external
+  and integrated as `01a662e`; the next attempt is recorded below. No new external
   evidence is required for the identified source-supported corrections.
 - Follow-up offline closure is reviewed in PR #28 at `fa997fb` / `b1b2654`:
   exact issue-linked source excerpts, versioned generation ownership, strict
@@ -124,7 +124,15 @@ diagnostic or merged code increment is not a completed or accepted report.
   of 107 saved stages and synthetic sizing fit the unchanged prompt cap. The
   separately bound `reader_repair_plan_2` allows 6m additional tokens / 90 minutes /
   600 seconds per call, against a 5,034,886-token conservative reserve. Preparation
-  is not live completion; no admitted reader or financial approval is implied.
+  is not live completion. `reader_repair_run_2` completed on `6b1af82` (research
+  `b1b2654`): 22 new calls, **919,015 additional tokens / 46m34s**, complete
+  telemetry. Coverage is **202/211**, but **20 combined findings** withhold export.
+  Six issue-resolution failures keep historical obligations open; only one of
+  three pending response errors received a fresh coverage receipt. New coverage
+  also identified equity-commitment timing and Q3-actuals disclosures, alongside
+  DOE and concentration/source-scope conflicts. Diagnose these offline before
+  another separately bounded attempt. All 30 artifact hashes, original-plan
+  integrity and six hosted checks pass; no admitted reader or financial approval.
 
 See the [concise implementation record](DEEP-RESEARCH-PROGRESS.md) for completed
 checkpoints and the [latest validation evidence](archive/deep-research/DEEP-RESEARCH-FRESH-VALIDATION.md)
@@ -135,7 +143,7 @@ for exact attempts, bounds and usage.
 | Order | Deliverable | Completion evidence |
 | --- | --- | --- |
 | 1 — Done (engineering) | Integrate reviewed reader inputs and typed reconciliation | PRs #23 and #26 merged; reader assumption table, typed reconciliation and packet-validation fixes tested/reviewed. This is not final-reader delivery |
-| 2 — Ready for bounded validation | Complete bounded NVDA finalization | Latest settled attempt is `verification_failed`, 197/207. Reviewed source delivery, versioned replay and response-error handling pass targeted tests and the full 107-stage rehearsal; `reader_repair_plan_2` binds the next writer/factual/complete-coverage attempt |
+| 2 — Offline diagnosis / repair | Complete bounded NVDA finalization | `reader_repair_run_2` settled `verification_failed`, 202/211. Diagnose lifecycle/witness and pending-receipt failures, correct genuine disclosures, then prove offline readiness before a separately bounded continuation |
 | 3 | Inspect the actual exported English reader | Still open: the revised candidate was independently inspected and its footnotes/calculation links checked, but no admitted export exists. Verify exported bytes and reader usefulness before user review |
 | 4 | Close targeted financial and independent-evidence gaps | Typed issuer-FCF/residual reconciliation and fresh source/arithmetic reviews delivered in PR #26; dependent fresh analysis completed, but the reader is blocked and economic/independent-demand gaps remain |
 | 5 | Prove HOOD generality | Distinct broker-equity/funding workflow, English reader and comparator review using the same core contracts |
@@ -195,8 +203,11 @@ useful fresh reader but remain part of the full release.
   dispositions. The numbered repair corrected those prior finding subjects but
   exposed specific concentration omissions, an outcome-quote delivery gap, DOE
   historical/current excerpt scope and three new malformed audit-only responses.
-  Finish exact witness delivery and versioned response-error supersession before
-  another writer/full-verification run; do not simply waive or normalize them.
+  V4 witness delivery and versioned response-error handling are implemented, but
+  run 2 exposed remaining lifecycle/witness and receipt failures. Diagnose the
+  actual terminal audit, correct timing/Q3 disclosures and preserve substantive
+  caveats before another writer/full-verification run; do not waive or normalize
+  failed historical responses.
   Each generation needs its own bound
   allowance; unused allowance never authorizes an automatic writer loop.
   Editorial depth still needs
@@ -212,7 +223,7 @@ especially the substantive-closure, packet, disclosure-control and validation re
 
 | Checkpoint | User action |
 | --- | --- |
-| Concrete live run / recovery | The approved one-revision run completed within its cap but withheld export. Remaining work is engineering, not approval to waive findings; any later live path needs its own concrete bounds/plan. No automatic retry has been launched. Reader and production acceptance remain separate |
+| Concrete live run / recovery | Standing approval covers reasonable bounded validation. Run 2 settled without export; remaining diagnosis/repair is engineering and needs no new user input. Each subsequent run still needs its own explicit bounds, plan and offline readiness; no blind retry or waiver of findings. Reader and production acceptance remain separate |
 | Completed NVDA / HOOD reader | Review usefulness and readability, not every intermediate assumption |
 | Human reference validation / blind comparison | Review a prepared finite packet, or designate a qualified reviewer |
 | Paid/private data, changed scope or acceptance thresholds | Decide only after engineering explains the actual need and alternatives |

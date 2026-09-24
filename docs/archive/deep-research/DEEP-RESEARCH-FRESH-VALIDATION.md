@@ -862,3 +862,67 @@ bound handling of mechanically proven response-format defects. A draft
 `reader_repair_plan_2/request.json` is neither an authorized plan nor a launched run.
 PR #28 remains open. PR merge, financial underwriting, reader acceptance and
 production are not granted.
+
+### Numbered reader repair attempt 2 / v4 — September 24
+
+Reviewed source retrieval `fa997fb` and contract/lifecycle/packing `b1b2654` are
+on PR #28, not merged. V3 historical payloads retain their contract; v4 binds
+per-generation ownership and full stage hashes. Three mechanically proven
+audit-only span failures have a code-owned pending-coverage ledger, not factual
+correction claims; the other nine source findings require substantive follow-up.
+Fresh complete coverage is required for any supersession receipt. Historical
+reports, evidence and usage remain immutable.
+
+Review fixed fiscal-year offset parsing, missing-proposition misclassification
+and wrong-generation receipts. Interruption/resume regressions preserve pending
+records, prevent premature closure and avoid redispatch. 231 distinct targeted
+tests pass (119 + 114 - 19 overlap + 17); independent source, architecture and
+packing reviews are clear within scope. Additional independent probes covered
+60 indexed roundtrips, 250 legacy byte comparisons and 13 malformed decoder cases.
+Ruff and whitespace checks pass.
+
+The first 107-stage rehearsal stopped before any provider call on factual
+headroom; its 5,152,739-token reserve also exceeded the old 5m request draft.
+V4-only indexed references preserve full original-value hashes and exact decoding.
+The passing 107-stage rehearsal measures writer 854,922 bytes, baseline factual
+978,661 plus required 16,384-byte headroom, synthetic factual 979,028 and 19
+coverage prompts 34,964–42,465. All fit the unchanged 1,048,576-byte cap. Full-path
+reserve is 5,034,886 tokens / 21 calls. Synthetic text is sizing-only, not validation.
+
+`reader_repair_plan_2` binds a fresh 6m additional-token best-effort ceiling,
+5,400 seconds total, 600 seconds per call, 1m-token / 2,400-second reserve and
+zero investigation cycles, under the user's standing approval. One writer and
+fresh factual/full coverage only; no analyst redispatch or evidence changes.
+Plan: `71e8b55fe929fffc99d601739e268b63db56cbc25f89ae46d73666f327a900c4`.
+Request: `721813ca1eeafa492398a905db8282e776d78883c5e5dd5f16595abed11d18c9`.
+Metadata-only Astra/high and Sol/xhigh capability checks passed. The authorization
+timestamp 10:29:14 UTC records transcription, not a new user message.
+
+The supervised `reader_repair_run_2` launched around **10:32 UTC**, on HEAD
+`6b1af82` (research `b1b2654`), from settled run 1's 107 stages. Source reader:
+`10e4f7a40ef23f2580e029aecdd4ff4e0b42d2898cd8be6c06503383e4520a7e`.
+It settled **`verification_failed`**, with **107 imported + 22 new calls** in
+**2,793.54845 seconds**. Fresh usage: **797,583 input + 121,432 output = 919,015**,
+complete; cached input **62,720** and reasoning output **63,056** are subsets.
+Selected lineage: **5,865,473 tokens**, complete, excluding coordinator/team usage
+and the separately preserved incomplete first-verification attempt. All 30 result
+artifact hashes and the original plan/frozen-input identities were verified after
+settlement. All six hosted checks passed on frozen `6b1af82`.
+
+Final coverage is **202/211**. Twenty findings comprise six issue-lifecycle failures,
+nine disposition findings, one carried material-omission finding and four newly
+authored coverage findings. Nine factual source-followups reported correction, but
+this did not establish issue retirement or final coverage. One of three deferred
+response errors received a hash-bound fresh receipt; two remain unresolved.
+Additional findings concern remainder-FY2027 timing for the $18bn equity commitment,
+Q3 actuals availability, DOE retained-excerpt scope and concentration evidence.
+This is a verification/lifecycle failure, not a provider, source-access, prompt-size
+or budget failure. Diagnose the exact witnesses and pending ledger offline before
+another separately planned run; do not infer closure from raw model responses.
+
+Candidate SHA256:
+`ebb6b6ba04fe63870d03f9627e921f20f2f2bebf542f42d6a8b4f5cbd3f09b45`.
+No reader exported; `reader_report.md` is diagnostic. Provisional inspection found
+3,185 whitespace-delimited words, ten used/defined footnotes and sixteen matching
+calculation links. This is not an exported-reader check or user acceptance.
+Financial approval, PR merge and production activation remain separate.

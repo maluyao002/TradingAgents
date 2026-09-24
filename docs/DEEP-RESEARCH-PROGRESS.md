@@ -34,7 +34,29 @@ truncating evidence. Complete-path reserve is **5,034,886 tokens / 21 calls**.
 `reader_repair_plan_2` therefore binds **6m additional tokens best-effort / 5,400
 seconds / 600 seconds per call**, zero investigation cycles, under the user's standing
 approval. Runtime metadata checks passed for Astra/high and Sol/xhigh. This is
-readiness, not live success or reader acceptance; the latest settled result is below.
+readiness, not live success or reader acceptance. `reader_repair_run_2` launched
+around **10:32 UTC September 24**, on HEAD `6b1af82` (frozen research `b1b2654`).
+It settled at **`verification_failed`** after **107 imported + 22 new calls**,
+**2,793.55 seconds / 46m34s**, and **797,583 input + 121,432 output = 919,015
+additional tokens**, complete telemetry. Selected-lineage usage is **5,865,473**;
+separate unknown-usage and coordinator/team ledgers are excluded. All 30 result
+hashes and original source-plan/input integrity checks pass; all six hosted checks
+passed on frozen HEAD. Candidate `ebb6b6ba…f09b45` is **not an admitted export**.
+
+Final coverage is **202/211**. The combined review has **20 findings**, not twenty
+independent reader defects: six issue-lifecycle failures, nine disposition findings,
+one carried concentration finding and four newly authored coverage findings.
+All nine factual source-followups *reported* correction, but that did not establish
+valid issue retirement or final coverage. Only **one of three** deferred response
+errors received a fresh coverage receipt; two remain open. The new review identifies
+FY2027 equity-commitment timing, Q3 actuals availability, and continuing DOE and
+concentration/source-scope conflicts. Offline diagnosis must distinguish stale
+lifecycle obligations from genuinely missing disclosures before another live run.
+No retry, approval override, financial acceptance or PR merge is implied.
+
+Provisional candidate inspection found 3,185 whitespace-delimited words, ten used
+and defined footnotes and sixteen matching calculation links. These checks do not
+substitute for successful engine admission or inspection of an actual export.
 
 Follow-up offline work is implemented in **`2b60ba3`**, not a new live outcome. The numbered
 one-writer transition carries every terminal finding into mandatory evidence-backed
@@ -99,9 +121,9 @@ inspection found the original three textual repairs sound, all 10 footnotes defi
 and all 16 calculation links matched; its raw-source check did not prove delivered
 verifier support. The candidate is 3,223 whitespace-delimited words, with a dense
 182-word guarantee paragraph. These are candidate observations, not export or user
-acceptance. No second live repair has launched: a request draft alone is not a
-bound plan or authorization. Close evidence delivery, versioned replay contracts
-and response-error scope offline before another bounded run. PR #28 is unmerged.
+acceptance. At that checkpoint no second live repair had launched: the request
+draft was not a bound plan or authorization. The v4 offline closure and separately
+authorized follow-up are recorded above. PR #28 is unmerged.
 
 ## Earlier frozen-reader verification outcome — September 24
 
