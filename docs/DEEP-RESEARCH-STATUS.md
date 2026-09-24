@@ -9,8 +9,9 @@ for scope and release requirements. This summary does not replace their gates.
 ## Current position
 
 The engine foundation and several review/integration increments are implemented,
-but **Stage 3 is still open: no accepted improved English NVDA/HOOD report pair
-has been delivered**. A successful diagnostic is not a completed or accepted report.
+but **Stage 3 is still open: no admitted final improved English NVDA reader
+has been delivered**. The HOOD contrast remains Stage 4 work. A successful
+diagnostic or merged code increment is not a completed or accepted report.
 
 - PR #24 merged as `d9bb516` into `codex/research-substantive-closure`.
   Its local/remote sub-branch was removed. All six checks passed on final PR head
@@ -19,7 +20,12 @@ has been delivered**. A successful diagnostic is not a completed or accepted rep
   after all six checks passed and all seven review threads were resolved.
   The fully merged local/remote `codex/research-substantive-closure` sub-branch
   was removed; its history remains in the merge. Main remains unchanged.
-  PR #26 delivers the next reviewed increment against that integration branch.
+- PR #26 merged into `codex/deep-research-v2` as `b957806` on September 23
+  at 22:06 PDT (September 24 at 05:06 UTC). All six hosted checks passed on
+  final reviewed head `0eb9387`; both new source-validation findings were fixed
+  and independently re-reviewed. Its local/remote sub-branch and temporary
+  review worktree were removed. Main and the unrelated configuration branch
+  were unchanged.
 - Active Sol/Luna selections now use GPT-6. Runtime capability checks, API effort
   forwarding, conservative input-size admission and lossless packing are implemented.
 - The latest exact-reader factual diagnostic succeeded in **237.17 seconds /
@@ -33,11 +39,10 @@ has been delivered**. A successful diagnostic is not a completed or accepted rep
   HOOD and release acceptance are not part of this increment. Reader inputs are
   now code-owned and tested (`f3a7967`); typed reconciliation and immutable packet
   preparation are implemented (`ecd2fc3`). Fresh source/operating and cash-flow
-  reviews passed and are attached in `reviewed_inputs_2`. PR #26 targets
-  `codex/deep-research-v2`. Its pre-merge re-review also fixed truncated source
-  cells and Decimal-rounded anchor comparisons; see the implementation record
-  and [PR #26](https://github.com/maluyao002/TradingAgents/pull/26) for final checks
-  and integration state. Historical reports and live allowances are unchanged.
+  reviews passed and are attached in `reviewed_inputs_2`. These engineering
+  changes, including complete source-cell validation and exact anchor-value
+  comparisons, are integrated through [PR #26](https://github.com/maluyao002/TradingAgents/pull/26).
+  Historical reports and live allowances are unchanged.
 - Fresh English attempt 3 completed 28 model calls, including all fresh analyses,
   the writer, factual review and 18 coverage batches. It stopped before repair at
   `repair_path_budget_insufficient`: **1,642,733 tokens / 3,593.84 seconds**, with
@@ -59,8 +64,8 @@ for exact attempts, bounds and usage.
 
 | Order | Deliverable | Completion evidence |
 | --- | --- | --- |
-| 1 | Complete feature-branch integration and prepare the next English reader | PR #23 merged; reader assumption table implemented/reviewed in PR #26; no unsupported valuation or funding claim |
-| 2 | Complete bounded NVDA finalization | Fresh analysis and first full review pass finished; attempt 3 stopped before repair. Offline continuation awaits its own allowance; no silent retry or skipped check |
+| 1 — Done (engineering) | Integrate reviewed reader inputs and typed reconciliation | PRs #23 and #26 merged; reader assumption table, typed reconciliation and packet-validation fixes tested/reviewed. This is not final-reader delivery |
+| 2 — Next, gated | Complete bounded NVDA finalization | Fresh analysis and first full review pass finished; attempt 3 stopped before repair. Assess applicability findings offline, check exact runtime/input compatibility and repair/recheck reserves, then obtain the continuation allowance; no silent retry or skipped check |
 | 3 | Inspect the actual exported English reader | Still open: only a provisional exact-candidate comparison with Claude exists; no admitted export. Check repaired/exported bytes, citations, readability and material scope before user review |
 | 4 | Close targeted financial and independent-evidence gaps | Typed issuer-FCF/residual reconciliation and fresh source/arithmetic reviews delivered in PR #26; dependent fresh analysis completed, but the reader is blocked and economic/independent-demand gaps remain |
 | 5 | Prove HOOD generality | Distinct broker-equity/funding workflow, English reader and comparator review using the same core contracts |
@@ -79,8 +84,8 @@ These Stage 0–5 labels are the delivery roadmap, **not** the original M0–M6 
 | --- | --- | --- |
 | 0 — Organize and reconcile | Baseline, scope decisions and current work index; documentation cleanup | Keep this queue and implementation record current |
 | 1 — Evidence delivery and result scope | Reviewed-input contracts, actual-payload coverage audit, typed derivations and scoped conclusions; PR #11 merged | Broader evidence/model completeness is not implied |
-| 2 — NVDA financial case | PR #12 schedules, conditional operating/cash-flow calculations, exact passages and source/arithmetic reviews; PR #26 typed CFO/issuer-FCF reconciliation | Economic underwriting, equity/share/funding and opening-date closure |
-| 3 — Integrated English NVDA reader | PR #13 and later review/rendering/recovery increments; fresh analyses and a successful exact-reader factual diagnostic | Complete admitted export, coverage/repair, reader inspection and user acceptance |
+| 2 — NVDA financial case | PR #12 schedules, conditional operating/cash-flow calculations, exact passages and source/arithmetic reviews; merged PR #26 typed CFO/issuer-FCF reconciliation and packet hardening | Economic underwriting, equity/share/funding and opening-date closure |
+| 3 — Integrated English NVDA reader | PR #13 and later review/rendering/recovery increments; merged PR #26 reviewed-input presentation; fresh analyses and first full review pass | Complete admitted export, coverage/repair, reader inspection and user acceptance |
 | 4 — Robinhood contrast | Comparator and broker-model groundwork | Complete distinct HOOD workflow and English report; independent economic review and user review of the pair |
 | 5 — Updates, benchmark and release | Dossier/evaluation utilities and benchmark contracts | Full original release scope, matched trials, human labels, held-out/repeat pilots and activation decision |
 
@@ -163,6 +168,13 @@ Older artifacts and exact chronological decisions are in the
 and [full implementation history](archive/deep-research/DEEP-RESEARCH-PROGRESS-20260923.md).
 
 ## Keeping documentation current
+
+Reconcile this roadmap and the implementation record by default whenever a PR
+is merged, following the [repository merge-closeout rules](../AGENTS.md#pr-merge-closeout).
+Verify the actual merge target/commit and checks, remove stale current-status
+claims, mark only proven deliverables done, and retain outstanding user gates.
+For documentation-only merges that leave these records accurate, verify that
+without starting a recursive bookkeeping PR.
 
 Update this file for priorities, gates and ownership. Record completed changes in
 [the implementation record](DEEP-RESEARCH-PROGRESS.md), and commands in
