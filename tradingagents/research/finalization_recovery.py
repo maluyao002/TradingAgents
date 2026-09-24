@@ -24,6 +24,7 @@ from typing import Any, Literal
 
 from pydantic import AwareDatetime, Field, field_validator
 
+from .case_context import load_case_context
 from .contracts import Budget, Contract, EvidenceSnapshot, ResearchRequest, Usage
 from .evidence import validate_snapshot
 from .reader_revision import (
@@ -728,11 +729,15 @@ def prepare_finalization_continuation(
                     else deferred_coverage_eligibility(
                         source_verification, checkpoint["stages"], candidate["reader_text"])
                     if generic_revision else ())
-        source_witness_catalog = (revision_witness_catalog(target_contract,
-            validate_snapshot(EvidenceSnapshot.model_validate(
-                parse_json(source_inputs["evidence_path"])), source_request),
-            terminal_review["findings"], source_verification["issue_lifecycle"]["issues"])
-            if generic_revision else None)
+        source_witness_catalog = None
+        if generic_revision:
+            witness_snapshot = validate_snapshot(EvidenceSnapshot.model_validate(
+                parse_json(source_inputs["evidence_path"])), source_request)
+            witness_case = (load_case_context(source_inputs["financial_case_path"],
+                source_request, witness_snapshot) if target_contract == V6_CONTRACT else None)
+            source_witness_catalog = revision_witness_catalog(target_contract,
+                witness_snapshot, terminal_review["findings"],
+                source_verification["issue_lifecycle"]["issues"], case_context=witness_case)
         pending_inventory = (inventory_contexts_from_source(
             source_verification, checkpoint, source_provenance, candidate["reader_text"],
             current_artifact_hashes=artifact_hashes)
@@ -973,7 +978,9 @@ def assert_finalization_source_unchanged(
                                              prepared.revision_contract_sha256)
                 expected_catalog = revision_witness_catalog(contract,
                     snapshot, source_verification["review"]["findings"],
-                    source_verification["issue_lifecycle"]["issues"])
+                    source_verification["issue_lifecycle"]["issues"],
+                    case_context=(load_case_context(prepared.frozen_inputs["financial_case_path"],
+                        prepared.source_request, snapshot) if contract == V6_CONTRACT else None))
                 expected_inventory = (inventory_contexts_from_source(
                     source_verification, checkpoint, source_provenance,
                     prepared.candidate["reader_text"],

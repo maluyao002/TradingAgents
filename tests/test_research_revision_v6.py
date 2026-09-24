@@ -2,10 +2,12 @@
 
 from copy import deepcopy
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 
 from tests.test_research_generic_revision import PendingGenericFixture
+from tests.test_research_revision_source_witnesses import setup_claim, source
 from tests.test_research_revision_v5 import V5FreshCoverage, _v5
 from tradingagents.research.budget import BudgetExhausted
 from tradingagents.research.engine import run_research
@@ -16,10 +18,39 @@ from tradingagents.research.finalization_recovery import (
     prepare_finalization_continuation,
 )
 from tradingagents.research.reader_revision import generation_stages
-from tradingagents.research.revision_contracts import V5_CONTRACT, V6_CONTRACT
+from tradingagents.research.revision_contracts import (
+    V3_CONTRACT,
+    V4_CONTRACT,
+    V5_CONTRACT,
+    V6_CONTRACT,
+)
 from tradingagents.research.revision_inventory import inventory_finding_hashes
+from tradingagents.research.revision_witness_selection import revision_witness_catalog
 from tradingagents.research.services import ResearchServices
 from tradingagents.research.storage import CheckpointStore, digest, read_json
+
+
+@pytest.mark.parametrize("contract", [V3_CONTRACT, V4_CONTRACT, V5_CONTRACT])
+def test_historical_witness_catalogs_ignore_new_case_locator_context(contract):
+    snapshot, finding, issue = setup_claim(source())
+    baseline = revision_witness_catalog(contract, snapshot, [finding], [issue])
+    assert revision_witness_catalog(contract, snapshot, [finding], [issue],
+                                    case_context=object()) == baseline
+
+
+def test_v6_selector_binds_case_locator_without_mutating_context():
+    doc = source()
+    snapshot, finding, _ = setup_claim(doc)
+    finding["affected_ids"] = [doc.id]
+    material = [{"source_id": doc.id, "source_sha256": doc.content_sha256,
+                 "start": 16, "end": 43, "text": doc.content[16:43]}]
+    before = deepcopy(material)
+    context = SimpleNamespace(operating_scenarios=SimpleNamespace(
+        model_context={"source_material": material}))
+    catalog = revision_witness_catalog(V6_CONTRACT, snapshot, [finding], [], case_context=context)
+    reference = f"source_passage:{digest(finding)}:{doc.id}:{doc.content_sha256}:16:43"
+    assert catalog[reference] == doc.content[16:43]
+    assert material == before
 
 
 class V5InventoryError(V5FreshCoverage):
@@ -90,6 +121,9 @@ def test_v6_replays_v5_and_closes_inventory_pair_only_after_full_coverage(tmp_pa
     assert [payload["stage"] for _, payload in provider.calls][0] == generation_stages(4)[0]
     factual = next(payload for _, payload in provider.calls if payload["stage"] == generation_stages(4)[1])
     assert factual["research"]["pending_inventory"] == list(plan.pending_inventory)
+    for payload in (provider.calls[0][1], factual):
+        assert payload["research"]["source_text_witnesses"] == plan.source_witness_catalog
+        assert digest(payload["research"]["source_text_witnesses"]) == plan.source_witness_catalog_sha256
     assert not inventory_finding_hashes(plan.pending_inventory).intersection(
         item["source_finding_sha256"] for item in lifecycle["source_finding_followups"])
     assert_finalization_source_unchanged(plan)

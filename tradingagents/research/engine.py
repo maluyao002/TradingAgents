@@ -2014,7 +2014,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                             source_issues = reader_verifications[request.report_language][
                                 "issue_lifecycle"]["issues"]
                             source_text_witnesses = revision_witness_catalog(
-                                contract, snapshot, source_terminal_review["findings"], source_issues)
+                                contract, snapshot, source_terminal_review["findings"], source_issues,
+                                case_context=case_context if contract == V6_CONTRACT else None)
                             pending_coverage = (pending_entries(pending_contexts)
                                 if contract in PINNED_CONTRACTS else deferred_coverage_eligibility(
                                     reader_verifications[request.report_language], model_checkpoints,

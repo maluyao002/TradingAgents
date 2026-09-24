@@ -159,6 +159,7 @@ GENERIC_V5_COVERAGE_SCHEDULE_POLICY = "pinned_atomic_slots_complete_wire_delta_v
 # Append-only: inventory-format defects are proved by later coverage, never by
 # factual claims about a changed reader. Earlier contracts remain byte-identical.
 GENERIC_V6_INVENTORY_POLICY = "one_missing_one_foreign_full_batch_inventory_v1"
+GENERIC_V6_SOURCE_WITNESS_POLICY = "finding_bound_direct_source_and_validated_locator_v1"
 GENERIC_V6_WRITER_REQUIREMENTS = GENERIC_V5_WRITER_REQUIREMENTS + (
     " Make minimal targeted edits to the source candidate. Preserve unaffected "
     "supported prose, citations and material qualifiers; do not compress other "
