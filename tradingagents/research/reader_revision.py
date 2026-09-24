@@ -12,6 +12,7 @@ GENERATION_PATTERN = r"(?:[2-9]|[1-9][0-9]+)"
 GENERIC_SHARED_CONTEXT_MIN_BYTES = 256
 GENERIC_REVISION_POLICY_V4 = "frozen-candidate-revision-v4"
 GENERIC_V4_SOURCE_WITNESS_POLICY = "finding_bound_issue_context_exact_source_passage_v1"
+GENERIC_REVISION_POLICY_V5 = "frozen-candidate-revision-v5"
 
 
 def generation_stages(generation: int) -> tuple[str, str]:
@@ -112,6 +113,47 @@ GENERIC_V4_COVERAGE_REQUIREMENTS = (
     "a waiver of the issue: decide the supplied issue anew against this exact reader."
 )
 GENERIC_V4_DEFERRED_POLICY = "audit_only_has_reader_spans_exact_saved_coverage_v1"
+
+# v5 is append-only. Earlier model payloads, including the issued v4, are exact
+# historical replay contracts and must not inherit these instructions.
+GENERIC_V5_WRITER_REQUIREMENTS = (
+    GENERIC_V4_WRITER_REQUIREMENTS
+    + " pending_coverage_contexts contain exact code-owned original issue obligations. "
+    "Keep them in scope even if the source draft paraphrased or omitted their text; "
+    "do not claim their prior response-format errors were resolved by the writer."
+)
+GENERIC_V5_FOLLOWUP_REQUIREMENTS = (
+    GENERIC_V4_FOLLOWUP_REQUIREMENTS
+    + " Witness namespaces are field-specific: issue_resolutions[].witnesses may "
+    "use ONLY exact keys and literal substrings from resolution_evidence. "
+    "source_passage: references belong ONLY in source_finding_followups[].witnesses "
+    "and must match that finding hash and an exact eligible source_text_witnesses key. "
+    "Do not add a source_passage witness to an issue resolution, even when its "
+    "claim_change witness is valid. For every corrected source finding, copy an "
+    "exact nonblank substring of the supplied catalog value, preserving case, "
+    "punctuation, spacing and line breaks; a normalized or paraphrased quote is "
+    "not a witness. pending_coverage_contexts are not factual corrections: "
+    "return no followup for them, do not retire their issue resolutions, and "
+    "leave their exact same-issue coverage to the fresh atomic batches."
+)
+GENERIC_V5_COVERAGE_REQUIREMENTS = (
+    GENERIC_V4_COVERAGE_REQUIREMENTS
+    + " Code-owned pending_coverage_contexts are exact required issue obligations. "
+    "Judge each supplied original issue ID and full proposition context against "
+    "this reader; prior replies and reworded authored limitations are not receipts. "
+    "An optional current_factual_correction_context is a narrowly accepted "
+    "current-reader source-finding followup supplied as review context only. "
+    "Keep the original issue open for this coverage decision and judge its full "
+    "remaining material scope independently. Do not repeat a demonstrably stale "
+    "source-absence clause merely to match historical wording, but do not treat "
+    "a retained source passage as commercial, economic, or analytical validation. "
+    "Correction context is not an issue-resolution receipt, materiality waiver, "
+    "or permission to skip any residual caveat."
+)
+GENERIC_V5_PENDING_POLICY = "origin_proven_issue_context_and_fresh_same_issue_coverage_v1"
+GENERIC_V5_CORRECTION_CONTEXT_MAX_BYTES = 64_000
+GENERIC_V5_COVERAGE_DELTA_MAX_BYTES = 64_000
+GENERIC_V5_COVERAGE_SCHEDULE_POLICY = "pinned_atomic_slots_complete_wire_delta_v1"
 
 VERIFICATION_REPAIR_REQUIREMENTS = (
     "This is a new attestation of the unchanged candidate, not permission to edit "

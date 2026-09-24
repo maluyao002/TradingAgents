@@ -94,9 +94,9 @@ def deferred_coverage_eligibility(verification, stages, reader_text):
 
 def resolve_deferred_coverage(pending, *, source_stage, generation, contract_sha256,
                               reader_sha256, reader_text, issues, batches, batch_audit,
-                              model_checkpoints):
+                              model_checkpoints, policy=V4_CONTRACT.policy):
     """Return receipts and unchanged source findings for every unproved entry."""
-    if not revision_contract(V4_CONTRACT.policy, contract_sha256).deferred_coverage:
+    if not revision_contract(policy, contract_sha256).deferred_coverage:
         raise ValueError("deferred coverage requires its exact registered contract")
     issue_by_id = {item["issue_id"]: item for item in issues}
     receipts, still_open = [], []

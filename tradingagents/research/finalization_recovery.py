@@ -38,9 +38,14 @@ from .reader_revision import (
     generic_review_stage,
 )
 from .review_lifecycle import compound_coverage_issues
-from .revision_contracts import V3_CONTRACT, V4_CONTRACT
+from .revision_contracts import V3_CONTRACT, V4_CONTRACT, V5_CONTRACT
 from .revision_deferred import deferred_coverage_eligibility
 from .revision_lineage import lineage_sha256, source_revision_contracts
+from .revision_pending import (
+    pending_contexts_from_source,
+    pending_entries,
+    prior_pending_context_lineage,
+)
 from .revision_witness_selection import revision_witness_catalog
 from .services import ModelReply
 from .storage import (
@@ -142,6 +147,12 @@ class FinalizationContinuationPlan:
     deferred_coverage_eligibility: tuple[dict[str, Any], ...] | None = None
     deferred_coverage_eligibility_sha256: str | None = None
     source_issue_lifecycle_sha256: str | None = None
+    pending_coverage_contexts: tuple[dict[str, Any], ...] | None = None
+    pending_coverage_contexts_sha256: str | None = None
+    pending_origin_dir: Path | None = None
+    pending_origin_artifact_hashes: dict[str, str] | None = None
+    prior_pending_contexts: tuple[dict[str, Any], ...] | None = None
+    prior_pending_contexts_sha256: str | None = None
 
     def manifest(self) -> dict[str, Any]:
         return {
@@ -187,7 +198,11 @@ class FinalizationContinuationPlan:
             **({"prior_revision_contracts_sha256": self.prior_revision_contracts_sha256,
                 "deferred_coverage_eligibility_sha256": self.deferred_coverage_eligibility_sha256,
                 "source_issue_lifecycle_sha256": self.source_issue_lifecycle_sha256}
-               if self.reader_revision_policy == V4_CONTRACT.policy else {}),
+               if self.reader_revision_policy in {V4_CONTRACT.policy, V5_CONTRACT.policy} else {}),
+            **({"pending_coverage_contexts_sha256": self.pending_coverage_contexts_sha256,
+                "pending_origin_artifact_hashes": self.pending_origin_artifact_hashes,
+                "prior_pending_contexts_sha256": self.prior_pending_contexts_sha256}
+               if self.reader_revision_policy == V5_CONTRACT.policy else {}),
         }
 
     @property
@@ -225,6 +240,36 @@ def _read_object(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("finalization recovery JSON input must be an object")
     return value
+
+
+def _pending_origin_proof(origin_dir: Path | None, expected_hashes: dict[str, str],
+                          source_dir: Path) -> dict[str, Any]:
+    """Read an explicit locator, accepting only the hash-bound direct parent."""
+    if origin_dir is None:
+        raise ValueError("pending carry requires an explicit origin locator")
+    origin_dir = Path(origin_dir)
+    if origin_dir.is_symlink() or not origin_dir.is_dir():
+        raise ValueError("pending origin must be a real directory")
+    origin_dir = origin_dir.resolve()
+    if origin_dir == source_dir or set(expected_hashes) != {
+            FINALIZATION_CHECKPOINT_NAME, "reader_verification.json",
+            "recovery_provenance.json", "result.json"}:
+        raise ValueError("pending origin is not its bound direct parent")
+    with _source_lock(origin_dir):
+        contents = {name: _read_regular(origin_dir / name) for name in expected_hashes}
+    if {name: hashlib.sha256(value).hexdigest() for name, value in contents.items()} != expected_hashes:
+        raise ValueError("pending origin artifact hashes differ from parent provenance")
+    checkpoint = parse_json(contents[FINALIZATION_CHECKPOINT_NAME])
+    verification = parse_json(contents["reader_verification.json"])
+    result = parse_json(contents["result.json"])
+    if (not isinstance(checkpoint, dict) or not isinstance(verification, dict)
+            or not isinstance(verification.get("English"), dict)
+            or not isinstance(result, dict) or result.get("stop_reason") != "verification_failed"
+            or checkpoint.get("dispatched") is not False
+            or Usage.model_validate(checkpoint.get("usage")).complete is not True):
+        raise ValueError("pending origin is not a settled failed verification")
+    return {"artifact_hashes": dict(expected_hashes),
+            "checkpoint": checkpoint, "verification": verification["English"]}
 
 
 @contextmanager
@@ -303,10 +348,13 @@ def _validate_narrow_scope(source: ResearchRequest, destination: ResearchRequest
 
 
 def _validate_path_isolation(
-    source_dir: Path, destination: Path, input_paths: dict[str, Path] | None = None
+    source_dir: Path, destination: Path, input_paths: dict[str, Path] | None = None,
+    pending_origin_dir: Path | None = None,
 ) -> None:
     output = destination.resolve()
     protected = {source_dir, *(path.resolve().parent for path in (input_paths or {}).values())}
+    if pending_origin_dir is not None:
+        protected.add(Path(pending_origin_dir).resolve())
     if any(
         output == item or output.is_relative_to(item) or item.is_relative_to(output)
         for item in protected
@@ -542,11 +590,13 @@ def _revision_artifacts(source_dir, candidate, imported, source_usage, *, repair
 
 def prepare_finalization_continuation(
     source_dir: Path, destination_request: ResearchRequest, *, revise_reader: bool = False,
-    repair_verification: bool = False,
+    repair_verification: bool = False, pending_origin_dir: Path | None = None,
 ) -> FinalizationContinuationPlan:
     """Prepare and content-bind a candidate continuation without live calls."""
     if revise_reader and repair_verification:
         raise ValueError("writer revision and verification repair are mutually exclusive")
+    if pending_origin_dir is not None and not revise_reader:
+        raise ValueError("pending origin is only valid for a reader revision")
     source_dir = Path(source_dir)
     if source_dir.is_symlink() or not source_dir.is_dir():
         raise ValueError("source run must be a real directory")
@@ -554,7 +604,8 @@ def prepare_finalization_continuation(
     destination_request = ResearchRequest.model_validate_json(
         destination_request.model_dump_json(warnings="error")
     )
-    _validate_path_isolation(source_dir, destination_request.output_dir)
+    _validate_path_isolation(source_dir, destination_request.output_dir,
+                             pending_origin_dir=pending_origin_dir)
 
     with _source_lock(source_dir):
         checkpoint_path = source_dir / FINALIZATION_CHECKPOINT_NAME
@@ -577,7 +628,8 @@ def prepare_finalization_continuation(
             raise ValueError("source request output directory does not match its checkpoint")
         _validate_narrow_scope(source_request, destination_request)
         source_paths, source_inputs = _read_request_inputs(source_request)
-        _validate_path_isolation(source_dir, destination_request.output_dir, source_paths)
+        _validate_path_isolation(source_dir, destination_request.output_dir, source_paths,
+                                 pending_origin_dir=pending_origin_dir)
         destination_paths, destination_inputs = _read_request_inputs(destination_request)
         del destination_paths
         frozen_hashes = {
@@ -621,24 +673,47 @@ def prepare_finalization_continuation(
             checkpoint["model_service_identity"],
             checkpoint["run_identity"],
         )
+        source_provenance = (_read_object(source_dir / "recovery_provenance.json")
+                             if generic_revision and generation > 2 else None)
         prior_contracts = (source_revision_contracts(
-            _read_object(source_dir / "recovery_provenance.json"),
+            source_provenance,
             lineage_hashes["recovery_provenance.json"], imported, generation - 1)
             if generic_revision and generation > 2 else ())
-        target_contract = V4_CONTRACT if generic_revision else None
-        deferred = (deferred_coverage_eligibility(
-            source_verification, checkpoint["stages"], candidate["reader_text"])
-            if generic_revision else ())
-        source_witness_catalog = (revision_witness_catalog(target_contract,
-            validate_snapshot(EvidenceSnapshot.model_validate(
-                parse_json(source_inputs["evidence_path"])), source_request),
-            terminal_review["findings"], source_verification["issue_lifecycle"]["issues"])
-            if generic_revision else None)
+        target_contract = (V5_CONTRACT if prior_contracts and prior_contracts[-1][
+            "contract_sha256"] in {V4_CONTRACT.sha256, V5_CONTRACT.sha256}
+            else V4_CONTRACT) if generic_revision else None
         artifact_hashes = {
             FINALIZATION_CHECKPOINT_NAME: hashlib.sha256(checkpoint_bytes).hexdigest(),
             **lineage_hashes,
             **revision_artifacts,
         }
+        pending_origin_proof = None
+        pending_contexts = None
+        if target_contract == V5_CONTRACT:
+            if source_provenance.get("reader_revision_policy") == V4_CONTRACT.policy and (
+                    source_verification["issue_lifecycle"].get("pending_coverage")):
+                pending_origin_proof = _pending_origin_proof(
+                    pending_origin_dir, source_provenance["source_artifact_hashes"], source_dir)
+            elif pending_origin_dir is not None:
+                raise ValueError("unneeded pending origin locator")
+            pending_contexts = pending_contexts_from_source(
+                source_verification, checkpoint, source_provenance, candidate["reader_text"],
+                current_artifact_hashes=artifact_hashes, origin_proof=pending_origin_proof)
+            prior_pending_contexts = prior_pending_context_lineage(
+                source_provenance, prior_contracts)
+        elif pending_origin_dir is not None:
+            raise ValueError("pending origin cannot change a historical revision contract")
+        else:
+            prior_pending_contexts = None
+        deferred = (pending_entries(pending_contexts) if target_contract == V5_CONTRACT
+                    else deferred_coverage_eligibility(
+                        source_verification, checkpoint["stages"], candidate["reader_text"])
+                    if generic_revision else ())
+        source_witness_catalog = (revision_witness_catalog(target_contract,
+            validate_snapshot(EvidenceSnapshot.model_validate(
+                parse_json(source_inputs["evidence_path"])), source_request),
+            terminal_review["findings"], source_verification["issue_lifecycle"]["issues"])
+            if generic_revision else None)
         plan = FinalizationContinuationPlan(
             source_dir=source_dir,
             source_request=source_request,
@@ -677,12 +752,24 @@ def prepare_finalization_continuation(
             deferred_coverage_eligibility_sha256=(digest(deferred) if generic_revision else None),
             source_issue_lifecycle_sha256=(digest(source_verification["issue_lifecycle"])
                                            if generic_revision else None),
+            pending_coverage_contexts=pending_contexts,
+            pending_coverage_contexts_sha256=(digest(pending_contexts)
+                                              if pending_contexts is not None else None),
+            pending_origin_dir=(Path(pending_origin_dir).resolve()
+                                if pending_origin_proof is not None else None),
+            pending_origin_artifact_hashes=(pending_origin_proof["artifact_hashes"]
+                                            if pending_origin_proof is not None else None),
+            prior_pending_contexts=prior_pending_contexts,
+            prior_pending_contexts_sha256=(digest(prior_pending_contexts)
+                                           if prior_pending_contexts is not None else None),
         )
     assert_finalization_source_unchanged(plan)
     return plan
 
 
 def _validate_plan_content(plan: FinalizationContinuationPlan) -> None:
+    _validate_path_isolation(plan.source_dir, plan.destination_request.output_dir,
+                             plan.source_input_paths, plan.pending_origin_dir)
     checkpoint = parse_json(plan.source_checkpoint_bytes)
     if not isinstance(checkpoint, dict) or set(checkpoint) != _CHECKPOINT_KEYS:
         raise ValueError("prepared finalization checkpoint bytes are invalid")
@@ -702,10 +789,12 @@ def _validate_plan_content(plan: FinalizationContinuationPlan) -> None:
     if plan.reader_revision_policy is not None:
         if plan.revision_generation is not None:
             generation, writer = _generic_source_generation(imported, review_stage)
-            if (plan.reader_revision_policy != V4_CONTRACT.policy
+            target_contract = next((contract for contract in (V4_CONTRACT, V5_CONTRACT)
+                                    if contract.policy == plan.reader_revision_policy), None)
+            if (target_contract is None
                     or plan.verification_repair_policy is not None
                     or not _is_hash(plan.source_terminal_review_sha256)
-                    or plan.revision_contract_sha256 != V4_CONTRACT.sha256
+                    or plan.revision_contract_sha256 != target_contract.sha256
                     or not isinstance(plan.source_witness_catalog, dict)
                     or digest(plan.source_witness_catalog) != plan.source_witness_catalog_sha256
                     or not isinstance(plan.prior_revision_contracts, tuple)
@@ -717,6 +806,25 @@ def _validate_plan_content(plan: FinalizationContinuationPlan) -> None:
                     or not _is_hash(plan.source_issue_lifecycle_sha256)
                     or (generation, writer) != (plan.revision_generation, plan.source_writer_stage)):
                 raise ValueError("invalid generic revision policy or source writer")
+            if target_contract == V5_CONTRACT:
+                if (not isinstance(plan.pending_coverage_contexts, tuple)
+                        or digest(plan.pending_coverage_contexts)
+                        != plan.pending_coverage_contexts_sha256
+                        or pending_entries(plan.pending_coverage_contexts)
+                        != plan.deferred_coverage_eligibility
+                        or (plan.pending_origin_dir is None)
+                        != (plan.pending_origin_artifact_hashes is None)
+                        or not isinstance(plan.prior_pending_contexts, tuple)
+                        or digest(plan.prior_pending_contexts)
+                        != plan.prior_pending_contexts_sha256):
+                    raise ValueError("invalid v5 pending context envelope")
+            elif (plan.pending_coverage_contexts is not None
+                  or plan.pending_coverage_contexts_sha256 is not None
+                  or plan.pending_origin_dir is not None
+                  or plan.pending_origin_artifact_hashes is not None
+                  or plan.prior_pending_contexts is not None
+                  or plan.prior_pending_contexts_sha256 is not None):
+                raise ValueError("historical v4 plan gained pending context fields")
         elif (plan.reader_revision_policy != READER_REVISION_POLICY
               or review_stage != "verify_repaired_report" or plan.source_writer_stage is not None):
             raise ValueError("invalid reader revision policy or source candidate")
@@ -730,7 +838,13 @@ def _validate_plan_content(plan: FinalizationContinuationPlan) -> None:
           or plan.prior_revision_contracts_sha256 is not None
           or plan.deferred_coverage_eligibility is not None
           or plan.deferred_coverage_eligibility_sha256 is not None
-          or plan.source_issue_lifecycle_sha256 is not None):
+          or plan.source_issue_lifecycle_sha256 is not None
+          or plan.pending_coverage_contexts is not None
+          or plan.pending_coverage_contexts_sha256 is not None
+          or plan.pending_origin_dir is not None
+          or plan.pending_origin_artifact_hashes is not None
+          or plan.prior_pending_contexts is not None
+          or plan.prior_pending_contexts_sha256 is not None):
         raise ValueError("unexpected generic revision generation")
     if plan.source_run_identity != digest(
         {"request": source_request_id, "model_service": plan.source_model_identity}
@@ -785,24 +899,45 @@ def assert_finalization_source_unchanged(
                 prepared.source_dir / "reader_verification.json")["English"]["review"]
             ) != prepared.source_terminal_review_sha256:
                 raise ValueError("reader revision terminal findings changed")
-            if prepared.reader_revision_policy == V4_CONTRACT.policy:
+            if prepared.reader_revision_policy in {V4_CONTRACT.policy, V5_CONTRACT.policy}:
                 source_verification = _read_object(
                     prepared.source_dir / "reader_verification.json")["English"]
                 checkpoint = parse_json(prepared.source_checkpoint_bytes)
+                source_provenance = _read_object(
+                    prepared.source_dir / "recovery_provenance.json")
                 prior = (source_revision_contracts(
-                    _read_object(prepared.source_dir / "recovery_provenance.json"),
+                    source_provenance,
                     prepared.source_artifact_hashes["recovery_provenance.json"],
                     prepared.imported_stages, prepared.revision_generation - 1)
                     if prepared.revision_generation > 2 else ())
-                expected_deferred = deferred_coverage_eligibility(
-                    source_verification, checkpoint["stages"], prepared.candidate["reader_text"])
+                if prepared.reader_revision_policy == V5_CONTRACT.policy:
+                    origin_proof = (_pending_origin_proof(
+                        prepared.pending_origin_dir, prepared.pending_origin_artifact_hashes,
+                        prepared.source_dir) if prepared.pending_origin_dir is not None else None)
+                    expected_contexts = pending_contexts_from_source(
+                        source_verification, checkpoint, source_provenance,
+                        prepared.candidate["reader_text"],
+                        current_artifact_hashes=prepared.source_artifact_hashes,
+                        origin_proof=origin_proof)
+                    expected_deferred = pending_entries(expected_contexts)
+                    expected_prior_pending = prior_pending_context_lineage(
+                        source_provenance, prior)
+                else:
+                    expected_contexts = None
+                    expected_prior_pending = None
+                    expected_deferred = deferred_coverage_eligibility(
+                        source_verification, checkpoint["stages"], prepared.candidate["reader_text"])
                 snapshot = validate_snapshot(EvidenceSnapshot.model_validate(
                     parse_json(prepared.frozen_inputs["evidence_path"])), prepared.source_request)
-                expected_catalog = revision_witness_catalog(V4_CONTRACT,
+                contract = (V5_CONTRACT if prepared.reader_revision_policy == V5_CONTRACT.policy
+                            else V4_CONTRACT)
+                expected_catalog = revision_witness_catalog(contract,
                     snapshot, source_verification["review"]["findings"],
                     source_verification["issue_lifecycle"]["issues"])
                 if (prior != prepared.prior_revision_contracts
                         or expected_deferred != prepared.deferred_coverage_eligibility
+                        or expected_contexts != prepared.pending_coverage_contexts
+                        or expected_prior_pending != prepared.prior_pending_contexts
                         or expected_catalog != prepared.source_witness_catalog
                         or digest(source_verification["issue_lifecycle"])
                         != prepared.source_issue_lifecycle_sha256):
@@ -841,7 +976,8 @@ def authorize_finalization_continuation(
     if frozen is None:
         _, frozen = _read_request_inputs(request)
     _validate_narrow_scope(plan.source_request, request)
-    _validate_path_isolation(plan.source_dir, request.output_dir, plan.source_input_paths)
+    _validate_path_isolation(plan.source_dir, request.output_dir, plan.source_input_paths,
+                             plan.pending_origin_dir)
     identity = finalization_continuation_request_identity(request, frozen)
     if (
         authorization.plan_sha256 != plan.plan_sha256
@@ -872,7 +1008,8 @@ def write_finalization_continuation_plan(
     if (path.exists() or path.is_symlink() or resolved.is_relative_to(plan.source_dir)
             or resolved in {item.resolve() for item in plan.source_input_paths.values()}):
         raise ValueError("continuation plan requires a fresh path outside historical inputs")
-    _validate_path_isolation(plan.source_dir, resolved, plan.source_input_paths)
+    _validate_path_isolation(plan.source_dir, resolved, plan.source_input_paths,
+                             plan.pending_origin_dir)
     payload = {
         **plan.manifest(),
         "plan_sha256": plan.plan_sha256,
@@ -998,7 +1135,13 @@ class FinalizationRecoveryModelService:
                 "deferred_coverage_eligibility": list(plan.deferred_coverage_eligibility or ()),
                 "deferred_coverage_eligibility_sha256": plan.deferred_coverage_eligibility_sha256,
                 "source_issue_lifecycle_sha256": plan.source_issue_lifecycle_sha256}
-               if plan.reader_revision_policy == V4_CONTRACT.policy else {}),
+               if plan.reader_revision_policy in {V4_CONTRACT.policy, V5_CONTRACT.policy} else {}),
+            **({"pending_coverage_contexts": list(plan.pending_coverage_contexts or ()),
+                "pending_coverage_contexts_sha256": plan.pending_coverage_contexts_sha256,
+                "pending_origin_artifact_hashes": plan.pending_origin_artifact_hashes,
+                "prior_pending_contexts": list(plan.prior_pending_contexts or ()),
+                "prior_pending_contexts_sha256": plan.prior_pending_contexts_sha256}
+               if plan.reader_revision_policy == V5_CONTRACT.policy else {}),
             "authorization": {
                 **self.plan.authorization.model_dump(mode="json"),
                 "authorization_sha256": self.plan.authorization.authorization_sha256,
@@ -1271,9 +1414,13 @@ class FinalizationRecoveryModelService:
                         != self.plan.plan.reader_revision_policy
                         or research.get("source_text_witnesses")
                         != self.plan.plan.source_witness_catalog
-                        or (self.plan.plan.reader_revision_policy == V4_CONTRACT.policy
+                        or (self.plan.plan.reader_revision_policy in {
+                                V4_CONTRACT.policy, V5_CONTRACT.policy}
                             and research.get("pending_coverage")
-                            != list(self.plan.plan.deferred_coverage_eligibility))):
+                            != list(self.plan.plan.deferred_coverage_eligibility))
+                        or (self.plan.plan.reader_revision_policy == V5_CONTRACT.policy
+                            and research.get("pending_coverage_contexts")
+                            != list(self.plan.plan.pending_coverage_contexts))):
                     raise ValueError("generic revision writer lacks the bound source candidate")
             if stage == verifier:
                 research = engine_payload.get("research")
@@ -1290,9 +1437,13 @@ class FinalizationRecoveryModelService:
                         != self.plan.plan.source_terminal_review_sha256
                         or research.get("source_text_witnesses")
                         != self.plan.plan.source_witness_catalog
-                        or (self.plan.plan.reader_revision_policy == V4_CONTRACT.policy
+                        or (self.plan.plan.reader_revision_policy in {
+                                V4_CONTRACT.policy, V5_CONTRACT.policy}
                             and research.get("pending_coverage")
-                            != list(self.plan.plan.deferred_coverage_eligibility))):
+                            != list(self.plan.plan.deferred_coverage_eligibility))
+                        or (self.plan.plan.reader_revision_policy == V5_CONTRACT.policy
+                            and research.get("pending_coverage_contexts")
+                            != list(self.plan.plan.pending_coverage_contexts))):
                     raise ValueError("numbered revision factual review omitted bound source findings")
         return "current_live"
 
