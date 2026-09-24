@@ -13,6 +13,7 @@ GENERIC_SHARED_CONTEXT_MIN_BYTES = 256
 GENERIC_REVISION_POLICY_V4 = "frozen-candidate-revision-v4"
 GENERIC_V4_SOURCE_WITNESS_POLICY = "finding_bound_issue_context_exact_source_passage_v1"
 GENERIC_REVISION_POLICY_V5 = "frozen-candidate-revision-v5"
+GENERIC_REVISION_POLICY_V6 = "frozen-candidate-revision-v6"
 
 
 def generation_stages(generation: int) -> tuple[str, str]:
@@ -154,6 +155,34 @@ GENERIC_V5_PENDING_POLICY = "origin_proven_issue_context_and_fresh_same_issue_co
 GENERIC_V5_CORRECTION_CONTEXT_MAX_BYTES = 64_000
 GENERIC_V5_COVERAGE_DELTA_MAX_BYTES = 64_000
 GENERIC_V5_COVERAGE_SCHEDULE_POLICY = "pinned_atomic_slots_complete_wire_delta_v1"
+
+# Append-only: inventory-format defects are proved by later coverage, never by
+# factual claims about a changed reader. Earlier contracts remain byte-identical.
+GENERIC_V6_INVENTORY_POLICY = "one_missing_one_foreign_full_batch_inventory_v1"
+GENERIC_V6_WRITER_REQUIREMENTS = GENERIC_V5_WRITER_REQUIREMENTS + (
+    " Make minimal targeted edits to the source candidate. Preserve unaffected "
+    "supported prose, citations and material qualifiers; do not compress other "
+    "caveats to make room for repairs. Preserve the named relationships and distinct "
+    "scope limits in terminal findings instead of replacing them with generic "
+    "uncertainty. Inventory claims about supplied disclosures must be supported by "
+    "passages actually included in this payload; otherwise narrow the inventory "
+    "assertion without claiming issuer nondisclosure. pending_inventory records "
+    "are procedural defects in earlier coverage replies, not reader facts. All "
+    "their original obligations remain required; the writer cannot close them."
+)
+GENERIC_V6_FOLLOWUP_REQUIREMENTS = GENERIC_V5_FOLLOWUP_REQUIREMENTS + (
+    " Also return no source_finding_followup for any finding hash in "
+    "pending_inventory. Those paired inventory-format findings require a later "
+    "complete fresh coverage receipt, not factual correction or source witnesses. "
+    "Do not retire any original obligation pinned by pending_inventory. Never "
+    "guess which valid issue an unknown historical ID was intended to identify."
+)
+GENERIC_V6_COVERAGE_REQUIREMENTS = GENERIC_V5_COVERAGE_REQUIREMENTS + (
+    " Copy each assigned issue ID exactly and return exactly one disposition per "
+    "assigned ID. Do not shorten, combine, substitute or infer issue identities. "
+    "A complete ID inventory is necessary but does not establish material coverage; "
+    "apply all ordinary semantic and exact-reader-span requirements independently."
+)
 
 VERIFICATION_REPAIR_REQUIREMENTS = (
     "This is a new attestation of the unchanged candidate, not permission to edit "

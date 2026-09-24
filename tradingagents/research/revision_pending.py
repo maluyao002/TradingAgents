@@ -8,7 +8,7 @@ from copy import deepcopy
 from hashlib import sha256
 
 from .review_lifecycle import compound_coverage_issues
-from .revision_contracts import V4_CONTRACT, V5_CONTRACT
+from .revision_contracts import PINNED_CONTRACTS, PINNED_POLICIES, V4_CONTRACT
 from .revision_coverage_schedule import coverage_delta_admission
 from .revision_deferred import deferred_coverage_eligibility, resolve_deferred_coverage
 from .storage import canonical_json, digest
@@ -79,7 +79,7 @@ def pending_contexts_from_source(verification, checkpoint, provenance, reader_te
         raise ValueError("source pending ledger differs from its direct provenance")
     if sha256(reader_text.encode()).hexdigest() != verification["reader_sha256"]:
         raise ValueError("source pending reader hash differs")
-    if provenance.get("reader_revision_policy") == V5_CONTRACT.policy:
+    if provenance.get("reader_revision_policy") in PINNED_POLICIES:
         schedule = lifecycle.get("pinned_coverage_schedule")
         if (not isinstance(schedule, dict)
                 or digest(schedule) != lifecycle.get("pinned_coverage_schedule_sha256")
@@ -134,7 +134,7 @@ def pending_contexts_from_source(verification, checkpoint, provenance, reader_te
         if digest(contexts) != provenance.get("pending_coverage_contexts_sha256"):
             raise ValueError("source pending context envelope hash differs")
     else:
-        if provenance.get("reader_revision_policy") == V5_CONTRACT.policy and (
+        if provenance.get("reader_revision_policy") in PINNED_POLICIES and (
                 lifecycle.get("pending_coverage_contexts") != []
                 or lifecycle.get("pending_coverage_contexts_sha256")
                 != provenance.get("pending_coverage_contexts_sha256")
@@ -201,12 +201,12 @@ def pending_entries(contexts):
 
 
 def prior_pending_context_lineage(provenance, prior_contracts):
-    """Carry exactly one context envelope for each already-owned v5 generation."""
+    """Carry one exact context envelope for each already-owned pinned generation."""
     v5_records = [item for item in prior_contracts
-                  if item["contract_sha256"] == V5_CONTRACT.sha256]
+                  if item["contract_sha256"] in {contract.sha256 for contract in PINNED_CONTRACTS}]
     if not v5_records:
         return ()
-    if provenance.get("reader_revision_policy") != V5_CONTRACT.policy:
+    if provenance.get("reader_revision_policy") not in PINNED_POLICIES:
         raise ValueError("v5 context lineage ends in a different policy")
     earlier = provenance.get("prior_pending_contexts", ())
     if (not isinstance(earlier, (list, tuple))
@@ -218,14 +218,14 @@ def prior_pending_context_lineage(provenance, prior_contracts):
     if digest(own_contexts) != provenance.get("pending_coverage_contexts_sha256"):
         raise ValueError("source v5 context envelope differs")
     own = {"generation": v5_records[-1]["generation"],
-           "contract_sha256": V5_CONTRACT.sha256,
+           "contract_sha256": v5_records[-1]["contract_sha256"],
            "provenance_sha256": v5_records[-1]["provenance_sha256"],
            "contexts": own_contexts, "contexts_sha256": digest(own_contexts)}
     result = (*earlier, own)
     for record, item in zip(v5_records, result, strict=True):
         if (not isinstance(item, dict) or set(item) != set(own)
                 or item["generation"] != record["generation"]
-                or item["contract_sha256"] != V5_CONTRACT.sha256
+                or item["contract_sha256"] != record["contract_sha256"]
                 or item["provenance_sha256"] != record["provenance_sha256"]
                 or not isinstance(item["contexts"], (list, tuple))
                 or digest(item["contexts"]) != item["contexts_sha256"]):

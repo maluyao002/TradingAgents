@@ -105,7 +105,13 @@ from .review_lifecycle import (
     source_passage_witness_valid,
     split_compound_obligations,
 )
-from .revision_contracts import V4_CONTRACT, V5_CONTRACT, revision_contract
+from .revision_contracts import (
+    PINNED_CONTRACTS,
+    V4_CONTRACT,
+    V5_CONTRACT,
+    V6_CONTRACT,
+    revision_contract,
+)
 from .revision_correction_context import (
     CORRECTION_CONTEXT_FIELD,
     CORRECTION_CONTEXT_POLICY,
@@ -120,6 +126,12 @@ from .revision_coverage_schedule import (
     reserve_global_coverage_delta,
 )
 from .revision_deferred import deferred_coverage_eligibility, resolve_deferred_coverage
+from .revision_inventory import (
+    assert_inventory_prefix_proof,
+    inventory_finding_hashes,
+    project_inventory_issues,
+    resolve_inventory,
+)
 from .revision_pending import pending_entries, project_pending_issues
 from .revision_witness_selection import revision_witness_catalog
 from .services import ModelReply, ResearchServices
@@ -492,6 +504,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
         model_checkpoints = {}
         coverage_reuse = {}
         factual_payloads = {}
+        coverage_payloads = {}
         finalization_candidate = {}
         candidate_review_stage = None
         finalization_plans = {}
@@ -682,6 +695,11 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             active_stage = stage
             payload = model_payload(stage, role, data, schema, language, coverage_only,
                                     record_delivery=True)
+            if coverage_only:
+                coverage_payloads[stage] = payload
+            observer = getattr(services.models, "observe_replayed_payload", None)
+            if observer is not None:
+                observer(role, payload, request)
             role_indices[role] += 1
             reuse_key = digest({"wire": WIRE_SCHEMA_VERSION, "payload": {
                 key: value for key, value in payload.items() if key not in {"stage", "role_call_index"}
@@ -754,7 +772,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             if origin == "current_live":
                 if (payload.get("verification_repair_policy") == VERIFICATION_REPAIR_POLICY
                         or payload.get("reader_revision_policy") in {
-                            GENERIC_REVISION_POLICY, V4_CONTRACT.policy, V5_CONTRACT.policy}):
+                            GENERIC_REVISION_POLICY, V4_CONTRACT.policy, V5_CONTRACT.policy, V6_CONTRACT.policy}):
                     prompt_limit = getattr(services.models, "max_prompt_utf8_bytes", None)
                     prompt_bytes = len(model_prompt(payload))
                     if prompt_limit is not None and prompt_bytes > prompt_limit:
@@ -764,7 +782,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                         })
                         raise BudgetExhausted("revision_prompt_size_limit" if
                             payload.get("reader_revision_policy") in {
-                                GENERIC_REVISION_POLICY, V4_CONTRACT.policy, V5_CONTRACT.policy}
+                                GENERIC_REVISION_POLICY, V4_CONTRACT.policy, V5_CONTRACT.policy, V6_CONTRACT.policy}
                             else "verification_prompt_size_limit")
                 permit = tracker.reserve(envelope, finalization=finalization)
                 dispatch_unsettled = True
@@ -979,10 +997,13 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     } for item in limitations]
             stage_contract = numbered_contract(stage) if generic_review_stage(stage) else None
             pending_contexts = tuple((extra or {}).get("pending_coverage_contexts", ()))
-            if stage_contract == V5_CONTRACT:
+            pending_inventory = tuple((extra or {}).get("pending_inventory", ()))
+            if stage_contract in PINNED_CONTRACTS:
                 if pending_entries(pending_contexts) != tuple((extra or {}).get("pending_coverage", ())):
                     raise ValueError("v5 factual pending context differs from its eligibility")
                 limitations = project_pending_issues(limitations, pending_contexts)
+            if stage_contract == V6_CONTRACT:
+                limitations = project_inventory_issues(limitations, pending_inventory)
             review_data = {
                 "draft": candidate.model_dump(mode="json"), "analyses": outputs,
                 "valuation": valuation, "rendered_reader": rendered.reader_text,
@@ -1071,7 +1092,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     stage, "verifier", factual_data, factual_schema, language)
                 v5_slots = ()
                 v5_baselines = ()
-                if stage_contract == V5_CONTRACT:
+                if stage_contract in PINNED_CONTRACTS:
                     v5_slots = pinned_coverage_slots(coverage_batches(
                         compound_coverage_issues(limitations)))
                     baselines = []
@@ -1099,15 +1120,15 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                         precheck_calls = [FinalizationCallPlan(stage, "repaired_factual_review", factual_payload,
                             16_000, request.budget.call_timeout_seconds, role="verifier",
                             valuation_method=request.valuation_method)]
-                        base_batches = (v5_slots if stage_contract == V5_CONTRACT else
+                        base_batches = (v5_slots if stage_contract in PINNED_CONTRACTS else
                                         coverage_batches(compound_coverage_issues(limitations)))
                         for index, items in enumerate(base_batches):
                             batch_stage = f"{stage}-coverage-{index}"
-                            payload = (v5_baselines[index]["payload"] if stage_contract == V5_CONTRACT
+                            payload = (v5_baselines[index]["payload"] if stage_contract in PINNED_CONTRACTS
                                        else model_payload(batch_stage, "verifier", coverage_data(items),
                                            ReaderVerification, language, True,
                                            role_call_index=role_indices["verifier"] + 1 + index))
-                            cached = (stage_contract != V5_CONTRACT and
+                            cached = (stage_contract not in PINNED_CONTRACTS and
                                 (store.load_stage(batch_stage, payload) is not None
                                 or getattr(services.models, "has_saved_reply", lambda *_: False)(batch_stage, payload))
                                 )
@@ -1115,7 +1136,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 coverage_envelope, request.budget.call_timeout_seconds, cache_hit=cached,
                                 role="verifier", valuation_method=request.valuation_method))
                         workload = finalization_workload(precheck_calls)
-                        if stage_contract == V5_CONTRACT:
+                        if stage_contract in PINNED_CONTRACTS:
                             workload = reserve_global_coverage_delta(workload,
                                 has_slots=bool(v5_slots))
                         remaining = request.budget.total_tokens - tracker.usage.total_tokens
@@ -1132,7 +1153,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                            **({"possible_decorated_prompt_bytes":
                                                len(model_prompt(item.payload)) +
                                                GENERIC_V5_COVERAGE_DELTA_MAX_BYTES}
-                                              if stage_contract == V5_CONTRACT and
+                                              if stage_contract in PINNED_CONTRACTS and
                                               item.call_id != stage else {})}
                                           for item in precheck_calls if not item.cache_hit],
                             }
@@ -1151,7 +1172,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 factual_review = call(stage, "verifier", factual_data, factual_schema,
                                       True, language=language)
                 raw_factual_review = (factual_review.model_dump(mode="json")
-                                      if stage_contract == V5_CONTRACT else None)
+                                      if stage_contract in PINNED_CONTRACTS else None)
                 unresolved_source_findings = []
                 accepted_source_corrections = []
                 source_followup_audit = None
@@ -1161,7 +1182,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 for item in source_review["findings"]}
                     pending_coverage = (tuple(factual_data.get("pending_coverage", ()))
                                         if stage_contract.deferred_coverage else ())
-                    if stage_contract == V5_CONTRACT and any(
+                    if stage_contract in PINNED_CONTRACTS and any(
                         item.issue_id in {entry["issue_id"] for entry in pending_coverage}
                         and item.status != "open" for item in factual_review.issue_resolutions
                     ):
@@ -1174,6 +1195,16 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 if key != "source_finding_sha256"}
                                 for item in pending_coverage)):
                         raise ValueError("numbered revision pending coverage ledger differs from source")
+                    if stage_contract == V6_CONTRACT:
+                        inventory_hashes = inventory_finding_hashes(pending_inventory)
+                        pinned_ids = {identifier for entry in pending_inventory
+                                      for identifier in entry["expected_issue_ids"]}
+                        if (not inventory_hashes <= set(findings)
+                                or pending_hashes.intersection(inventory_hashes)
+                                or any(item.issue_id in pinned_ids and item.status != "open"
+                                       for item in factual_review.issue_resolutions)):
+                            raise ValueError("inventory obligations cannot be factually retired")
+                        pending_hashes.update(inventory_hashes)
                     followups = {item.source_finding_sha256: item
                                  for item in factual_review.source_finding_followups}
                     if (len(followups) != len(factual_review.source_finding_followups)
@@ -1227,12 +1258,15 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     lifecycle["source_terminal_review_sha256"] = factual_data[
                         "source_terminal_review_sha256"]
                     lifecycle["source_finding_followups"] = source_followup_audit
-                    if pending_coverage or stage_contract == V5_CONTRACT:
+                    if pending_coverage or stage_contract in PINNED_CONTRACTS:
                         lifecycle["pending_coverage"] = list(pending_coverage)
                         lifecycle["pending_coverage_sha256"] = digest(pending_coverage)
-                    if stage_contract == V5_CONTRACT:
+                    if stage_contract in PINNED_CONTRACTS:
                         lifecycle["pending_coverage_contexts"] = list(pending_contexts)
                         lifecycle["pending_coverage_contexts_sha256"] = digest(pending_contexts)
+                    if stage_contract == V6_CONTRACT:
+                        lifecycle["pending_inventory"] = list(pending_inventory)
+                        lifecycle["pending_inventory_sha256"] = digest(pending_inventory)
                 if unresolved_source_findings:
                     main_review = main_review.model_copy(update={"findings": (
                         *main_review.findings, *unresolved_source_findings)})
@@ -1265,7 +1299,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 # candidate's bytes and attestation are never rewritten in place.
                 retired_reader_texts.update(item["text"] for item in lifecycle["issues"]
                                            if item["status"] in {"resolved", "superseded"})
-                if stage_contract == V5_CONTRACT:
+                if stage_contract in PINNED_CONTRACTS:
                     if (MAX_CORRECTION_CONTEXT_BYTES != GENERIC_V5_CORRECTION_CONTEXT_MAX_BYTES
                             or CORRECTION_CONTEXT_POLICY !=
                             "current_single_issue_accepted_factual_context_v1"):
@@ -1294,9 +1328,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 parent_limitations = limitations
                 limitations = compound_coverage_issues(parent_limitations)
                 v5_projected = (project_pinned_coverage(v5_slots, limitations)
-                                if stage_contract == V5_CONTRACT else ())
+                                if stage_contract in PINNED_CONTRACTS else ())
                 batches = (tuple(items for _, items in v5_projected)
-                           if stage_contract == V5_CONTRACT else coverage_batches(limitations))
+                           if stage_contract in PINNED_CONTRACTS else coverage_batches(limitations))
                 batch_results = []
 
                 planned_calls = []
@@ -1304,11 +1338,11 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 reader_bytes = len(rendered.reader_text.encode("utf-8"))
                 for index, items in enumerate(batches):
                     batch_stage = f"{stage}-coverage-{index}"
-                    if stage_contract == V5_CONTRACT:
+                    if stage_contract in PINNED_CONTRACTS:
                         decorated_packet_bytes(items)
                     payload = model_payload(batch_stage, "verifier", coverage_data(items), ReaderVerification,
                                             language, True, role_call_index=role_indices["verifier"] + index)
-                    if stage_contract == V5_CONTRACT:
+                    if stage_contract in PINNED_CONTRACTS:
                         source_index = v5_projected[index][0]
                         baseline = v5_baselines[source_index]
                         v5_delta_rows.append({
@@ -1327,14 +1361,14 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     key = digest({"wire": WIRE_SCHEMA_VERSION, "payload": {
                         name: value for name, value in payload.items() if name not in {"stage", "role_call_index"}
                     }})
-                    cached = ((stage_contract != V5_CONTRACT and key in coverage_reuse)
+                    cached = ((stage_contract not in PINNED_CONTRACTS and key in coverage_reuse)
                               or store.load_stage(batch_stage, payload) is not None
                               or getattr(services.models, "has_saved_reply", lambda *_: False)(batch_stage, payload))
                     planned_calls.append(FinalizationCallPlan(
                         batch_stage, "current_coverage", payload, coverage_envelope,
                         request.budget.call_timeout_seconds, cache_hit=cached, reader_bytes=reader_bytes,
                         role="verifier", valuation_method=request.valuation_method))
-                if stage_contract == V5_CONTRACT:
+                if stage_contract in PINNED_CONTRACTS:
                     schedule = coverage_delta_admission(v5_delta_rows)
                     lifecycle["pinned_coverage_schedule"] = schedule
                     lifecycle["pinned_coverage_schedule_sha256"] = digest(schedule)
@@ -1442,6 +1476,21 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     if pending_failures:
                         verification = verification.model_copy(update={"findings": (
                             *verification.findings, *pending_failures)})
+                if stage_contract == V6_CONTRACT:
+                    inventory_receipts, inventory_failures = resolve_inventory(
+                        pending_inventory, generation=int(stage.rsplit("-", 1)[1]),
+                        contract_sha256=stage_contract.sha256,
+                        reader_sha256=rendered_hash, reader_text=rendered.reader_text,
+                        issues=limitations, batches=batches,
+                        batch_audit=reader_verifications[language]["coverage_batches"],
+                        model_checkpoints=model_checkpoints)
+                    lifecycle["inventory_receipts"] = list(inventory_receipts)
+                    lifecycle["inventory_receipts_sha256"] = digest(inventory_receipts)
+                    lifecycle["pending_inventory_unresolved"] = sorted(
+                        digest(item.model_dump(mode="json")) for item in inventory_failures)
+                    if inventory_failures:
+                        verification = verification.model_copy(update={"findings": (
+                            *verification.findings, *inventory_failures)})
             else:
                 verification = call(stage, "verifier", review_data, ReaderVerification,
                                     True, language=language)
@@ -1916,7 +1965,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                             coverage_reuse.clear()
                             previous_factual = factual_payloads[source_stage]["research"]
                             pending_contexts = ()
-                            if contract == V5_CONTRACT:
+                            pending_inventory = ()
+                            if contract in PINNED_CONTRACTS:
                                 if generation == target_generation:
                                     pending_contexts = tuple(candidate_recovery[
                                         "pending_coverage_contexts"])
@@ -1927,17 +1977,36 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                         "contexts_sha256"]:
                                         raise ValueError("historical v5 pending context is missing")
                                     pending_contexts = tuple(records[0]["contexts"])
+                            if contract == V6_CONTRACT:
+                                if generation == target_generation:
+                                    pending_inventory = tuple(candidate_recovery["pending_inventory"])
+                                else:
+                                    records = [item for item in candidate_recovery.get(
+                                        "prior_pending_inventory", ()) if item["generation"] == generation]
+                                    if (len(records) != 1
+                                            or records[0]["contract_sha256"] != contract.sha256
+                                            or digest(records[0]["envelopes"])
+                                            != records[0]["envelopes_sha256"]):
+                                        raise ValueError("historical inventory context is missing")
+                                    pending_inventory = tuple(records[0]["envelopes"])
+                                assert_inventory_prefix_proof(
+                                    pending_inventory, model_checkpoints, coverage_payloads)
                             reopened = split_compound_obligations(
                                 previous_factual["inherited_issues"],
                                 previous_factual["resolution_evidence"],
                                 reader_revision=True, verification_repair=True)
-                            if contract == V5_CONTRACT:
+                            if contract in PINNED_CONTRACTS:
                                 reopened = project_pending_issues(reopened, pending_contexts)
+                            if contract == V6_CONTRACT:
+                                reopened = project_inventory_issues(reopened, pending_inventory)
                             atomic_reopened = compound_coverage_issues(reopened)
                             source_findings = {
                                 digest(finding.model_dump(mode="json")): finding.model_dump(mode="json")
                                 for finding in final_review.findings
                             }
+                            if contract == V6_CONTRACT and (
+                                    not inventory_finding_hashes(pending_inventory) <= set(source_findings)):
+                                raise ValueError("inventory findings differ from current source review")
                             source_terminal_review = {"stage": source_stage,
                                 "reader_sha256": source_hash,
                                 "findings": [{"source_finding_sha256": key, **value}
@@ -1947,10 +2016,10 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                             source_text_witnesses = revision_witness_catalog(
                                 contract, snapshot, source_terminal_review["findings"], source_issues)
                             pending_coverage = (pending_entries(pending_contexts)
-                                if contract == V5_CONTRACT else deferred_coverage_eligibility(
+                                if contract in PINNED_CONTRACTS else deferred_coverage_eligibility(
                                     reader_verifications[request.report_language], model_checkpoints,
                                     rendered.reader_text) if contract.deferred_coverage else ())
-                            if contract == V5_CONTRACT:
+                            if contract in PINNED_CONTRACTS:
                                 terminal_hashes = set(source_findings)
                                 if (len({item["issue_id"] for item in pending_coverage})
                                         != len(pending_coverage)
@@ -1981,7 +2050,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 **({"pending_coverage": list(pending_coverage)}
                                    if contract.deferred_coverage else {}),
                                 **({"pending_coverage_contexts": list(pending_contexts)}
-                                   if contract == V5_CONTRACT else {}),
+                                   if contract in PINNED_CONTRACTS else {}),
+                                **({"pending_inventory": list(pending_inventory)}
+                                   if contract == V6_CONTRACT else {}),
                             }
                             active_stage = writer_stage
                             revision_payload = model_payload(writer_stage, "editor", revision_data,
@@ -1992,7 +2063,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                             reader_bytes = len(rendered.reader_text.encode("utf-8"))
                             finding_growth = len(final_review.findings) * 4096
                             correction_growth = (GENERIC_V5_CORRECTION_CONTEXT_MAX_BYTES
-                                                 if contract == V5_CONTRACT else 0)
+                                                 if contract in PINNED_CONTRACTS else 0)
                             future_growth = 2 * reader_bytes + finding_growth + 8192
                             estimated_calls = [FinalizationCallPlan(
                                 writer_stage, "revision", revision_payload, 16_000,
@@ -2018,7 +2089,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                     coverage_envelope, request.budget.call_timeout_seconds,
                                     role="verifier", valuation_method=request.valuation_method))
                             workload = finalization_workload(estimated_calls)
-                            if contract == V5_CONTRACT:
+                            if contract in PINNED_CONTRACTS:
                                 workload = reserve_global_coverage_delta(workload,
                                     has_slots=bool(atomic_reopened))
                             remaining = request.budget.total_tokens - tracker.usage.total_tokens
@@ -2041,7 +2112,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 **({"pending_coverage": list(pending_coverage)}
                                    if contract.deferred_coverage else {}),
                                 **({"pending_coverage_contexts": list(pending_contexts)}
-                                   if contract == V5_CONTRACT else {}),
+                                   if contract in PINNED_CONTRACTS else {}),
+                                **({"pending_inventory": list(pending_inventory)}
+                                   if contract == V6_CONTRACT else {}),
                             }
                             baseline_payload = model_payload(
                                 review_stage, "verifier", baseline_factual,
@@ -2071,7 +2144,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 "atomic_reopened_issue_count": len(atomic_reopened),
                                 "future_prompt_growth_bytes": future_growth,
                                 **({"accepted_correction_context_growth_bound_bytes":
-                                    correction_growth} if contract == V5_CONTRACT else {}),
+                                    correction_growth} if contract in PINNED_CONTRACTS else {}),
                                 "future_candidate_sizes_are_estimates": True,
                             }
                             finalization_plans["revision_admission"] = revision_plan
@@ -2098,7 +2171,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                        **({"pending_coverage": list(pending_coverage)}
                                           if contract.deferred_coverage else {}),
                                        **({"pending_coverage_contexts": list(pending_contexts)}
-                                          if contract == V5_CONTRACT else {})},
+                                          if contract in PINNED_CONTRACTS else {}),
+                                       **({"pending_inventory": list(pending_inventory)}
+                                          if contract == V6_CONTRACT else {})},
                                 authored=source_draft)
             else:
                 final_review = call("verify_report", "verifier",

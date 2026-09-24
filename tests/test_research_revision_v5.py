@@ -27,7 +27,12 @@ from tradingagents.research.review_lifecycle import (
     reconcile_review,
     source_passage_witness_valid,
 )
-from tradingagents.research.revision_contracts import V4_CONTRACT, V5_CONTRACT, revision_contract
+from tradingagents.research.revision_contracts import (
+    V4_CONTRACT,
+    V5_CONTRACT,
+    V6_CONTRACT,
+    revision_contract,
+)
 from tradingagents.research.revision_correction_context import CORRECTION_CONTEXT_FIELD
 from tradingagents.research.revision_pending import pending_entries, project_pending_issues
 from tradingagents.research.services import ResearchServices
@@ -344,7 +349,7 @@ def test_v5_writer_and_factual_binding_include_pending_context(tmp_path):
     assert canonical_json(plan.manifest())
 
 
-def test_v5_unresolved_receipt_carries_forward_without_guessing_origin(tmp_path):
+def test_v5_unresolved_receipt_carries_to_latest_contract_without_guessing_origin(tmp_path):
     class StillOpen(V5FreshCoverage):
         def complete(self, role, payload, request):
             reply = super().complete(role, payload, request)
@@ -366,7 +371,7 @@ def test_v5_unresolved_receipt_carries_forward_without_guessing_origin(tmp_path)
     assert len(source["issue_lifecycle"]["pending_coverage_unresolved"]) == 1
     destination = request.model_copy(update={"output_dir": tmp_path / "next-v5"})
     plan = prepare_finalization_continuation(request.output_dir, destination, revise_reader=True)
-    assert plan.reader_revision_policy == GENERIC_REVISION_POLICY_V5
+    assert plan.reader_revision_policy == V6_CONTRACT.policy
     assert plan.revision_generation == 4
     assert plan.pending_origin_dir is None
     assert len(plan.pending_coverage_contexts) == len(plan.prior_pending_contexts) == 1

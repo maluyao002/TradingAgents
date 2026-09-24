@@ -38,8 +38,18 @@ from .reader_revision import (
     generic_review_stage,
 )
 from .review_lifecycle import compound_coverage_issues
-from .revision_contracts import V3_CONTRACT, V4_CONTRACT, V5_CONTRACT
+from .revision_contracts import (
+    PINNED_CONTRACTS,
+    PINNED_POLICIES,
+    V3_CONTRACT,
+    V4_CONTRACT,
+    V5_CONTRACT,
+    V6_CONTRACT,
+    revision_contract,
+)
 from .revision_deferred import deferred_coverage_eligibility
+from .revision_inventory import assert_inventory_prefix_proof, inventory_finding_hashes
+from .revision_inventory_state import inventory_contexts_from_source, prior_inventory_lineage
 from .revision_lineage import lineage_sha256, source_revision_contracts
 from .revision_pending import (
     pending_contexts_from_source,
@@ -153,6 +163,10 @@ class FinalizationContinuationPlan:
     pending_origin_artifact_hashes: dict[str, str] | None = None
     prior_pending_contexts: tuple[dict[str, Any], ...] | None = None
     prior_pending_contexts_sha256: str | None = None
+    pending_inventory: tuple[dict[str, Any], ...] | None = None
+    pending_inventory_sha256: str | None = None
+    prior_pending_inventory: tuple[dict[str, Any], ...] | None = None
+    prior_pending_inventory_sha256: str | None = None
 
     def manifest(self) -> dict[str, Any]:
         return {
@@ -198,11 +212,14 @@ class FinalizationContinuationPlan:
             **({"prior_revision_contracts_sha256": self.prior_revision_contracts_sha256,
                 "deferred_coverage_eligibility_sha256": self.deferred_coverage_eligibility_sha256,
                 "source_issue_lifecycle_sha256": self.source_issue_lifecycle_sha256}
-               if self.reader_revision_policy in {V4_CONTRACT.policy, V5_CONTRACT.policy} else {}),
+               if self.reader_revision_policy in {V4_CONTRACT.policy, V5_CONTRACT.policy, V6_CONTRACT.policy} else {}),
             **({"pending_coverage_contexts_sha256": self.pending_coverage_contexts_sha256,
                 "pending_origin_artifact_hashes": self.pending_origin_artifact_hashes,
                 "prior_pending_contexts_sha256": self.prior_pending_contexts_sha256}
-               if self.reader_revision_policy == V5_CONTRACT.policy else {}),
+               if self.reader_revision_policy in PINNED_POLICIES else {}),
+            **({"pending_inventory_sha256": self.pending_inventory_sha256,
+                "prior_pending_inventory_sha256": self.prior_pending_inventory_sha256}
+               if self.reader_revision_policy == V6_CONTRACT.policy else {}),
         }
 
     @property
@@ -679,9 +696,11 @@ def prepare_finalization_continuation(
             source_provenance,
             lineage_hashes["recovery_provenance.json"], imported, generation - 1)
             if generic_revision and generation > 2 else ())
-        target_contract = (V5_CONTRACT if prior_contracts and prior_contracts[-1][
-            "contract_sha256"] in {V4_CONTRACT.sha256, V5_CONTRACT.sha256}
-            else V4_CONTRACT) if generic_revision else None
+        parent_contract = prior_contracts[-1]["contract_sha256"] if prior_contracts else None
+        target_contract = (
+            V6_CONTRACT if parent_contract in {item.sha256 for item in PINNED_CONTRACTS}
+            else V5_CONTRACT if parent_contract == V4_CONTRACT.sha256 else V4_CONTRACT
+        ) if generic_revision else None
         artifact_hashes = {
             FINALIZATION_CHECKPOINT_NAME: hashlib.sha256(checkpoint_bytes).hexdigest(),
             **lineage_hashes,
@@ -689,7 +708,7 @@ def prepare_finalization_continuation(
         }
         pending_origin_proof = None
         pending_contexts = None
-        if target_contract == V5_CONTRACT:
+        if target_contract in PINNED_CONTRACTS:
             if source_provenance.get("reader_revision_policy") == V4_CONTRACT.policy and (
                     source_verification["issue_lifecycle"].get("pending_coverage")):
                 pending_origin_proof = _pending_origin_proof(
@@ -705,7 +724,7 @@ def prepare_finalization_continuation(
             raise ValueError("pending origin cannot change a historical revision contract")
         else:
             prior_pending_contexts = None
-        deferred = (pending_entries(pending_contexts) if target_contract == V5_CONTRACT
+        deferred = (pending_entries(pending_contexts) if target_contract in PINNED_CONTRACTS
                     else deferred_coverage_eligibility(
                         source_verification, checkpoint["stages"], candidate["reader_text"])
                     if generic_revision else ())
@@ -714,6 +733,12 @@ def prepare_finalization_continuation(
                 parse_json(source_inputs["evidence_path"])), source_request),
             terminal_review["findings"], source_verification["issue_lifecycle"]["issues"])
             if generic_revision else None)
+        pending_inventory = (inventory_contexts_from_source(
+            source_verification, checkpoint, source_provenance, candidate["reader_text"],
+            current_artifact_hashes=artifact_hashes)
+            if target_contract == V6_CONTRACT else None)
+        prior_inventory = (prior_inventory_lineage(source_provenance, prior_contracts)
+                           if target_contract == V6_CONTRACT else None)
         plan = FinalizationContinuationPlan(
             source_dir=source_dir,
             source_request=source_request,
@@ -762,6 +787,10 @@ def prepare_finalization_continuation(
             prior_pending_contexts=prior_pending_contexts,
             prior_pending_contexts_sha256=(digest(prior_pending_contexts)
                                            if prior_pending_contexts is not None else None),
+            pending_inventory=pending_inventory,
+            pending_inventory_sha256=(digest(pending_inventory) if pending_inventory is not None else None),
+            prior_pending_inventory=prior_inventory,
+            prior_pending_inventory_sha256=(digest(prior_inventory) if prior_inventory is not None else None),
         )
     assert_finalization_source_unchanged(plan)
     return plan
@@ -789,7 +818,7 @@ def _validate_plan_content(plan: FinalizationContinuationPlan) -> None:
     if plan.reader_revision_policy is not None:
         if plan.revision_generation is not None:
             generation, writer = _generic_source_generation(imported, review_stage)
-            target_contract = next((contract for contract in (V4_CONTRACT, V5_CONTRACT)
+            target_contract = next((contract for contract in (V4_CONTRACT, V5_CONTRACT, V6_CONTRACT)
                                     if contract.policy == plan.reader_revision_policy), None)
             if (target_contract is None
                     or plan.verification_repair_policy is not None
@@ -806,7 +835,7 @@ def _validate_plan_content(plan: FinalizationContinuationPlan) -> None:
                     or not _is_hash(plan.source_issue_lifecycle_sha256)
                     or (generation, writer) != (plan.revision_generation, plan.source_writer_stage)):
                 raise ValueError("invalid generic revision policy or source writer")
-            if target_contract == V5_CONTRACT:
+            if target_contract in PINNED_CONTRACTS:
                 if (not isinstance(plan.pending_coverage_contexts, tuple)
                         or digest(plan.pending_coverage_contexts)
                         != plan.pending_coverage_contexts_sha256
@@ -846,6 +875,17 @@ def _validate_plan_content(plan: FinalizationContinuationPlan) -> None:
           or plan.prior_pending_contexts is not None
           or plan.prior_pending_contexts_sha256 is not None):
         raise ValueError("unexpected generic revision generation")
+    if plan.reader_revision_policy == V6_CONTRACT.policy:
+        if (not isinstance(plan.pending_inventory, tuple)
+                or digest(plan.pending_inventory) != plan.pending_inventory_sha256
+                or not isinstance(plan.prior_pending_inventory, tuple)
+                or digest(plan.prior_pending_inventory) != plan.prior_pending_inventory_sha256):
+            raise ValueError("invalid v6 inventory envelope")
+        inventory_finding_hashes(plan.pending_inventory)
+    elif any(value is not None for value in (
+            plan.pending_inventory, plan.pending_inventory_sha256,
+            plan.prior_pending_inventory, plan.prior_pending_inventory_sha256)):
+        raise ValueError("historical contract gained inventory envelope fields")
     if plan.source_run_identity != digest(
         {"request": source_request_id, "model_service": plan.source_model_identity}
     ):
@@ -899,7 +939,7 @@ def assert_finalization_source_unchanged(
                 prepared.source_dir / "reader_verification.json")["English"]["review"]
             ) != prepared.source_terminal_review_sha256:
                 raise ValueError("reader revision terminal findings changed")
-            if prepared.reader_revision_policy in {V4_CONTRACT.policy, V5_CONTRACT.policy}:
+            if prepared.reader_revision_policy in {V4_CONTRACT.policy, V5_CONTRACT.policy, V6_CONTRACT.policy}:
                 source_verification = _read_object(
                     prepared.source_dir / "reader_verification.json")["English"]
                 checkpoint = parse_json(prepared.source_checkpoint_bytes)
@@ -910,7 +950,7 @@ def assert_finalization_source_unchanged(
                     prepared.source_artifact_hashes["recovery_provenance.json"],
                     prepared.imported_stages, prepared.revision_generation - 1)
                     if prepared.revision_generation > 2 else ())
-                if prepared.reader_revision_policy == V5_CONTRACT.policy:
+                if prepared.reader_revision_policy in PINNED_POLICIES:
                     origin_proof = (_pending_origin_proof(
                         prepared.pending_origin_dir, prepared.pending_origin_artifact_hashes,
                         prepared.source_dir) if prepared.pending_origin_dir is not None else None)
@@ -929,16 +969,25 @@ def assert_finalization_source_unchanged(
                         source_verification, checkpoint["stages"], prepared.candidate["reader_text"])
                 snapshot = validate_snapshot(EvidenceSnapshot.model_validate(
                     parse_json(prepared.frozen_inputs["evidence_path"])), prepared.source_request)
-                contract = (V5_CONTRACT if prepared.reader_revision_policy == V5_CONTRACT.policy
-                            else V4_CONTRACT)
+                contract = revision_contract(prepared.reader_revision_policy,
+                                             prepared.revision_contract_sha256)
                 expected_catalog = revision_witness_catalog(contract,
                     snapshot, source_verification["review"]["findings"],
                     source_verification["issue_lifecycle"]["issues"])
+                expected_inventory = (inventory_contexts_from_source(
+                    source_verification, checkpoint, source_provenance,
+                    prepared.candidate["reader_text"],
+                    current_artifact_hashes=prepared.source_artifact_hashes)
+                    if contract == V6_CONTRACT else None)
+                expected_inventory_lineage = (prior_inventory_lineage(source_provenance, prior)
+                                              if contract == V6_CONTRACT else None)
                 if (prior != prepared.prior_revision_contracts
                         or expected_deferred != prepared.deferred_coverage_eligibility
                         or expected_contexts != prepared.pending_coverage_contexts
                         or expected_prior_pending != prepared.prior_pending_contexts
                         or expected_catalog != prepared.source_witness_catalog
+                        or expected_inventory != prepared.pending_inventory
+                        or expected_inventory_lineage != prepared.prior_pending_inventory
                         or digest(source_verification["issue_lifecycle"])
                         != prepared.source_issue_lifecycle_sha256):
                     raise ValueError("numbered revision source contract or eligibility changed")
@@ -1095,6 +1144,8 @@ class FinalizationRecoveryModelService:
         self._live_boundary: dict[str, Any] | None = None
         self._current_calls: list[dict[str, Any]] = []
         self._validated_request_identity: str | None = None
+        self._inventory_replay_payloads: dict[str, dict[str, Any]] = {}
+        self._inventory_prefix_verified = False
 
     @property
     def candidate_recovery_context(self) -> dict[str, Any]:
@@ -1135,13 +1186,18 @@ class FinalizationRecoveryModelService:
                 "deferred_coverage_eligibility": list(plan.deferred_coverage_eligibility or ()),
                 "deferred_coverage_eligibility_sha256": plan.deferred_coverage_eligibility_sha256,
                 "source_issue_lifecycle_sha256": plan.source_issue_lifecycle_sha256}
-               if plan.reader_revision_policy in {V4_CONTRACT.policy, V5_CONTRACT.policy} else {}),
+               if plan.reader_revision_policy in {V4_CONTRACT.policy, V5_CONTRACT.policy, V6_CONTRACT.policy} else {}),
             **({"pending_coverage_contexts": list(plan.pending_coverage_contexts or ()),
                 "pending_coverage_contexts_sha256": plan.pending_coverage_contexts_sha256,
                 "pending_origin_artifact_hashes": plan.pending_origin_artifact_hashes,
                 "prior_pending_contexts": list(plan.prior_pending_contexts or ()),
                 "prior_pending_contexts_sha256": plan.prior_pending_contexts_sha256}
-               if plan.reader_revision_policy == V5_CONTRACT.policy else {}),
+               if plan.reader_revision_policy in PINNED_POLICIES else {}),
+            **({"pending_inventory": list(plan.pending_inventory or ()),
+                "pending_inventory_sha256": plan.pending_inventory_sha256,
+                "prior_pending_inventory": list(plan.prior_pending_inventory or ()),
+                "prior_pending_inventory_sha256": plan.prior_pending_inventory_sha256}
+               if plan.reader_revision_policy == V6_CONTRACT.policy else {}),
             "authorization": {
                 **self.plan.authorization.model_dump(mode="json"),
                 "authorization_sha256": self.plan.authorization.authorization_sha256,
@@ -1318,6 +1374,20 @@ class FinalizationRecoveryModelService:
                 )
         return False
 
+    def observe_replayed_payload(self, role, payload, request):
+        """Reprove cached imported inputs without advancing dispatch/replay state."""
+        if self.plan.plan.reader_revision_policy != V6_CONTRACT.policy:
+            return
+        self._require_validated_request(request)
+        value = self._engine_payload(payload)
+        saved = next((item for item in self.plan.plan.imported_stages
+                      if item.stage == value.get("stage")), None)
+        if saved is not None:
+            if role != saved.role or digest(value) != saved.inputs_hash:
+                raise ValueError("inventory replay payload differs from imported input")
+            if generic_coverage_stage(saved.stage):
+                self._inventory_replay_payloads[saved.stage] = deepcopy(value)
+
     def _validate_candidate_payload(
         self, saved: ImportedFinalizationStage, engine_payload: dict[str, Any]
     ) -> None:
@@ -1344,6 +1414,14 @@ class FinalizationRecoveryModelService:
             item.stage for item in self.plan.plan.imported_stages
         }:
             raise ValueError("reader revision requires the complete exact source prefix")
+        if self.plan.plan.reader_revision_policy == V6_CONTRACT.policy:
+            stages = {item.stage: {
+                "role": item.role, "inputs_hash": item.inputs_hash, "output_hash": item.output_hash,
+                "output": item.output, "usage": item.usage.model_dump(mode="json"),
+            } for item in self.plan.plan.imported_stages}
+            assert_inventory_prefix_proof(
+                self.plan.plan.pending_inventory, stages, self._inventory_replay_payloads)
+            self._inventory_prefix_verified = True
 
     @staticmethod
     def _verification_stage(stage):
@@ -1374,7 +1452,13 @@ class FinalizationRecoveryModelService:
             ):
                 raise ValueError("current engine payload differs from the saved model stage")
             self._validate_candidate_payload(saved, engine_payload)
+            if (self.plan.plan.reader_revision_policy == V6_CONTRACT.policy
+                    and generic_coverage_stage(stage)):
+                self._inventory_replay_payloads[stage] = deepcopy(engine_payload)
             return "imported_historical"
+        if (self.plan.plan.reader_revision_policy == V6_CONTRACT.policy
+                and not self._inventory_prefix_verified):
+            self._require_candidate_boundary()
         if not self._live_started:
             self._require_candidate_boundary()
             if self.plan.plan.revision_generation is not None and stage != generation_stages(
@@ -1415,13 +1499,16 @@ class FinalizationRecoveryModelService:
                         or research.get("source_text_witnesses")
                         != self.plan.plan.source_witness_catalog
                         or (self.plan.plan.reader_revision_policy in {
-                                V4_CONTRACT.policy, V5_CONTRACT.policy}
+                                V4_CONTRACT.policy, V5_CONTRACT.policy, V6_CONTRACT.policy}
                             and research.get("pending_coverage")
                             != list(self.plan.plan.deferred_coverage_eligibility))
-                        or (self.plan.plan.reader_revision_policy == V5_CONTRACT.policy
+                        or (self.plan.plan.reader_revision_policy in PINNED_POLICIES
                             and research.get("pending_coverage_contexts")
                             != list(self.plan.plan.pending_coverage_contexts))):
                     raise ValueError("generic revision writer lacks the bound source candidate")
+                if (self.plan.plan.reader_revision_policy == V6_CONTRACT.policy
+                        and research.get("pending_inventory") != list(self.plan.plan.pending_inventory)):
+                    raise ValueError("generic revision writer lacks the bound inventory obligations")
             if stage == verifier:
                 research = engine_payload.get("research")
                 source_review = _read_object(self.plan.plan.source_dir /
@@ -1438,13 +1525,16 @@ class FinalizationRecoveryModelService:
                         or research.get("source_text_witnesses")
                         != self.plan.plan.source_witness_catalog
                         or (self.plan.plan.reader_revision_policy in {
-                                V4_CONTRACT.policy, V5_CONTRACT.policy}
+                                V4_CONTRACT.policy, V5_CONTRACT.policy, V6_CONTRACT.policy}
                             and research.get("pending_coverage")
                             != list(self.plan.plan.deferred_coverage_eligibility))
-                        or (self.plan.plan.reader_revision_policy == V5_CONTRACT.policy
+                        or (self.plan.plan.reader_revision_policy in PINNED_POLICIES
                             and research.get("pending_coverage_contexts")
                             != list(self.plan.plan.pending_coverage_contexts))):
                     raise ValueError("numbered revision factual review omitted bound source findings")
+                if (self.plan.plan.reader_revision_policy == V6_CONTRACT.policy
+                        and research.get("pending_inventory") != list(self.plan.plan.pending_inventory)):
+                    raise ValueError("numbered revision factual review omitted inventory obligations")
         return "current_live"
 
     def complete(self, role: str, payload: dict[str, Any], request: ResearchRequest) -> ModelReply:
