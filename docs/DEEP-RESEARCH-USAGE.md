@@ -419,6 +419,37 @@ Selective closure and semantic rerun routing are still future work. Failed revie
 retains an unverified reader candidate and partial batches for diagnosis, not a
 publishable report. Unknown usage stops subsequent admissions and automatic retry.
 
+### Open-ended retry-loop rule
+
+Limit non-converging retry loops, **not the duration of a single task**. A finite
+task may continue for hours while making demonstrable progress within its scope
+and authorization. Existing per-call and per-run safety/resource bounds still
+apply; this rule adds no blanket task-duration or attempt-count cap.
+
+- Before another attempt, record the specific diagnosis, meaningful change (or
+  evidence of a transient condition), expected observable improvement and relevant
+  offline check. Repeating the same substantive request is not a repair strategy.
+- Keep one campaign history across plans, budgets, branches, policy versions and
+  agent handoffs: attempt/result, changes, comparable unresolved defects, elapsed
+  time and incremental known usage, with unknown usage explicit. Do not count
+  imported lineage tokens again or treat a changed coverage denominator as progress.
+- Reassess before dispatch when the same failure recurs after its targeted fix,
+  successive attempts show no demonstrable deliverable improvement, or repairs
+  repeatedly expand scope. Passing more engineering tests alone does not establish
+  convergence toward an admitted reader. In-flight calls are not failed attempts.
+- At that checkpoint, stop automatic retries, summarize what changed and why it
+  failed, and propose a materially different, testable approach. Continue finite,
+  authorized offline diagnosis where useful. Resume live work only after the
+  convergence assessment and applicable authorization gates are satisfied; ask
+  the user when a scope, budget or acceptance decision is needed. A fresh plan or
+  available allowance cannot bypass this checkpoint.
+- Do not lower acceptance criteria, normalize historical responses, discard
+  warnings or silently renew allowances to escape a loop. A transport retry and a
+  semantic repair are different actions, but both remain visible in the history.
+
+This is the coordinator's operating rule, not a newly implemented automatic
+cross-run detector. Each runtime run remains separately bounded and fail-closed.
+
 ### One separately authorized reader revision
 
 `cli.research_finalize prepare` and `run` accept `--revise-reader` for one new

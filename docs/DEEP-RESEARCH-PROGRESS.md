@@ -5,6 +5,48 @@ and validation checkpoints, **not a second work queue**. For current priorities,
 open gates and user decisions, use the [current roadmap](DEEP-RESEARCH-STATUS.md).
 The [original implementation plan](DEEP-RESEARCH-PLAN.md) is preserved.
 
+## Retry-loop policy and offline readiness closeout — September 24
+
+The [operating rule](DEEP-RESEARCH-USAGE.md#open-ended-retry-loop-rule) now requires
+campaign-level convergence reassessment for repeated failures, stalled deliverables
+or continually expanding repairs. It imposes no blanket single-task time or attempt
+cap and does not replace existing per-run bounds. This is documented coordinator
+policy, not a new runtime detector. The audited September 24 continuation campaign
+had seven attempts (initial plus six follow-ups), 5,148,531 known incremental tokens
+plus one incomplete-usage attempt, 122 completed new calls and 4h02m59s summed run
+wall time, with no admitted export. Campaign elapsed time at the audit was about
+9.5 hours; coordinator/team usage is excluded. Changed issue inventories are not
+directly comparable success metrics.
+
+Final no-provider rehearsal against research code `b57469d` completed all 150 saved
+stages. The writer and factual boundaries delivered the same validated 19-reference
+catalog (`927bc8a1…9dbd2`). Packed writer prompt: **865,153 bytes**; synthetic-reader
+factual prompt: **989,236 bytes**, both losslessly roundtripped under the 1,048,576-byte
+cap. Baseline factual size was **990,358 bytes**, leaving **41,834 bytes** after
+the required 16,384-byte growth allowance. All twenty coverage prompts fit:
+**32,770–42,465 bytes**, with **106,465 bytes**
+as the bounded decorated maximum. Conservative complete-path reserve: **5,772,859
+tokens / 22 calls**, below the prepared 7m-token allowance; the rehearsal's 9m setting
+was sizing-only. Frozen source integrity and the research-code fingerprint remained
+unchanged; fingerprint `0e8c4f8df47ae50b7722fccf4b06025744f9358b94c1e13c1ae5bb1371dd7244`.
+Integrity checks covered the bound source artifacts, frozen evidence/case inputs,
+terminal review/lifecycle identity and exact imported stages, not every report-tree
+file. The disposable output was auto-cleaned; final stdout remains in task history.
+Exact rehearsal elapsed time was not instrumented; live completion within the
+5,400-second bound is not established. Synthetic responses test delivery/admission, not substantive verification
+or guaranteed live completion. Existing affected tests and independent reviews below
+were reused; no full-suite rerun or model inference was needed for this closeout.
+
+Replacement `reader_repair_plan_4_ready` is prepared offline; the initial plan 4
+remains held and preserved. Replacement plan identity:
+`c3b27e164c339064f75d01310e6605c48fe31eff38b8f8f716e93b5bd088a41a`;
+v6 contract `9386b573f5f7706af0ae1e725425448c7602e1ca9f3b72b9073b06cf9f2baadb`;
+witness catalog `927bc8a10871f3fe85801f89a5a55410e1f153f8356b7ebd9b147d526209dbd2`.
+No live authorization, run 4, admitted reader or user
+acceptance is implied. PR #28 remains unmerged. The current request ends at offline
+readiness; another live attempt requires the campaign checkpoint and applicable
+authorization, not automatic renewal after a green rehearsal.
+
 ## Numbered reader repair and latest validation — September 24
 
 The next offline increment is committed as **`1b2ef04` / `75ab791` / `8fbdf42`**
@@ -41,8 +83,8 @@ passages under the exact proxy-finding hash and retains the correct concentratio
 passage; all 13 legacy references remain byte-identical in the actual 19-reference /
 19,750-character catalog. All 237 inspected source/input/initial-plan files remain
 unchanged. The unissued v6 contract has been rebound; final real-prefix readiness
-is running before a replacement plan can be authorized. No v6 live attempt or
-admitted export is claimed at this checkpoint. All six hosted checks passed on
+subsequently passed as recorded above. No v6 live attempt or
+admitted export is claimed. All six hosted checks passed on
 the preceding `6794351`; the new increment's checks are separate.
 
 The subsequent v5 repair is implemented in **`72f2495`** with CLI support in

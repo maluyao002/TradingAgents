@@ -162,8 +162,11 @@ diagnostic or merged code increment is not a completed or accepted report.
   The initial plan 4 is held before authorization. The v6-only finding-bound
   selector is now fixed and reviewed: 65 affected tests pass, the three exact
   incentive passages and concentration witness validate, and all 13 legacy
-  references survive unchanged. Final real-prefix readiness is running before
-  authorizing a replacement plan. No new export or user acceptance is implied.
+  references survive unchanged. The final 150-stage no-provider readiness check
+  now passes with identical writer/factual witness delivery, lossless prompt
+  roundtrips and a 5,772,859-token / 22-call reserve within the prepared 7m allowance.
+  The replacement plan remains offline-only: no live authorization or run 4 was
+  created. No new export or user acceptance is implied.
 
 See the [concise implementation record](DEEP-RESEARCH-PROGRESS.md) for completed
 checkpoints and the [latest validation evidence](archive/deep-research/DEEP-RESEARCH-FRESH-VALIDATION.md)
@@ -174,7 +177,7 @@ for exact attempts, bounds and usage.
 | Order | Deliverable | Completion evidence |
 | --- | --- | --- |
 | 1 — Done (engineering) | Integrate reviewed reader inputs and typed reconciliation | PRs #23 and #26 merged; reader assumption table, typed reconciliation and packet-validation fixes tested/reviewed. This is not final-reader delivery |
-| 2 — Offline follow-up | Complete bounded NVDA finalization | Run 3 remains `verification_failed`, 198/206. V6 inventory recovery and strict proxy-witness delivery are tested/reviewed; finish rebound real-prefix readiness, then run one separately bounded reader repair |
+| 2 — Offline readiness done; live held | Complete bounded NVDA finalization | Run 3 remains `verification_failed`, 198/206. V6 recovery, strict witness delivery and final 150-stage offline readiness pass. Apply the campaign convergence checkpoint before any separately authorized live repair; no run 4 launched |
 | 3 | Inspect the actual exported English reader | Still open: the revised candidate was independently inspected and its footnotes/calculation links checked, but no admitted export exists. Verify exported bytes and reader usefulness before user review |
 | 4 | Close targeted financial and independent-evidence gaps | Typed issuer-FCF/residual reconciliation and fresh source/arithmetic reviews delivered in PR #26; dependent fresh analysis completed, but the reader is blocked and economic/independent-demand gaps remain |
 | 5 | Prove HOOD generality | Distinct broker-equity/funding workflow, English reader and comparator review using the same core contracts |
@@ -189,8 +192,11 @@ Do not run another probe unless it addresses a named residual risk.
 
 The v5 third reader repair is settled and preserved. Its engineering fixes are
 validated, but the report is not admitted. Offline diagnosis led to the reviewed
-v6 inventory-recovery increment above; real-prefix prompt-and-budget readiness is
-still required before a new separately bounded run. Narrow unsupported inventory
+v6 inventory-recovery increment above; real-prefix prompt-and-budget readiness now
+passes. The [open-ended retry-loop rule](DEEP-RESEARCH-USAGE.md#open-ended-retry-loop-rule)
+governs further continuation: no blanket task-duration limit, but no automatic
+renewal of non-converging attempts. The current request closes offline readiness
+only; live continuation remains held. Narrow unsupported inventory
 assertions to delivered passages instead of expanding source-context machinery;
 preserve all material economic disclosures. Broader decorated-origin recovery is
 explicitly excluded from this narrow increment, not silently accepted.
