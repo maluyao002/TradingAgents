@@ -5,6 +5,60 @@ and validation checkpoints, **not a second work queue**. For current priorities,
 open gates and user decisions, use the [current roadmap](DEEP-RESEARCH-STATUS.md).
 The [original implementation plan](DEEP-RESEARCH-PLAN.md) is preserved.
 
+## Authorized NVDA finalization — September 24 UTC / September 23 PDT
+
+After PR #27 integrated the documentation closeout rules, the user explicitly
+approved offline applicability/readiness, bounded NVDA finalization and actual
+export inspection, including the required run allowance. The coordinator selected
+the prepared **4m additional-token / 5,400-second / 600-second-per-call** cap.
+The supervised continuation launched around **05:29 UTC September 24** into
+`RESEARCH_SUBSTANTIVE_20260922/finalization_run_3`, from runtime revision
+`ef2db3d`. It completed all 20 new calls (repair, factual review and 18 coverage
+batches), then stopped at **`verification_failed`** after **2,282.52 seconds
+(38m03s)**. Incremental usage was **764,518 input + 111,936 output = 876,454
+tokens**, complete. Including the 28 imported calls, cumulative usage is
+**2,519,187 tokens**; imported usage was not charged to the new allowance.
+This is a content/verification stop, not a budget or provider/source-access failure.
+
+Readiness: all 24 frozen packet artifacts match their manifest; the existing plan
+and provider identities match; all `tradingagents/` and `cli/` runtime code is
+unchanged from attempt 3. Metadata-only model preflight passed. **53 targeted
+offline tests** passed, and a no-provider rehearsal reused all 28 saved stages
+before stopping at `repair_report`, the first new-call boundary. Independent
+applicability review reported 78 focused tests plus four in-memory controls;
+these counts overlap and are not summed. The disposable rehearsal's interrupted
+ledger is not a live attempt or imported usage. Historical source integrity was
+checked afterward.
+
+Independent review cleared frozen-contract repair/rechecks, not the unchanged
+reader. Material omissions remain subject to fresh factual/coverage checks.
+Audit-lineage and unused-model caveats require truthful, scoped treatment; no
+saved issue, disposition or evidence was changed. Typed applicability routing
+remains separate engineering work. Exact authorization/readiness are retained in
+`finalization_plan_3/authorization_20260924.json` and `READINESS_20260924.md`.
+User reader acceptance, financial approval, HOOD and production release remain open.
+
+The repaired candidate passed **196 of 202** required limitation checks (the
+original candidate passed 167 of 200). Its combined review retains **12 findings:
+six authored and six deterministic disposition findings, eight critical/four
+warning**. These are not 12 distinct substantive defects. Remaining issues cover
+repurchase execution wording, audit-lineage disclosure under the frozen contract,
+a non-exact reviewer excerpt, the partial separate working-capital schedule,
+investment-commitment timing, guarantee triggers/coverage, and source-extraction
+limits. Independent candidate review also flags overbroad claims that incentive
+mechanics are unavailable despite supplied proxy tables.
+
+`reader_verification.json` records `exported=false`; admission remains incomplete
+and blocked, with production activation false. `reader_report.md` is diagnostic
+only, not the repaired reader. Candidate inspection found improvements to local
+issuer-FCF citation, fiscal-date treatment, conditional commitment overlap and
+linked-exposure caveats, but no actual exported-reader inspection is possible.
+The current engine permits one repair; unused allowance does not trigger another
+revision automatically. Next: scoped applicability/excerpt handling and bounded
+revision engineering, then fresh exact-reader checks. No historical finding was
+overridden and no additional retry was launched. Detailed terminal evidence is in
+the [dated validation record](archive/deep-research/DEEP-RESEARCH-FRESH-VALIDATION.md#authorized-finalization-outcome--september-24-utc--september-23-pdt).
+
 ## Latest integrated increment — PR #26, September 23
 
 [PR #26](https://github.com/maluyao002/TradingAgents/pull/26) merged into

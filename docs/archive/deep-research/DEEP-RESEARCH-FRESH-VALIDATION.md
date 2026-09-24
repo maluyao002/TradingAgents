@@ -511,3 +511,94 @@ Its budget is a cap, not a completion promise. Changed runtime/input identities
 require rechecking compatibility; this plan does not authorize applying new
 code/evidence to old attestations. Any repaired candidate must pass its own exact
 factual/coverage checks before export and user review. PR #26 remains open.
+
+## Authorized finalization outcome — September 24 UTC / September 23 PDT
+
+This dated entry supersedes the proposal's pending-approval/current-PR statements
+above without rewriting that historical checkpoint. PR #26 and documentation
+PR #27 were merged into `codex/deep-research-v2`; runtime revision was `ef2db3d`.
+The user authorized offline readiness, bounded continuation and export inspection,
+including the necessary run budget. The selected cap remained **4,000,000
+additional tokens best-effort, 5,400 seconds total, 600 seconds per call**.
+
+The authorization is retained at
+`reports/RESEARCH_SUBSTANTIVE_20260922/finalization_plan_3/authorization_20260924.json`.
+Plan and destination identities match the proposal above. All 24 frozen input
+hashes matched; research/CLI runtime code was unchanged from source revision
+`d65b3ba`. Metadata-only preflight verified the configured GPT-6 selections and
+provider identity. **53 targeted offline regressions** passed. A disposable
+no-provider replay reached the first new `repair_report` call after all 28 saved
+stages; historical source integrity was checked afterward. Independent review
+cleared repair/rechecks, not unchanged-reader export or changed scope.
+
+### Terminal accounting and admission
+
+`finalization_run_3` launched approximately 05:29:35 UTC September 24 and completed
+all **20 new calls**: repair, exact-reader factual review and 18 coverage batches.
+The supervisor settled with **`verification_failed`** (exit 1) after
+**2,282.52 seconds / 38m03s**. No call remained in flight.
+
+| Usage scope | Input | Output | Total | Telemetry |
+| --- | ---: | ---: | ---: | --- |
+| Imported attempt 3 | 1,463,703 | 179,030 | 1,642,733 | Complete |
+| New continuation | 764,518 | 111,936 | 876,454 | Complete |
+| Cumulative lineage | 2,228,221 | 290,966 | 2,519,187 | Complete |
+
+Cached input/reasoning are subsets, not extra tokens. These figures exclude
+coordinator/reviewer task usage and do not repair prior attempt 2's unknown usage.
+The source history, saved evidence and previous attempts were not changed.
+This stop is a verification/content outcome, not a source-fetch, transport or
+budget failure. Unused allowance is not an automatic second-repair authorization
+inside the current one-repair engine path.
+
+`result.json` and `run_metadata.json` agree on the stop. `reader_verification.json`
+records `exported=false`, with repaired-candidate SHA-256
+`d1740fcde708fdc4050fedd1ab0ec12561f36818c603e1ab511659b0d0b3ad74`.
+**196/202** required IDs were validated, versus 167/200 on the original candidate.
+The combined review contains **12 findings (eight critical/four warning)**:
+six authored findings plus six deterministic disposition findings. Counts include
+duplicate manifestations of the same issue, not 12 distinct substantive defects.
+Admission records report/assessment incomplete, acceptance blocked and production
+activation false. `reader_report.md` is the diagnostic fallback, explicitly
+marked **Diagnostic only — no reader draft**, not an exported repaired reader.
+
+### Residuals and candidate inspection
+
+| Residual | Treatment needed |
+| --- | --- |
+| Repurchase execution | Distributions including repurchases establish some execution; authorization alone does not. Preserve amount/share-count limits without claiming no execution evidence |
+| Audit lineage | The frozen contract requires disclosure that new reconciliation does not rewrite old packets or transfer reviews. Future scoped routing must protect the audit/identity boundary without forcing audit procedure into reader prose |
+| Non-exact excerpt | A reviewer capitalized "Contingent equity" where the candidate has "contingent equity" after a semicolon. Preserve exact-substring enforcement and repair/recheck the attestation, not the historical response |
+| Working capital | Distinguish the separate partial financial-case schedule and unresolved mixed prepaid/accrual rows from the narrow bridge and legacy proxy |
+| Investment timing | Identify the USD 18bn remainder-of-FY2027 commitment and acknowledge later investment/lease obligations |
+| Guarantee terms | Retain specified default triggers and defined coverage as well as contingent timing/phasing/termination |
+| Source quality | Disclose selective/truncated passages, bounded retrieval's completeness limits and PDF-table extraction lineage risk |
+
+Independent candidate inspection also found that saying full incentive mechanics
+are unavailable overstates the gap: supplied proxy tables contain mechanics and
+earned outcomes; target difficulty, realized pay sensitivity and investment
+returns are distinct unresolved questions. This is an independent quality finding,
+not an invented additional pipeline finding.
+
+The repaired candidate improves the local issuer-FCF citation, fiscal-date
+derivation, conditional commitment-overlap treatment and disclosure of unquantified
+linked-intermediary exposure. It retains ten used source footnotes with no unused
+or undefined definitions. Legacy-model caveats and tables remain dense; scenario
+interpretation and observable follow-up tests need work. This is inspection of
+the saved candidate, **not actual exported-reader acceptance**. Unsupported
+valuation, per-share, company-wide funding and economic-forecast conclusions
+remain withheld. No financial approval or Stage 3 closure is implied.
+
+Next: a separately reviewed applicability/excerpt and bounded-revision increment,
+then new exact-candidate factual/coverage checks and inspection only if exported.
+No severity was downgraded, no disposition overridden and no blind retry launched.
+The user was asked whether to extend this validation task to that pipeline fix;
+budget approval itself is not the remaining blocker. Keep HOOD after the NVDA
+reader boundary, and retain independent evidence/financial underwriting and user
+acceptance as separate deliverables.
+
+The reused independent reviewer confirmed terminal accounting, admission and all
+residual classifications. The final two coverage batches contribute three authored
+findings. Source-extraction limits affect evidentiary confidence and must not be
+blanket-reclassified as administrative audit detail. No additional live call or
+offline test was needed for this terminal read-only check.

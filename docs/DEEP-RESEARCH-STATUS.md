@@ -51,10 +51,19 @@ diagnostic or merged code increment is not a completed or accepted report.
   not fit. This was not an external-source or transport failure. No final reader
   was exported; `reader_report.md` is explicitly a diagnostic placeholder.
 - An exact-input candidate continuation is prepared offline in
-  `finalization_plan_3`, proposing at most 4m additional tokens / 5,400 seconds /
+  `finalization_plan_3`, allowing at most 4m additional tokens / 5,400 seconds /
   600 seconds per call. It reuses attempt 3's 28 completed calls, not old attempt
-  2 analyses. No authorization file or live continuation exists. User approval
-  is pending; changing inputs/runtime would require a new compatibility assessment.
+  2 analyses. The user subsequently approved this work and the necessary budget.
+  Offline applicability/readiness passed: 24 packet hashes, unchanged research/CLI
+  runtime, supported model selections and all 28 replayed stages verified before
+  any new call. The supervised `finalization_run_3` launched around 05:29 UTC
+  September 24 (September 23 PDT) under `authorization_20260924.json`.
+  All 20 new calls completed, then final verification withheld export:
+  **876,454 additional tokens / 2,282.52 seconds**, complete telemetry.
+  Coverage improved to **196/202** required IDs; 12 combined findings remain
+  (six authored plus six deterministic, not 12 distinct defects).
+  This is `verification_failed`, not a provider/source-access or budget failure.
+  Changing inputs/runtime still requires a new compatibility assessment.
 
 See the [concise implementation record](DEEP-RESEARCH-PROGRESS.md) for completed
 checkpoints and the [latest validation evidence](archive/deep-research/DEEP-RESEARCH-FRESH-VALIDATION.md)
@@ -65,7 +74,7 @@ for exact attempts, bounds and usage.
 | Order | Deliverable | Completion evidence |
 | --- | --- | --- |
 | 1 — Done (engineering) | Integrate reviewed reader inputs and typed reconciliation | PRs #23 and #26 merged; reader assumption table, typed reconciliation and packet-validation fixes tested/reviewed. This is not final-reader delivery |
-| 2 — Next, gated | Complete bounded NVDA finalization | Fresh analysis and first full review pass finished; attempt 3 stopped before repair. Assess applicability findings offline, check exact runtime/input compatibility and repair/recheck reserves, then obtain the continuation allowance; no silent retry or skipped check |
+| 2 — Run completed; export blocked | Complete bounded NVDA finalization | Readiness and all 20 new calls completed within bounds. Fix scoped applicability/excerpt handling and remaining reader omissions, support a separately bounded revision, then reverify the exact candidate; never waive findings |
 | 3 | Inspect the actual exported English reader | Still open: only a provisional exact-candidate comparison with Claude exists; no admitted export. Check repaired/exported bytes, citations, readability and material scope before user review |
 | 4 | Close targeted financial and independent-evidence gaps | Typed issuer-FCF/residual reconciliation and fresh source/arithmetic reviews delivered in PR #26; dependent fresh analysis completed, but the reader is blocked and economic/independent-demand gaps remain |
 | 5 | Prove HOOD generality | Distinct broker-equity/funding workflow, English reader and comparator review using the same core contracts |
@@ -98,7 +107,7 @@ useful fresh reader but remain part of the full release.
 
 - **Financial case:** typed, tested CFO/residual/issuer-FCF reconciliation and
   the new packet's dependent source/arithmetic reviews are complete; fresh
-  analysis and first-pass review completed, but finalization stopped before repair.
+  analysis, repair and complete rechecks finished, but final verification withheld export.
   Finish fiscal/calendar alignment where required by the model, economic forecasts, opening-date roll-forward,
   usable cash/securities, debt/leases, capitalization and commitment/guarantee
   coverage. Unknown public-source relationships stay explicit; positive FCFF does
@@ -118,6 +127,13 @@ useful fresh reader but remain part of the full release.
   from audit procedure and assumptions unused by the displayed conclusions.
   Preserve semantic negative controls: prior coverage checks falsely closed a
   missing-disclosure control. Do not switch coverage defaults on efficiency alone.
+  The latest repaired candidate still needs precise repurchase execution wording,
+  partial financial-case working-capital disclosure, investment timing/later
+  obligations, guarantee triggers/coverage and source-extraction limits. One
+  reviewer excerpt is not an exact substring. Independent review also identified
+  underuse of supplied incentive tables. A bounded second-revision path must
+  retain exact-input/reader binding and full rechecks; the current one-repair path
+  stops safely even with unused allowance. Do not blindly repeat the same run.
 - **Broader release:** dependency-aware reuse/updates, forecast-vintage evaluation,
   wider source/history/company coverage, ADR/FX/mixed-business cases, matched
   comparisons and finite human-label review packets remain required.
@@ -129,7 +145,7 @@ especially the substantive-closure, packet, disclosure-control and validation re
 
 | Checkpoint | User action |
 | --- | --- |
-| Concrete live run / recovery | Attempt 3 ended. Proposed exact-candidate repair continuation: up to 4m additional tokens, 90 minutes total, 600 seconds per call, one attempt; approval pending. Old allowances are not renewed by these docs |
+| Concrete live run / recovery | Approved 4m-token/90-minute continuation completed within bounds, but export was withheld. Budget approval is not the blocker. A scoped pipeline-fix follow-up was proposed for confirmation; no further retry or gate override has occurred. Reader and production acceptance remain separate |
 | Completed NVDA / HOOD reader | Review usefulness and readability, not every intermediate assumption |
 | Human reference validation / blind comparison | Review a prepared finite packet, or designate a qualified reviewer |
 | Paid/private data, changed scope or acceptance thresholds | Decide only after engineering explains the actual need and alternatives |
@@ -158,7 +174,7 @@ Never ask the user to approve away unsupported conclusions.
 | `RESEARCH_SUBSTANTIVE_20260922/reviewed_inputs_1/` | Preserved prior targeted source/arithmetic inputs; financial case remains draft |
 | `RESEARCH_SUBSTANTIVE_20260922/reviewed_inputs_2/` | New nine-fact typed reconciliation, fresh dependent reviews, 36 operating and 65 cash-flow values; financial case still draft |
 | `RESEARCH_SUBSTANTIVE_20260922/fresh_validation_plan_3/` and `fresh_validation_run_3/` | Preserved 28-call fresh attempt, complete 1,642,733-token telemetry; stopped before repair, no final reader; provisional candidate comparison retained |
-| `RESEARCH_SUBSTANTIVE_20260922/finalization_plan_3/` | Offline exact-candidate continuation proposal; 28 completed calls bound for reuse; not authorized or launched |
+| `RESEARCH_SUBSTANTIVE_20260922/finalization_plan_3/` and `finalization_run_3/` | Approved continuation completed: 28 saved stages reused, 20 new calls, 876,454 additional tokens; `verification_failed`, 196/202 IDs validated, no admitted export |
 | `RESEARCH_SUBSTANTIVE_20260922/fresh_validation_run_2/` | Nine completed stages; failed factual boundary; 1,159,911 known tokens with incomplete usage; not a final report |
 | `RESEARCH_SUBSTANTIVE_20260922/factual_diagnostic_sol6_lifecycle_1/run_1/` | Successful exact-reader diagnostic and reply; no export or recovery-attestation reuse |
 | `NVDA_V2_20260917/run_recovered_1/` | Older bilingual previews; historical baseline, not the intended new English deliverable |
