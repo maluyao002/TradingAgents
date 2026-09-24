@@ -7,6 +7,28 @@ The [original implementation plan](DEEP-RESEARCH-PLAN.md) is preserved.
 
 ## Numbered reader repair and latest validation — September 24
 
+The next offline increment is committed as **`1b2ef04` / `75ab791` / `8fbdf42`**
+on the same unmerged PR #28. Append-only v6 handles one proven missing/foreign
+coverage-ID pair by retaining the entire original batch, not interpreting the
+foreign ID as an alias. All original obligations remain pinned until fresh,
+complete, semantically valid coverage earns one atomic receipt for both historical
+response errors. Other factual findings and financial gates remain independent.
+The actual historical input payload must be reconstructed and match its saved hash
+before dispatch; saved hash labels alone are insufficient. Unresolved envelopes
+carry unchanged, completed receipts retain audit lineage, and safe resume reuses
+completed calls while rechecking the original payload proof.
+
+Independent review removed an incompatible dynamic-schema proposal and added early
+rejection of decorated origin batches; that broader context-carryover case remains
+outside this narrow policy. The actual run-3 affected batch is undecorated. Earlier
+v3–v5 contracts and historical artifacts are unchanged. **226 distinct targeted
+tests pass** (214 recovery/contract/context/wire, seven v6 integration and five CLI),
+including unresolved carryover, receipt partition, unrelated-warning preservation
+and interruption/resume. Ruff and whitespace checks pass; scoped independent review
+has no remaining actionable findings. Metadata-only runtime preflight passes for
+GPT-6 Astra/high and Sol/xhigh. Real 150-stage no-provider readiness is in progress;
+no v6 live attempt or admitted export is claimed at this checkpoint.
+
 The subsequent v5 repair is implemented in **`72f2495`** with CLI support in
 **`50983e9`**, on PR #28 and not merged. It preserves v3/v4 replay, carries the
 two unresolved response-error obligations from hash-verified original contexts,

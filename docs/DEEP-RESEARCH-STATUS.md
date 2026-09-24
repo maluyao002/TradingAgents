@@ -151,6 +151,14 @@ diagnostic or merged code increment is not a completed or accepted report.
   coverage ID, proxy-passage delivery and compressed financial/exposure caveats.
   There is no admitted export. Continue offline applicability/delivery diagnosis;
   no historical response normalization, acceptance override or blind retry.
+- The narrow v6 follow-up is implemented on unmerged PR #28 (`8fbdf42`, with
+  helper commits `1b2ef04` / `75ab791`). It pins the complete original inventory
+  for the missing/foreign-ID pair and requires a fresh atomic coverage receipt;
+  it never aliases a malformed ID or clears unrelated findings. Exact historical
+  input reconstruction, carryover and safe resume are tested. **226 targeted
+  tests** and scoped independent review pass; v3–v5 contracts remain unchanged.
+  The real 150-stage no-provider readiness check is in progress before any new
+  separately bounded live attempt. No new export or user acceptance is implied.
 
 See the [concise implementation record](DEEP-RESEARCH-PROGRESS.md) for completed
 checkpoints and the [latest validation evidence](archive/deep-research/DEEP-RESEARCH-FRESH-VALIDATION.md)
@@ -161,7 +169,7 @@ for exact attempts, bounds and usage.
 | Order | Deliverable | Completion evidence |
 | --- | --- | --- |
 | 1 — Done (engineering) | Integrate reviewed reader inputs and typed reconciliation | PRs #23 and #26 merged; reader assumption table, typed reconciliation and packet-validation fixes tested/reviewed. This is not final-reader delivery |
-| 2 — Offline follow-up | Complete bounded NVDA finalization | `reader_repair_run_3` settled `verification_failed`, 198/206. Both pending receipts and current correction delivery work; investigate exact quote/ID failures, proxy delivery and compressed caveats before another separately bound attempt |
+| 2 — Offline follow-up | Complete bounded NVDA finalization | Run 3 remains `verification_failed`, 198/206. Exact quote/ID and delivery diagnosis is complete; narrow v6 inventory recovery is tested/reviewed. Finish real-prefix readiness, then run one separately bounded repair of the remaining reader caveats |
 | 3 | Inspect the actual exported English reader | Still open: the revised candidate was independently inspected and its footnotes/calculation links checked, but no admitted export exists. Verify exported bytes and reader usefulness before user review |
 | 4 | Close targeted financial and independent-evidence gaps | Typed issuer-FCF/residual reconciliation and fresh source/arithmetic reviews delivered in PR #26; dependent fresh analysis completed, but the reader is blocked and economic/independent-demand gaps remain |
 | 5 | Prove HOOD generality | Distinct broker-equity/funding workflow, English reader and comparator review using the same core contracts |
@@ -175,10 +183,12 @@ Do not run another probe unless it addresses a named residual risk.
 ### Immediate offline acceptance criteria
 
 The v5 third reader repair is settled and preserved. Its engineering fixes are
-validated, but the report is not admitted. The next check is offline continuation
-applicability and exact evidence delivery, before deciding whether further code is
-necessary. Prefer narrowing unsupported inventory assertions over adding unnecessary
-source-context machinery; preserve all material economic disclosures.
+validated, but the report is not admitted. Offline diagnosis led to the reviewed
+v6 inventory-recovery increment above; real-prefix prompt-and-budget readiness is
+still required before a new separately bounded run. Narrow unsupported inventory
+assertions to delivered passages instead of expanding source-context machinery;
+preserve all material economic disclosures. Broader decorated-origin recovery is
+explicitly excluded from this narrow increment, not silently accepted.
 
 The engineering items below are implemented and reviewed in v5. The real-data
 rehearsal passes; the latest live result confirms both pending receipts and delivery
