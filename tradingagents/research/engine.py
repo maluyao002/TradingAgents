@@ -7,6 +7,7 @@ disabled until company-specific schedules and source coverage pass M3/M6 gates.
 from __future__ import annotations
 
 import hashlib
+import re
 from collections import defaultdict
 from copy import deepcopy
 from dataclasses import asdict, fields
@@ -54,10 +55,9 @@ from .reader import ReaderIssue, render_reader
 from .reader_provenance import RENDERED_READER_POLICY, case_model_appendix, reader_provenance
 from .reader_revision import (
     FROZEN_REVIEW_STAGE,
+    GENERATION_PATTERN,
     GENERIC_CASHFLOW_POLICY,
-    GENERIC_FOLLOWUP_REQUIREMENTS,
     GENERIC_REVISION_POLICY,
-    GENERIC_REVISION_REQUIREMENTS,
     READER_REVISION_POLICY,
     REVISE_STAGE,
     REVISED_REVIEW_STAGE,
@@ -101,9 +101,11 @@ from .review_lifecycle import (
     reconcile_review,
     resolution_witness_contract,
     source_passage_witness_valid,
-    source_passage_witnesses,
     split_compound_obligations,
 )
+from .revision_contracts import V4_CONTRACT, revision_contract
+from .revision_deferred import deferred_coverage_eligibility, resolve_deferred_coverage
+from .revision_witness_selection import revision_witness_catalog
 from .services import ModelReply, ResearchServices
 from .stages import AnalysisOutput, ReportDraft, ValuationProposal, VerificationOutput, instruction
 from .storage import (
@@ -451,6 +453,24 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
         def coverage_batches(issues):
             return coverage_batches_for_policy(issues, request.coverage_batch_policy)
 
+        def numbered_contract(stage):
+            if candidate_recovery is None or not candidate_recovery.get("revision_generation"):
+                return None
+            match = re.fullmatch(
+                rf"(?:revise_report|verify_revised_report)-({GENERATION_PATTERN})(?:-coverage-(?:0|[1-9][0-9]*))?",
+                stage)
+            if match is None:
+                return None
+            number = int(match[1])
+            if number == candidate_recovery["revision_generation"]:
+                return revision_contract(candidate_recovery["reader_revision_policy"],
+                                         candidate_recovery["revision_contract_sha256"])
+            records = [item for item in candidate_recovery.get("prior_revision_contracts", ())
+                       if item["generation"] == number]
+            if len(records) != 1:
+                raise ValueError("numbered revision lacks unambiguous historical contract")
+            return revision_contract(records[0]["policy"], records[0]["contract_sha256"])
+
         verified_readers = {}
         reader_verifications = {}
         model_checkpoints = {}
@@ -551,9 +571,11 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     payload["verification_repair_policy"] = VERIFICATION_REPAIR_POLICY
                     payload["system"] += " " + VERIFICATION_REPAIR_REQUIREMENTS
                 if generic_coverage_stage(stage):
-                    payload["reader_revision_policy"] = GENERIC_REVISION_POLICY
-                    payload["revision_contract_sha256"] = candidate_recovery[
-                        "revision_contract_sha256"]
+                    contract = numbered_contract(stage)
+                    payload["reader_revision_policy"] = contract.policy
+                    payload["revision_contract_sha256"] = contract.sha256
+                    if contract.coverage_requirements:
+                        payload["system"] += contract.coverage_requirements
                 return payload
             payload = {**instruction(role, schema), "evidence": (
                 _prompt_evidence(snapshot, queries)),
@@ -586,12 +608,12 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 payload["verification_repair_policy"] = VERIFICATION_REPAIR_POLICY
                 payload["system"] += " " + VERIFICATION_REPAIR_REQUIREMENTS
             if generic_writer_stage(stage) or generic_review_stage(stage):
-                payload["reader_revision_policy"] = GENERIC_REVISION_POLICY
-                payload["revision_contract_sha256"] = candidate_recovery[
-                    "revision_contract_sha256"]
+                contract = numbered_contract(stage)
+                payload["reader_revision_policy"] = contract.policy
+                payload["revision_contract_sha256"] = contract.sha256
                 payload["system"] += " " + (
-                    GENERIC_REVISION_REQUIREMENTS if generic_writer_stage(stage)
-                    else GENERIC_FOLLOWUP_REQUIREMENTS)
+                    contract.writer_requirements if generic_writer_stage(stage)
+                    else contract.factual_requirements)
             if case_context is not None and not coverage_only and stage not in {"planner", "independent_challenge"}:
                 payload["financial_case"] = case_context.model_context()
                 payload["case_reader_delivery"] = case_reader_delivery(case_context)
@@ -715,7 +737,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             permit = None
             if origin == "current_live":
                 if (payload.get("verification_repair_policy") == VERIFICATION_REPAIR_POLICY
-                        or payload.get("reader_revision_policy") == GENERIC_REVISION_POLICY):
+                        or payload.get("reader_revision_policy") in {
+                            GENERIC_REVISION_POLICY, V4_CONTRACT.policy}):
                     prompt_limit = getattr(services.models, "max_prompt_utf8_bytes", None)
                     prompt_bytes = len(model_prompt(payload))
                     if prompt_limit is not None and prompt_bytes > prompt_limit:
@@ -724,7 +747,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                             "limit_bytes": prompt_limit, "fits": False,
                         })
                         raise BudgetExhausted("revision_prompt_size_limit" if
-                            payload.get("reader_revision_policy") == GENERIC_REVISION_POLICY
+                            payload.get("reader_revision_policy") in {
+                                GENERIC_REVISION_POLICY, V4_CONTRACT.policy}
                             else "verification_prompt_size_limit")
                 permit = tracker.reserve(envelope, finalization=finalization)
                 dispatch_unsettled = True
@@ -1073,17 +1097,30 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 unresolved_source_findings = []
                 source_followup_audit = None
                 if generic_review_stage(stage):
+                    stage_contract = numbered_contract(stage)
                     source_review = factual_data["source_terminal_review"]
                     findings = {item["source_finding_sha256"]: item
                                 for item in source_review["findings"]}
+                    pending_coverage = (tuple(factual_data.get("pending_coverage", ()))
+                                        if stage_contract.deferred_coverage else ())
+                    pending_hashes = {item["source_finding_sha256"] for item in pending_coverage}
+                    if (len(pending_hashes) != len(pending_coverage)
+                            or not pending_hashes <= set(findings)
+                            or any(item["source_finding"] != {key: value for key, value in findings[
+                                item["source_finding_sha256"]].items()
+                                if key != "source_finding_sha256"}
+                                for item in pending_coverage)):
+                        raise ValueError("numbered revision pending coverage ledger differs from source")
                     followups = {item.source_finding_sha256: item
                                  for item in factual_review.source_finding_followups}
                     if (len(followups) != len(factual_review.source_finding_followups)
-                            or set(followups) != set(findings)):
+                            or set(followups) != set(findings) - pending_hashes):
                         raise ValueError("numbered revision omitted a terminal source finding")
                     source_followup_audit = [item.model_dump(mode="json")
                                              for item in factual_review.source_finding_followups]
                     for finding_hash, finding in findings.items():
+                        if finding_hash in pending_hashes:
+                            continue
                         followup = followups[finding_hash]
                         if followup.disposition == "still_open":
                             unresolved_source_findings.append(ReviewFinding.model_validate({
@@ -1125,6 +1162,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     lifecycle["source_terminal_review_sha256"] = factual_data[
                         "source_terminal_review_sha256"]
                     lifecycle["source_finding_followups"] = source_followup_audit
+                    if pending_coverage:
+                        lifecycle["pending_coverage"] = list(pending_coverage)
+                        lifecycle["pending_coverage_sha256"] = digest(pending_coverage)
                 if unresolved_source_findings:
                     main_review = main_review.model_copy(update={"findings": (
                         *main_review.findings, *unresolved_source_findings)})
@@ -1255,6 +1295,25 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 verification = fan_in_compound_dispositions(
                     verification, parent_limitations, rendered.reader_text)
                 limitations = parent_limitations
+                if generic_review_stage(stage) and stage_contract.deferred_coverage:
+                    receipts, pending_failures = resolve_deferred_coverage(
+                        pending_coverage,
+                        source_stage=source_review["stage"],
+                        generation=int(stage.rsplit("-", 1)[1]),
+                        contract_sha256=stage_contract.sha256,
+                        reader_sha256=rendered_hash, reader_text=rendered.reader_text,
+                        issues=limitations, batches=batches,
+                        batch_audit=reader_verifications[language]["coverage_batches"],
+                        model_checkpoints=model_checkpoints)
+                    lifecycle["deferred_coverage_receipts"] = list(receipts)
+                    lifecycle["deferred_coverage_receipts_sha256"] = digest(receipts)
+                    lifecycle["pending_coverage_unresolved"] = [
+                        item["source_finding_sha256"] for item in pending_coverage
+                        if item["source_finding_sha256"] not in {
+                            receipt["source_finding_sha256"] for receipt in receipts}]
+                    if pending_failures:
+                        verification = verification.model_copy(update={"findings": (
+                            *verification.findings, *pending_failures)})
             else:
                 verification = call(stage, "verifier", review_data, ReaderVerification,
                                     True, language=language)
@@ -1701,6 +1760,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                         target_generation = candidate_recovery["revision_generation"]
                         for generation in range(2, target_generation + 1):
                             writer_stage, review_stage = generation_stages(generation)
+                            contract = numbered_contract(writer_stage)
                             source_stage = reader_verifications[request.report_language]["stage"]
                             source_hash = reader_verifications[request.report_language]["reader_sha256"]
                             source_writer = (REVISE_STAGE if generation == 2 else
@@ -1713,6 +1773,16 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 != candidate_recovery["source_terminal_review_sha256"]
                             ):
                                 raise ValueError("generic revision source candidate or writer differs")
+                            if generation == target_generation and contract.deferred_coverage:
+                                if digest(reader_verifications[request.report_language][
+                                    "issue_lifecycle"]) != candidate_recovery["source_issue_lifecycle_sha256"]:
+                                    raise ValueError("numbered revision source issue lifecycle differs")
+                                for record in candidate_recovery["prior_revision_contracts"]:
+                                    for name, proof in record["stage_proofs"].items():
+                                        saved = model_checkpoints.get(name)
+                                        if saved is None or {key: saved[key] for key in (
+                                            "role", "inputs_hash", "output_hash")} != proof:
+                                            raise ValueError("numbered revision historical stage ownership differs")
                             reviews.extend(final_review.findings)
                             retired_reader_texts.clear()
                             coverage_reuse.clear()
@@ -1730,8 +1800,17 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 "reader_sha256": source_hash,
                                 "findings": [{"source_finding_sha256": key, **value}
                                              for key, value in source_findings.items()]}
-                            source_text_witnesses = source_passage_witnesses(
-                                snapshot, source_terminal_review["findings"])
+                            source_issues = reader_verifications[request.report_language][
+                                "issue_lifecycle"]["issues"]
+                            source_text_witnesses = revision_witness_catalog(
+                                contract, snapshot, source_terminal_review["findings"], source_issues)
+                            pending_coverage = (deferred_coverage_eligibility(
+                                reader_verifications[request.report_language], model_checkpoints,
+                                rendered.reader_text) if contract.deferred_coverage else ())
+                            if (generation == target_generation and contract.deferred_coverage
+                                    and digest(pending_coverage) != candidate_recovery[
+                                        "deferred_coverage_eligibility_sha256"]):
+                                raise ValueError("numbered revision deferred coverage eligibility differs")
                             if (generation == target_generation
                                     and digest(source_text_witnesses)
                                     != candidate_recovery["source_witness_catalog_sha256"]):
@@ -1747,8 +1826,10 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                     "reader_sha256": source_hash, "reader_text": rendered.reader_text},
                                 "source_writer_stage": source_writer,
                                 "source_text_witnesses": source_text_witnesses,
-                                "repair_policy": GENERIC_REVISION_REQUIREMENTS,
-                                "reader_revision_policy": GENERIC_REVISION_POLICY,
+                                "repair_policy": contract.writer_requirements,
+                                "reader_revision_policy": contract.policy,
+                                **({"pending_coverage": list(pending_coverage)}
+                                   if contract.deferred_coverage else {}),
                             }
                             active_stage = writer_stage
                             revision_payload = model_payload(writer_stage, "editor", revision_data,
@@ -1800,6 +1881,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 "source_text_witnesses": source_text_witnesses,
                                 "issue_resolution_policy": (LIFECYCLE_POLICY
                                     + GENERIC_CASHFLOW_POLICY),
+                                **({"pending_coverage": list(pending_coverage)}
+                                   if contract.deferred_coverage else {}),
                             }
                             baseline_payload = model_payload(
                                 review_stage, "verifier", baseline_factual,
@@ -1807,7 +1890,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                             baseline_factual_bytes = len(model_prompt(baseline_payload))
                             factual_headroom = min(32_768, max(16_384, reader_bytes // 2))
                             revision_plan = {
-                                "policy": GENERIC_REVISION_POLICY, "generation": generation,
+                                "policy": contract.policy, "generation": generation,
                                 "source_candidate_stage": source_stage,
                                 "source_reader_sha256": source_hash,
                                 "source_writer_stage": source_writer,
@@ -1850,7 +1933,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 extra={"source_terminal_review": source_terminal_review,
                                        "source_terminal_review_sha256": digest(
                                            final_review.model_dump(mode="json")),
-                                       "source_text_witnesses": source_text_witnesses},
+                                       "source_text_witnesses": source_text_witnesses,
+                                       **({"pending_coverage": list(pending_coverage)}
+                                          if contract.deferred_coverage else {})},
                                 authored=source_draft)
             else:
                 final_review = call("verify_report", "verifier",

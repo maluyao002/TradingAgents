@@ -10,6 +10,8 @@ FROZEN_REVIEW_STAGE = "verify_frozen_report"
 GENERIC_REVISION_POLICY = "frozen-candidate-revision-v3"
 GENERATION_PATTERN = r"(?:[2-9]|[1-9][0-9]+)"
 GENERIC_SHARED_CONTEXT_MIN_BYTES = 256
+GENERIC_REVISION_POLICY_V4 = "frozen-candidate-revision-v4"
+GENERIC_V4_SOURCE_WITNESS_POLICY = "finding_bound_issue_context_exact_source_passage_v1"
 
 
 def generation_stages(generation: int) -> tuple[str, str]:
@@ -78,6 +80,38 @@ GENERIC_CASHFLOW_POLICY = (
     "review's stated scope; it never resolves the whole compound issue or "
     "transfers economic, financial-case, valuation or funding approval."
 )
+
+# Append-only contract: v3 strings and their model payloads above remain unchanged.
+GENERIC_V4_WRITER_REQUIREMENTS = (
+    GENERIC_REVISION_REQUIREMENTS
+    + " All source terminal findings remain in the immutable audit. A code-owned "
+    "pending_coverage ledger may identify exact prior coverage-response format errors; "
+    "do not treat that ledger as permission to omit the underlying issue or material caveat."
+)
+_V3_FOLLOWUP_CARDINALITY = (
+    "For each source_terminal_review finding, return exactly one source_finding_followup "
+    "keyed by source_finding_sha256."
+)
+if _V3_FOLLOWUP_CARDINALITY not in GENERIC_FOLLOWUP_REQUIREMENTS:
+    raise RuntimeError("v3 factual instruction changed; v4 cardinality must be reviewed")
+GENERIC_V4_FOLLOWUP_REQUIREMENTS = GENERIC_FOLLOWUP_REQUIREMENTS.replace(
+    _V3_FOLLOWUP_CARDINALITY,
+    "For each source_terminal_review finding outside pending_coverage, return exactly "
+    "one source_finding_followup keyed by source_finding_sha256; return none for "
+    "pending_coverage.",
+) + (
+    " Pending entries are not factual corrections and cannot be closed by this "
+    "factual reply; they require independently validated fresh atomic coverage of "
+    "the same issue. Preserve every substantive finding and any new defect."
+)
+GENERIC_V4_COVERAGE_REQUIREMENTS = (
+    " For audit_only_operational or audit_only_immaterial, reader_excerpt must be "
+    "an empty string and reader_excerpts must be empty. Do not attach contextual "
+    "reader quotes to audit-only decisions. Material caveats require reader_covered "
+    "with exact spans or unresolved. A pending prior response-format defect is not "
+    "a waiver of the issue: decide the supplied issue anew against this exact reader."
+)
+GENERIC_V4_DEFERRED_POLICY = "audit_only_has_reader_spans_exact_saved_coverage_v1"
 
 VERIFICATION_REPAIR_REQUIREMENTS = (
     "This is a new attestation of the unchanged candidate, not permission to edit "

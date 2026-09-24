@@ -9,6 +9,8 @@ import pytest
 
 from tests.test_research_case_engine import CaseFixture
 from tests.test_research_verification_repair import _verification
+from tradingagents.research import engine as engine_module
+from tradingagents.research.budget import BudgetExhausted
 from tradingagents.research.contracts import EvidenceSnapshot, SourceDocument
 from tradingagents.research.engine import run_research
 from tradingagents.research.finalization_recovery import (
@@ -20,7 +22,7 @@ from tradingagents.research.finalization_recovery import (
 )
 from tradingagents.research.finalization_timing import call_family
 from tradingagents.research.reader_revision import (
-    GENERIC_REVISION_POLICY,
+    GENERIC_REVISION_POLICY_V4,
     generation_stages,
     generic_coverage_stage,
     generic_review_stage,
@@ -32,7 +34,7 @@ from tradingagents.research.review_lifecycle import (
     source_passage_witnesses,
 )
 from tradingagents.research.services import ResearchServices
-from tradingagents.research.storage import canonical_json, digest, read_json
+from tradingagents.research.storage import CheckpointStore, canonical_json, digest, read_json
 from tradingagents.research.wire import codec_for, validate_strict_schema
 
 
@@ -67,6 +69,57 @@ class GenericFixture(CaseFixture):
                 "witnesses": [{"reference": reference, "excerpt": evidence[:30]}],
             } for finding in research["source_terminal_review"]["findings"]]
         return reply
+
+
+class FrozenAuditSpan(CaseFixture):
+    """Create a saved, deterministic audit-only response-format failure."""
+
+    def complete(self, role, payload, request):
+        reply = super().complete(role, payload, request)
+        if payload["stage"] == "verify_frozen_report":
+            reply.data["findings"] = [{"code": "source_disclosure_gap", "severity": "warning",
+                "message": "A source-supported qualification remains to be corrected."}]
+        if payload["stage"].startswith("verify_frozen_report-coverage-"):
+            audit_ids = {issue["issue_id"] for issue in payload["research"]["limitation_review"]
+                         if issue["reader_coverage_required"] is False}
+            for decision in reply.data.get("limitation_dispositions", ()):
+                if decision["issue_id"] in audit_ids:
+                    decision["decision"] = "audit_only_operational"
+        return reply
+
+
+class PendingGenericFixture(GenericFixture):
+    """Factual followups cover substantive findings; coverage owns deferred ones."""
+
+    def complete(self, role, payload, request):
+        reply = super().complete(role, payload, request)
+        if payload["stage"].startswith("verify_revised_report-") and "-coverage-" not in payload["stage"]:
+            pending = {item["source_finding_sha256"] for item in payload["research"]["pending_coverage"]}
+            reply.data["source_finding_followups"] = [
+                item for item in reply.data["source_finding_followups"]
+                if item["source_finding_sha256"] not in pending]
+        return reply
+
+
+def _pending_generic(tmp_path, provider=None):
+    _, frozen_request, evidence, frozen_service, _ = _verification(
+        tmp_path, FrozenAuditSpan())
+    source_result = run_research(frozen_request, ResearchServices(evidence, frozen_service))
+    assert source_result.stop_reason == "verification_failed"
+    destination = frozen_request.model_copy(update={
+        "output_dir": tmp_path / "pending-revision",
+    })
+    plan = prepare_finalization_continuation(
+        frozen_request.output_dir, destination, revise_reader=True)
+    assert len(plan.deferred_coverage_eligibility) == 1
+    authorization = frozen_service.plan.authorization.model_copy(update={
+        "plan_sha256": plan.plan_sha256, "new_request_identity": plan.new_request_identity,
+        "incremental_budget": destination.budget,
+    })
+    provider = provider or PendingGenericFixture()
+    service = FinalizationRecoveryModelService(
+        authorize_finalization_continuation(plan, authorization), provider)
+    return destination, evidence, service, provider
 
 
 def test_source_passage_witness_is_finding_bound_exact_and_cutoff_eligible():
@@ -217,7 +270,7 @@ def test_generic_revision_one_writer_and_fresh_full_review(tmp_path):
     before = {path: path.read_bytes() for path in source.output_dir.rglob("*") if path.is_file()}
     assert service.plan.plan.revision_generation == 2
     assert service.plan.plan.source_writer_stage == "revise_report"
-    assert service.plan.plan.reader_revision_policy == GENERIC_REVISION_POLICY
+    assert service.plan.plan.reader_revision_policy == GENERIC_REVISION_POLICY_V4
     assert service.plan.plan.manifest()["revision_contract_sha256"] == (
         service.plan.plan.revision_contract_sha256)
     result = run_research(request, ResearchServices(evidence, service))
@@ -226,7 +279,8 @@ def test_generic_revision_one_writer_and_fresh_full_review(tmp_path):
     writer, verifier = generation_stages(2)
     assert [payload["stage"] for payload in calls[:2]] == [writer, verifier]
     assert all(payload["stage"].startswith(verifier + "-coverage-") for payload in calls[2:])
-    assert all(payload["reader_revision_policy"] == GENERIC_REVISION_POLICY for payload in calls)
+    assert all(payload["reader_revision_policy"] == GENERIC_REVISION_POLICY_V4
+               for payload in calls)
     assert all(payload["revision_contract_sha256"] == service.plan.plan.revision_contract_sha256
                for payload in calls)
     assert calls[0]["research"]["source_candidate"] == service.plan.plan.candidate
@@ -336,6 +390,185 @@ def test_generic_missing_terminal_finding_followup_fails_closed(tmp_path):
     result = run_research(request, ResearchServices(evidence, service))
     assert result.stop_reason == "stage_failed"
     assert len(provider.calls) == 2
+
+
+def test_deferred_span_error_requires_fresh_coverage_receipt_to_export(tmp_path):
+    request, evidence, service, provider = _pending_generic(tmp_path)
+    result = run_research(request, ResearchServices(evidence, service))
+    assert result.stop_reason == "completed_needs_review"
+    terminal = read_json(request.output_dir / "reader_verification.json")["English"]
+    lifecycle = terminal["issue_lifecycle"]
+    assert terminal["exported"]
+    assert len(lifecycle["pending_coverage"]) == 1
+    assert len(lifecycle["deferred_coverage_receipts"]) == 1
+    assert lifecycle["pending_coverage_unresolved"] == []
+    receipt = lifecycle["deferred_coverage_receipts"][0]
+    assert receipt["source_finding_sha256"] == lifecycle["pending_coverage"][0][
+        "source_finding_sha256"]
+    assert receipt["coverage_stage"].startswith(generation_stages(2)[1] + "-coverage-")
+    assert any(payload["stage"] == receipt["coverage_stage"] for _, payload in provider.calls)
+
+
+def test_deferred_span_error_interrupted_fresh_coverage_never_exports(tmp_path):
+    class Interrupted(PendingGenericFixture):
+        def complete(self, role, payload, request):
+            if payload["stage"].startswith(generation_stages(2)[1] + "-coverage-"):
+                raise TimeoutError("synthetic fresh coverage interruption")
+            return super().complete(role, payload, request)
+
+    request, evidence, service, _ = _pending_generic(tmp_path, Interrupted())
+    result = run_research(request, ResearchServices(evidence, service))
+    assert result.stop_reason != "completed_needs_review"
+    assert not read_json(request.output_dir / "reader_verification.json")["English"]["exported"]
+
+
+def test_deferred_span_error_repeated_in_fresh_coverage_remains_open(tmp_path):
+    class RepeatedSpan(PendingGenericFixture):
+        def complete(self, role, payload, request):
+            reply = super().complete(role, payload, request)
+            if payload["stage"].startswith(generation_stages(2)[1] + "-coverage-"):
+                pending_ids = {item["issue_id"] for item in payload["research"][
+                    "limitation_review"] if item["reader_coverage_required"] is False}
+                for decision in reply.data.get("limitation_dispositions", ()):
+                    if decision["issue_id"] in pending_ids:
+                        decision["decision"] = "audit_only_operational"
+                        decision["reader_excerpt"] = payload["research"]["rendered_reader"][:24]
+            return reply
+
+    request, evidence, service, _ = _pending_generic(tmp_path, RepeatedSpan())
+    result = run_research(request, ResearchServices(evidence, service))
+    assert result.stop_reason == "verification_failed"
+    terminal = read_json(request.output_dir / "reader_verification.json")["English"]
+    assert not terminal["exported"]
+    lifecycle = terminal["issue_lifecycle"]
+    assert lifecycle["deferred_coverage_receipts"] == []
+    assert lifecycle["pending_coverage_unresolved"] == [
+        lifecycle["pending_coverage"][0]["source_finding_sha256"]]
+    assert any(item["code"] == "limitation_disposition" for item in terminal["review"]["findings"])
+
+
+def test_deferred_receipt_waits_for_entire_fresh_coverage_after_late_interruption(
+        tmp_path, monkeypatch):
+    monkeypatch.setattr(engine_module, "coverage_batches_for_policy",
+                        lambda issues, _policy: tuple((item,) for item in issues))
+
+    class LateInterruption(PendingGenericFixture):
+        def complete(self, role, payload, request):
+            if payload["stage"] == generation_stages(2)[1] + "-coverage-1":
+                raise TimeoutError("synthetic later-batch interruption")
+            return super().complete(role, payload, request)
+
+    request, evidence, service, provider = _pending_generic(tmp_path, LateInterruption())
+    pending_id = service.plan.plan.deferred_coverage_eligibility[0]["issue_id"]
+    result = run_research(request, ResearchServices(evidence, service))
+    assert result.stop_reason == "stage_failed" and not result.usage.complete
+    assert any(payload["stage"] == generation_stages(2)[1] + "-coverage-0"
+               and pending_id in {item["issue_id"] for item in payload["research"]["limitation_review"]}
+               for _, payload in provider.calls)
+    terminal = read_json(request.output_dir / "reader_verification.json")["English"]
+    assert not terminal["exported"]
+    assert terminal["issue_lifecycle"]["pending_coverage"][0]["issue_id"] == pending_id
+    assert not terminal["issue_lifecycle"].get("deferred_coverage_receipts")
+    provenance = read_json(request.output_dir / "recovery_provenance.json")
+    assert provenance["deferred_coverage_eligibility"][0]["issue_id"] == pending_id
+
+    resumed_provider = PendingGenericFixture()
+    resumed_service = FinalizationRecoveryModelService(service.plan, resumed_provider)
+    resumed = run_research(request, ResearchServices(evidence, resumed_service))
+    assert resumed.stop_reason != "completed_needs_review"
+    assert not resumed_provider.calls
+    assert not read_json(request.output_dir / "reader_verification.json")["English"]["exported"]
+
+
+def test_deferred_safe_predispatch_resume_reuses_completed_prefix(tmp_path, monkeypatch):
+    monkeypatch.setattr(engine_module, "coverage_batches_for_policy",
+                        lambda issues, _policy: tuple((item,) for item in issues))
+    request, evidence, service, provider = _pending_generic(tmp_path)
+    original_save = CheckpointStore.save_stage
+    cost_stage = generation_stages(2)[1] + "-cost-plan"
+    count = 0
+
+    def interrupt_before_second_batch(store, stage, inputs, output):
+        nonlocal count
+        if stage == cost_stage:
+            count += 1
+            if count == 3:
+                raise BudgetExhausted("synthetic_predispatch_stop")
+        return original_save(store, stage, inputs, output)
+
+    monkeypatch.setattr(CheckpointStore, "save_stage", interrupt_before_second_batch)
+    first = run_research(request, ResearchServices(evidence, service))
+    assert first.stop_reason == "synthetic_predispatch_stop" and first.usage.complete
+    first_stages = [payload["stage"] for _, payload in provider.calls]
+    assert first_stages[-1] == generation_stages(2)[1] + "-coverage-0"
+    first_terminal = read_json(request.output_dir / "reader_verification.json")["English"]
+    assert not first_terminal["exported"]
+    assert first_terminal["issue_lifecycle"]["pending_coverage"]
+    assert not first_terminal["issue_lifecycle"].get("deferred_coverage_receipts")
+
+    monkeypatch.setattr(CheckpointStore, "save_stage", original_save)
+    resumed_provider = PendingGenericFixture()
+    resumed_service = FinalizationRecoveryModelService(service.plan, resumed_provider)
+    resumed = run_research(request, ResearchServices(evidence, resumed_service))
+    assert resumed.stop_reason == "completed_needs_review"
+    resumed_stages = [payload["stage"] for _, payload in resumed_provider.calls]
+    assert resumed_stages and all(stage.startswith(generation_stages(2)[1] + "-coverage-")
+                                  and stage != generation_stages(2)[1] + "-coverage-0"
+                                  for stage in resumed_stages)
+    terminal = read_json(request.output_dir / "reader_verification.json")["English"]
+    assert terminal["exported"]
+    assert len(terminal["issue_lifecycle"]["deferred_coverage_receipts"]) == 1
+    assert terminal["issue_lifecycle"]["pending_coverage_unresolved"] == []
+
+
+def test_deferred_span_error_does_not_waive_substantive_followup(tmp_path):
+    class Omitted(PendingGenericFixture):
+        def complete(self, role, payload, request):
+            reply = super().complete(role, payload, request)
+            if payload["stage"] == generation_stages(2)[1]:
+                reply.data["source_finding_followups"] = []
+            return reply
+
+    request, evidence, service, provider = _pending_generic(tmp_path, Omitted())
+    result = run_research(request, ResearchServices(evidence, service))
+    assert result.stop_reason == "stage_failed"
+    assert len(provider.calls) == 2
+    assert not read_json(request.output_dir / "reader_verification.json")["English"]["exported"]
+
+
+@pytest.mark.parametrize("stage_kind", ["writer", "factual"])
+def test_deferred_ledger_is_bound_at_both_new_paid_boundaries(tmp_path, stage_kind):
+    request, _, service, provider = _pending_generic(tmp_path)
+    plan = service.plan.plan
+    source_review = read_json(plan.source_dir / "reader_verification.json")["English"]["review"]
+    writer, factual = generation_stages(plan.revision_generation)
+    if stage_kind == "writer":
+        stage, role = writer, "editor"
+        research = {"source_candidate": plan.candidate,
+            "source_writer_stage": plan.source_writer_stage,
+            "repair_findings": source_review,
+            "source_terminal_review_sha256": plan.source_terminal_review_sha256,
+            "reader_revision_policy": plan.reader_revision_policy,
+            "source_text_witnesses": plan.source_witness_catalog}
+    else:
+        stage, role = factual, "verifier"
+        findings = {digest(item): item for item in source_review["findings"]}
+        research = {"source_terminal_review": {"stage": plan.candidate_review_stage,
+            "reader_sha256": plan.candidate["reader_sha256"],
+            "findings": [{"source_finding_sha256": key, **value}
+                         for key, value in findings.items()]},
+            "source_terminal_review_sha256": plan.source_terminal_review_sha256,
+            "source_text_witnesses": plan.source_witness_catalog}
+    service.validate_request(request, plan.frozen_inputs)
+    service._imported_stage_names = {item.stage for item in plan.imported_stages}
+    if stage_kind == "factual":
+        service._live_started = True
+    payload = {"stage": stage, "reader_revision_policy": plan.reader_revision_policy,
+        "revision_contract_sha256": plan.revision_contract_sha256,
+        "research": {**research, "pending_coverage": []}}
+    with pytest.raises(ValueError, match="bound source|bound source findings"):
+        service.call_origin(role, payload, request)
+    assert not provider.calls
 
 
 def test_generic_policy_bytes_are_bound_to_plan_and_authorization(tmp_path):
@@ -457,7 +690,7 @@ def test_generic_writer_boundary_and_lost_output_cannot_redispatch(tmp_path):
     service._imported_stage_names = {item.stage for item in plan.imported_stages}
     with pytest.raises(ValueError, match="bound source candidate"):
         service.call_origin("editor", {"stage": generation_stages(2)[0],
-            "reader_revision_policy": GENERIC_REVISION_POLICY,
+            "reader_revision_policy": plan.reader_revision_policy,
             "revision_contract_sha256": plan.revision_contract_sha256, "research": {}}, request)
     service._imported_stage_names.clear()
     first = run_research(request, ResearchServices(evidence, service, storage=LostOutput))

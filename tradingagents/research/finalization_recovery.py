@@ -29,11 +29,6 @@ from .evidence import validate_snapshot
 from .reader_revision import (
     FROZEN_REVIEW_STAGE,
     GENERATION_PATTERN,
-    GENERIC_CASHFLOW_POLICY,
-    GENERIC_FOLLOWUP_REQUIREMENTS,
-    GENERIC_REVISION_POLICY,
-    GENERIC_REVISION_REQUIREMENTS,
-    GENERIC_SHARED_CONTEXT_MIN_BYTES,
     READER_REVISION_POLICY,
     REVISE_STAGE,
     REVISED_REVIEW_STAGE,
@@ -42,7 +37,11 @@ from .reader_revision import (
     generic_coverage_stage,
     generic_review_stage,
 )
-from .review_lifecycle import compound_coverage_issues, source_passage_witnesses
+from .review_lifecycle import compound_coverage_issues
+from .revision_contracts import V3_CONTRACT, V4_CONTRACT
+from .revision_deferred import deferred_coverage_eligibility
+from .revision_lineage import lineage_sha256, source_revision_contracts
+from .revision_witness_selection import revision_witness_catalog
 from .services import ModelReply
 from .storage import (
     ENGINE_VERSION,
@@ -76,16 +75,7 @@ _CHECKPOINT_KEYS = {
 
 
 def _generic_revision_contract_sha256() -> str:
-    return digest({
-        "policy": GENERIC_REVISION_POLICY,
-        "writer_requirements": GENERIC_REVISION_REQUIREMENTS,
-        "factual_requirements": GENERIC_FOLLOWUP_REQUIREMENTS,
-        "cashflow_scope": GENERIC_CASHFLOW_POLICY,
-        "shared_context_min_bytes": GENERIC_SHARED_CONTEXT_MIN_BYTES,
-        "cost_aware_min_shared_bytes": 128,
-        "packing_policy": "original_value_row_tables_and_cost_aware_shared_v1",
-        "source_witness_policy": "finding_bound_exact_eligible_source_passage_v2",
-    })
+    return V3_CONTRACT.sha256
 
 
 class FinalizationRecoveryAuthorization(Contract):
@@ -147,6 +137,11 @@ class FinalizationContinuationPlan:
     revision_contract_sha256: str | None = None
     source_witness_catalog: dict[str, str] | None = None
     source_witness_catalog_sha256: str | None = None
+    prior_revision_contracts: tuple[dict[str, Any], ...] | None = None
+    prior_revision_contracts_sha256: str | None = None
+    deferred_coverage_eligibility: tuple[dict[str, Any], ...] | None = None
+    deferred_coverage_eligibility_sha256: str | None = None
+    source_issue_lifecycle_sha256: str | None = None
 
     def manifest(self) -> dict[str, Any]:
         return {
@@ -189,6 +184,10 @@ class FinalizationContinuationPlan:
                 "revision_contract_sha256": self.revision_contract_sha256,
                 "source_witness_catalog_sha256": self.source_witness_catalog_sha256}
                if self.revision_generation is not None else {}),
+            **({"prior_revision_contracts_sha256": self.prior_revision_contracts_sha256,
+                "deferred_coverage_eligibility_sha256": self.deferred_coverage_eligibility_sha256,
+                "source_issue_lifecycle_sha256": self.source_issue_lifecycle_sha256}
+               if self.reader_revision_policy == V4_CONTRACT.policy else {}),
         }
 
     @property
@@ -611,14 +610,10 @@ def prepare_finalization_continuation(
                                                   repair_verification=repair_verification,
                                                   generic_revision=generic_revision)
                               if revise_reader or repair_verification else {})
-        terminal_review = (_read_object(source_dir / "reader_verification.json")[
-            "English"]["review"] if generic_revision else None)
+        source_verification = (_read_object(source_dir / "reader_verification.json")[
+            "English"] if generic_revision else None)
+        terminal_review = source_verification["review"] if generic_revision else None
         source_terminal_review_sha256 = digest(terminal_review) if generic_revision else None
-        source_witness_catalog = (source_passage_witnesses(
-            validate_snapshot(EvidenceSnapshot.model_validate(
-                parse_json(source_inputs["evidence_path"])), source_request),
-            terminal_review["findings"])
-            if generic_revision else None)
         source_request_id = request_identity(source_request, source_inputs)
         lineage_hashes = _validate_source_lineage(
             source_dir,
@@ -626,6 +621,19 @@ def prepare_finalization_continuation(
             checkpoint["model_service_identity"],
             checkpoint["run_identity"],
         )
+        prior_contracts = (source_revision_contracts(
+            _read_object(source_dir / "recovery_provenance.json"),
+            lineage_hashes["recovery_provenance.json"], imported, generation - 1)
+            if generic_revision and generation > 2 else ())
+        target_contract = V4_CONTRACT if generic_revision else None
+        deferred = (deferred_coverage_eligibility(
+            source_verification, checkpoint["stages"], candidate["reader_text"])
+            if generic_revision else ())
+        source_witness_catalog = (revision_witness_catalog(target_contract,
+            validate_snapshot(EvidenceSnapshot.model_validate(
+                parse_json(source_inputs["evidence_path"])), source_request),
+            terminal_review["findings"], source_verification["issue_lifecycle"]["issues"])
+            if generic_revision else None)
         artifact_hashes = {
             FINALIZATION_CHECKPOINT_NAME: hashlib.sha256(checkpoint_bytes).hexdigest(),
             **lineage_hashes,
@@ -651,16 +659,23 @@ def prepare_finalization_continuation(
             new_request_identity=finalization_continuation_request_identity(
                 destination_request, destination_inputs
             ),
-            reader_revision_policy=(GENERIC_REVISION_POLICY if generic_revision else
+            reader_revision_policy=(target_contract.policy if generic_revision else
                                     READER_REVISION_POLICY if revise_reader else None),
             verification_repair_policy=VERIFICATION_REPAIR_POLICY if repair_verification else None,
             revision_generation=generation,
             source_writer_stage=source_writer,
             source_terminal_review_sha256=source_terminal_review_sha256,
-            revision_contract_sha256=(_generic_revision_contract_sha256()
+            revision_contract_sha256=(target_contract.sha256
                                       if generic_revision else None),
             source_witness_catalog=source_witness_catalog,
             source_witness_catalog_sha256=(digest(source_witness_catalog)
+                                           if generic_revision else None),
+            prior_revision_contracts=prior_contracts if generic_revision else None,
+            prior_revision_contracts_sha256=(lineage_sha256(prior_contracts)
+                                             if generic_revision else None),
+            deferred_coverage_eligibility=deferred if generic_revision else None,
+            deferred_coverage_eligibility_sha256=(digest(deferred) if generic_revision else None),
+            source_issue_lifecycle_sha256=(digest(source_verification["issue_lifecycle"])
                                            if generic_revision else None),
         )
     assert_finalization_source_unchanged(plan)
@@ -687,12 +702,19 @@ def _validate_plan_content(plan: FinalizationContinuationPlan) -> None:
     if plan.reader_revision_policy is not None:
         if plan.revision_generation is not None:
             generation, writer = _generic_source_generation(imported, review_stage)
-            if (plan.reader_revision_policy != GENERIC_REVISION_POLICY
+            if (plan.reader_revision_policy != V4_CONTRACT.policy
                     or plan.verification_repair_policy is not None
                     or not _is_hash(plan.source_terminal_review_sha256)
-                    or plan.revision_contract_sha256 != _generic_revision_contract_sha256()
+                    or plan.revision_contract_sha256 != V4_CONTRACT.sha256
                     or not isinstance(plan.source_witness_catalog, dict)
                     or digest(plan.source_witness_catalog) != plan.source_witness_catalog_sha256
+                    or not isinstance(plan.prior_revision_contracts, tuple)
+                    or lineage_sha256(plan.prior_revision_contracts)
+                    != plan.prior_revision_contracts_sha256
+                    or not isinstance(plan.deferred_coverage_eligibility, tuple)
+                    or digest(plan.deferred_coverage_eligibility)
+                    != plan.deferred_coverage_eligibility_sha256
+                    or not _is_hash(plan.source_issue_lifecycle_sha256)
                     or (generation, writer) != (plan.revision_generation, plan.source_writer_stage)):
                 raise ValueError("invalid generic revision policy or source writer")
         elif (plan.reader_revision_policy != READER_REVISION_POLICY
@@ -703,7 +725,12 @@ def _validate_plan_content(plan: FinalizationContinuationPlan) -> None:
           or plan.source_terminal_review_sha256 is not None
           or plan.revision_contract_sha256 is not None
           or plan.source_witness_catalog is not None
-          or plan.source_witness_catalog_sha256 is not None):
+          or plan.source_witness_catalog_sha256 is not None
+          or plan.prior_revision_contracts is not None
+          or plan.prior_revision_contracts_sha256 is not None
+          or plan.deferred_coverage_eligibility is not None
+          or plan.deferred_coverage_eligibility_sha256 is not None
+          or plan.source_issue_lifecycle_sha256 is not None):
         raise ValueError("unexpected generic revision generation")
     if plan.source_run_identity != digest(
         {"request": source_request_id, "model_service": plan.source_model_identity}
@@ -758,6 +785,28 @@ def assert_finalization_source_unchanged(
                 prepared.source_dir / "reader_verification.json")["English"]["review"]
             ) != prepared.source_terminal_review_sha256:
                 raise ValueError("reader revision terminal findings changed")
+            if prepared.reader_revision_policy == V4_CONTRACT.policy:
+                source_verification = _read_object(
+                    prepared.source_dir / "reader_verification.json")["English"]
+                checkpoint = parse_json(prepared.source_checkpoint_bytes)
+                prior = (source_revision_contracts(
+                    _read_object(prepared.source_dir / "recovery_provenance.json"),
+                    prepared.source_artifact_hashes["recovery_provenance.json"],
+                    prepared.imported_stages, prepared.revision_generation - 1)
+                    if prepared.revision_generation > 2 else ())
+                expected_deferred = deferred_coverage_eligibility(
+                    source_verification, checkpoint["stages"], prepared.candidate["reader_text"])
+                snapshot = validate_snapshot(EvidenceSnapshot.model_validate(
+                    parse_json(prepared.frozen_inputs["evidence_path"])), prepared.source_request)
+                expected_catalog = revision_witness_catalog(V4_CONTRACT,
+                    snapshot, source_verification["review"]["findings"],
+                    source_verification["issue_lifecycle"]["issues"])
+                if (prior != prepared.prior_revision_contracts
+                        or expected_deferred != prepared.deferred_coverage_eligibility
+                        or expected_catalog != prepared.source_witness_catalog
+                        or digest(source_verification["issue_lifecycle"])
+                        != prepared.source_issue_lifecycle_sha256):
+                    raise ValueError("numbered revision source contract or eligibility changed")
         artifact_hashes = {
             name: hashlib.sha256(_read_regular(prepared.source_dir / name)).hexdigest()
             for name in prepared.source_artifact_hashes
@@ -944,6 +993,12 @@ class FinalizationRecoveryModelService:
                 "revision_contract_sha256": plan.revision_contract_sha256,
                 "source_witness_catalog_sha256": plan.source_witness_catalog_sha256}
                if plan.revision_generation is not None else {}),
+            **({"prior_revision_contracts": list(plan.prior_revision_contracts or ()),
+                "prior_revision_contracts_sha256": plan.prior_revision_contracts_sha256,
+                "deferred_coverage_eligibility": list(plan.deferred_coverage_eligibility or ()),
+                "deferred_coverage_eligibility_sha256": plan.deferred_coverage_eligibility_sha256,
+                "source_issue_lifecycle_sha256": plan.source_issue_lifecycle_sha256}
+               if plan.reader_revision_policy == V4_CONTRACT.policy else {}),
             "authorization": {
                 **self.plan.authorization.model_dump(mode="json"),
                 "authorization_sha256": self.plan.authorization.authorization_sha256,
@@ -1198,7 +1253,8 @@ class FinalizationRecoveryModelService:
             allowed = stage in {writer, verifier} or (
                 stage.startswith(verifier + "-coverage-") and generic_coverage_stage(stage))
             if (not allowed or role != ("editor" if stage == writer else "verifier")
-                    or engine_payload.get("reader_revision_policy") != GENERIC_REVISION_POLICY
+                    or engine_payload.get("reader_revision_policy")
+                    != self.plan.plan.reader_revision_policy
                     or engine_payload.get("revision_contract_sha256")
                     != self.plan.plan.revision_contract_sha256):
                 raise ValueError("generic revision call is outside the authorized generation")
@@ -1211,9 +1267,13 @@ class FinalizationRecoveryModelService:
                         != self.plan.plan.source_terminal_review_sha256
                         or research.get("source_terminal_review_sha256")
                         != self.plan.plan.source_terminal_review_sha256
-                        or research.get("reader_revision_policy") != GENERIC_REVISION_POLICY
+                        or research.get("reader_revision_policy")
+                        != self.plan.plan.reader_revision_policy
                         or research.get("source_text_witnesses")
-                        != self.plan.plan.source_witness_catalog):
+                        != self.plan.plan.source_witness_catalog
+                        or (self.plan.plan.reader_revision_policy == V4_CONTRACT.policy
+                            and research.get("pending_coverage")
+                            != list(self.plan.plan.deferred_coverage_eligibility))):
                     raise ValueError("generic revision writer lacks the bound source candidate")
             if stage == verifier:
                 research = engine_payload.get("research")
@@ -1229,7 +1289,10 @@ class FinalizationRecoveryModelService:
                         or research.get("source_terminal_review_sha256")
                         != self.plan.plan.source_terminal_review_sha256
                         or research.get("source_text_witnesses")
-                        != self.plan.plan.source_witness_catalog):
+                        != self.plan.plan.source_witness_catalog
+                        or (self.plan.plan.reader_revision_policy == V4_CONTRACT.policy
+                            and research.get("pending_coverage")
+                            != list(self.plan.plan.deferred_coverage_eligibility))):
                     raise ValueError("numbered revision factual review omitted bound source findings")
         return "current_live"
 
