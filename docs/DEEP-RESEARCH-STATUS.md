@@ -78,6 +78,15 @@ diagnostic or merged code increment is not a completed or accepted report.
   level; this is not an exported or accepted reader. A later reserve-planning
   review fix, `740015e`, passed 42 focused tests and all six hosted checks; its
   review thread is resolved. The run stayed frozen at `2f0b8d2`; PR #28 is not merged.
+- Follow-up verification-only repair is implemented and reviewed in PR #28;
+  155 targeted tests passed (one optional packet test skipped). The unchanged candidate can receive fresh factual/complete coverage
+  checks after replaying all 68 saved calls, without another analyst or writer run.
+  A narrow evidence-bound split addresses the mixed pending-review/dependency
+  statement; financial scope limits remain reader-required. The new attestation
+  contract explicitly requires empty spans for audit-only decisions. Offline
+  rehearsal reached the exact frozen-reader boundary, reserving 1,983,755 tokens.
+  `verification_plan_1` is prepared at 3m additional tokens / 60 minutes / 600
+  seconds per call; supported Sol/xhigh preflight passed. No live outcome yet.
 
 See the [concise implementation record](DEEP-RESEARCH-PROGRESS.md) for completed
 checkpoints and the [latest validation evidence](archive/deep-research/DEEP-RESEARCH-FRESH-VALIDATION.md)
@@ -88,7 +97,7 @@ for exact attempts, bounds and usage.
 | Order | Deliverable | Completion evidence |
 | --- | --- | --- |
 | 1 — Done (engineering) | Integrate reviewed reader inputs and typed reconciliation | PRs #23 and #26 merged; reader assumption table, typed reconciliation and packet-validation fixes tested/reviewed. This is not final-reader delivery |
-| 2 — Revision complete; export blocked | Complete bounded NVDA finalization | Resolve the mixed stale-review/dependency obligation and add bounded malformed-disposition repair against exact unchanged reader bytes. Latest factual review is clean; 195/200 coverage IDs validated. Preserve all original responses and gates; no blind writer restart |
+| 2 — Verification repair reviewed; export blocked | Complete bounded NVDA finalization | Run bounded unchanged-reader factual/coverage checks under `verification_plan_1`. Latest completed run has clean factual review and 195/200 coverage IDs. Preserve original responses and gates; no blind writer restart |
 | 3 | Inspect the actual exported English reader | Still open: the revised candidate was independently inspected and its footnotes/calculation links checked, but no admitted export exists. Verify exported bytes and reader usefulness before user review |
 | 4 | Close targeted financial and independent-evidence gaps | Typed issuer-FCF/residual reconciliation and fresh source/arithmetic reviews delivered in PR #26; dependent fresh analysis completed, but the reader is blocked and economic/independent-demand gaps remain |
 | 5 | Prove HOOD generality | Distinct broker-equity/funding workflow, English reader and comparator review using the same core contracts |

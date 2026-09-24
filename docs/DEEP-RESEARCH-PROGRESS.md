@@ -5,6 +5,47 @@ and validation checkpoints, **not a second work queue**. For current priorities,
 open gates and user decisions, use the [current roadmap](DEEP-RESEARCH-STATUS.md).
 The [original implementation plan](DEEP-RESEARCH-PLAN.md) is preserved.
 
+## Frozen-reader verification repair — September 24
+
+Follow-up in [PR #28](https://github.com/maluyao002/TradingAgents/pull/28), still
+open and not merged: the user approved continuing the scoped repair and reasonable
+bounded validation without another approval stop. The new `--repair-verification`
+mode imports the completed 68-stage history, then permits only a new factual
+review and complete coverage pass against the unchanged revised candidate. It
+does not rerun analysts or writing. Policy, candidate hash, frozen inputs,
+destination and incremental allowance are bound to the new authorization.
+Unknown usage, lost paid output, altered reader bytes and renewed repair attempts
+fail closed. Historical reports and all original responses remain unchanged.
+
+The exact mixed stale-review/dependency obligation now has an opt-in split that
+requires current evaluated operating/cash-flow reviews and matching calculations.
+The former pending cash-flow-review status is satisfied only within that narrow
+scope; the dependency rule remains protected audit history, and conditional-review
+economic/financial limits remain reader-required. The new verifier instruction
+requires empty excerpt fields for audit-only decisions, not silent normalization
+of saved replies. Materiality and exact excerpts remain mandatory checks.
+
+Offline rehearsal replayed all **68** real saved calls and reached the new
+`verify_frozen_report` boundary with the exact candidate hash `7d9bfe93…3f06`,
+without invoking a model. The full pre-retirement factual/coverage reserve is
+**1,983,755 tokens**; time estimates for the new stage family are unknown, not
+a completion guarantee. A fresh `verification_plan_1` selects **3m additional
+tokens / 3,600 seconds / 600 seconds per call**, with no investigation cycles.
+The existing provider identity is unchanged and metadata-only GPT-6 Sol/xhigh
+preflight passed. Preparation is not a successful live run or reader acceptance.
+
+Targeted recovery/revision tests passed **54**, and directly affected engine,
+timing, compound-obligation, rendering and case regressions passed **74**, with
+one optional local-packet test skipped. Lint and whitespace checks passed.
+The 27 applicability regressions also passed: **155 targeted tests in total,
+one optional skip** across the three selections. Main review caught and fixed
+Python 3.10 UTC-suffix parsing; tests simulate that parser and preserve offsets.
+The reused Sol/high agent implemented only the applicability module/tests and
+independently reviewed the coordinator's engine/recovery/CLI changes, finding no
+actionable issues. Its overlapping 81-test check is not added to the total.
+All six hosted checks on prior documentation head
+`d5db0f2` passed; that is not CI evidence for this new increment.
+
 ## Single reader revision — September 24
 
 Follow-up engineering ([PR #28](https://github.com/maluyao002/TradingAgents/pull/28),
@@ -72,7 +113,7 @@ All six hosted checks passed on this fix and its GitHub thread is resolved.
 It was developed in a separate checkout: the live run stayed frozen at `2f0b8d2`
 until settlement and is not claimed as live validation of the later guard.
 
-Next engineering: scoped treatment of the mixed stale-review/dependency obligation
+The next engineering identified at that checkpoint was scoped treatment of the mixed stale-review/dependency obligation
 and bounded repair of malformed audit-only dispositions against unchanged reader
 bytes. Preserve original responses, exact-excerpt checks and financial gates;
 do not restart the writer blindly or automatically renew this one-revision path.

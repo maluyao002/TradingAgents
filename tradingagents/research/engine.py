@@ -53,10 +53,13 @@ from .prompt_context import model_input_bytes
 from .reader import ReaderIssue, render_reader
 from .reader_provenance import RENDERED_READER_POLICY, case_model_appendix, reader_provenance
 from .reader_revision import (
+    FROZEN_REVIEW_STAGE,
     READER_REVISION_POLICY,
     REVISE_STAGE,
     REVISED_REVIEW_STAGE,
     REVISION_REQUIREMENTS,
+    VERIFICATION_REPAIR_POLICY,
+    VERIFICATION_REPAIR_REQUIREMENTS,
 )
 from .rendering import render_references
 from .report_review import (
@@ -533,6 +536,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 payload = coverage_model_payload(request, data, stage, role_index, language)
                 if stage.startswith(REVISED_REVIEW_STAGE + "-coverage-"):
                     payload["reader_revision_policy"] = READER_REVISION_POLICY
+                if stage.startswith(FROZEN_REVIEW_STAGE + "-coverage-"):
+                    payload["verification_repair_policy"] = VERIFICATION_REPAIR_POLICY
+                    payload["system"] += " " + VERIFICATION_REPAIR_REQUIREMENTS
                 return payload
             payload = {**instruction(role, schema), "evidence": (
                 _prompt_evidence(snapshot, queries)),
@@ -561,6 +567,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 }
             if stage in {REVISE_STAGE, REVISED_REVIEW_STAGE}:
                 payload["reader_revision_policy"] = READER_REVISION_POLICY
+            if stage == FROZEN_REVIEW_STAGE:
+                payload["verification_repair_policy"] = VERIFICATION_REPAIR_POLICY
+                payload["system"] += " " + VERIFICATION_REPAIR_REQUIREMENTS
             if case_context is not None and not coverage_only and stage not in {"planner", "independent_challenge"}:
                 payload["financial_case"] = case_context.model_context()
                 payload["case_reader_delivery"] = case_reader_delivery(case_context)
@@ -640,7 +649,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 remember_coverage(output)
                 return output
             if (reuse_key is not None and reuse_key in coverage_reuse
-                    and not (candidate_recovery and candidate_recovery.get("reader_revision_policy")
+                    and not (candidate_recovery and (
+                        candidate_recovery.get("reader_revision_policy")
+                        or candidate_recovery.get("verification_repair_policy"))
                              and services.models.has_saved_reply(stage, payload))):
                 reused_stage, data = coverage_reuse[reuse_key]
                 output = schema.model_validate(data)
@@ -839,6 +850,11 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                      bind_case_state=bool(request.financial_case_path), case_context=case_context,
                                      bind_cashflow_inputs=ENGINE_VERSION == "research-v2-preview-12")
             rendered_hash = hashlib.sha256(rendered.reader_text.encode("utf-8")).hexdigest()
+            if stage == FROZEN_REVIEW_STAGE and (
+                    not candidate_recovery
+                    or candidate_recovery.get("verification_repair_policy") != VERIFICATION_REPAIR_POLICY
+                    or rendered_hash != candidate_recovery["candidate"]["reader_sha256"]):
+                raise ValueError("verification repair changed the authorized reader bytes")
             limitations = limitation_packet([*required_limitations(), *candidate.limitations])
             if bounded_review:
                 origins = case_context.limitation_origins if case_context else {}
@@ -908,9 +924,12 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 resolution_evidence = evidence_catalog(
                     snapshot, calculated_values, eligible_ids=_known_ids(snapshot), case_context=case_context,
                     issues=limitations, reader=rendered.reader_text,
+                    verification_repair=stage == FROZEN_REVIEW_STAGE,
                 )
                 limitations = split_compound_obligations(
-                    limitations, resolution_evidence, reader_revision=stage == REVISED_REVIEW_STAGE)
+                    limitations, resolution_evidence,
+                    reader_revision=stage in {REVISED_REVIEW_STAGE, FROZEN_REVIEW_STAGE},
+                    verification_repair=stage == FROZEN_REVIEW_STAGE)
                 factual_data.update(
                     inherited_issues=limitations, resolution_evidence=resolution_evidence,
                     resolution_witness_contract=resolution_witness_contract(
@@ -962,7 +981,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
 
                 factual_payloads[stage] = model_payload(
                     stage, "verifier", factual_data, LifecycleVerification, language)
-                if stage in {"verify_repaired_report", REVISED_REVIEW_STAGE}:
+                if stage in {"verify_repaired_report", REVISED_REVIEW_STAGE, FROZEN_REVIEW_STAGE}:
                     factual_payload = model_payload(stage, "verifier", factual_data, LifecycleVerification, language)
                     factual_cached = (store.load_stage(stage, factual_payload) is not None
                         or getattr(services.models, "has_saved_reply", lambda *_: False)(stage, factual_payload))
@@ -1482,11 +1501,13 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     draft = prepare_draft(source_draft, request.report_language)
                     final_review, rendered = verify_reader(
                         draft, request.report_language, "verify_repaired_report", authored=source_draft)
-                if candidate_recovery and candidate_recovery.get("reader_revision_policy"):
-                    if (candidate_recovery["reader_revision_policy"] != READER_REVISION_POLICY
+                if candidate_recovery and (candidate_recovery.get("reader_revision_policy")
+                                           or candidate_recovery.get("verification_repair_policy")):
+                    replay_revision = bool(candidate_recovery.get("verification_repair_policy"))
+                    if ((not replay_revision and candidate_recovery["reader_revision_policy"] != READER_REVISION_POLICY)
                             or reader_verifications[request.report_language]["stage"] != "verify_repaired_report"
-                            or reader_verifications[request.report_language]["reader_sha256"]
-                            != candidate_recovery["candidate"]["reader_sha256"]):
+                            or (not replay_revision and reader_verifications[request.report_language]["reader_sha256"]
+                                != candidate_recovery["candidate"]["reader_sha256"])):
                         raise ValueError("revision source reconstruction differs from the authorized candidate")
                     # Keep all historical findings, but no old retirement or coverage
                     # decision can attest a new candidate, even if its text is identical.
@@ -1504,7 +1525,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     active_stage = REVISE_STAGE
                     revision_payload = model_payload(REVISE_STAGE, "editor", revision_data,
                                                      draft_schema, request.report_language)
-                    revision_cached = (store.load_stage(REVISE_STAGE, revision_payload) is not None)
+                    revision_cached = (store.load_stage(REVISE_STAGE, revision_payload) is not None
+                        or getattr(services.models, "has_saved_reply", lambda *_: False)(REVISE_STAGE, revision_payload))
                     reader_bytes = len(rendered.reader_text.encode("utf-8"))
                     # Budget a writer plus full factual/coverage pass, with explicit
                     # growth assumptions. Exact post-writer admission remains mandatory.
@@ -1560,6 +1582,15 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     draft = prepare_draft(source_draft, request.report_language)
                     final_review, rendered = verify_reader(
                         draft, request.report_language, REVISED_REVIEW_STAGE, authored=source_draft)
+                    if replay_revision:
+                        if (reader_verifications[request.report_language]["reader_sha256"]
+                                != candidate_recovery["candidate"]["reader_sha256"]):
+                            raise ValueError("verification source reconstruction differs from authorized candidate")
+                        reviews.extend(final_review.findings)
+                        retired_reader_texts.clear()
+                        coverage_reuse.clear()
+                        final_review, rendered = verify_reader(
+                            draft, request.report_language, FROZEN_REVIEW_STAGE, authored=source_draft)
             else:
                 final_review = call("verify_report", "verifier",
                                     {"draft": draft.model_dump(mode="json"), "analyses": outputs,

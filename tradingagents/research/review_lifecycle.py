@@ -9,6 +9,7 @@ import json
 import re
 from collections import Counter
 from copy import deepcopy
+from datetime import datetime
 from hashlib import sha256
 from typing import Literal
 
@@ -93,6 +94,13 @@ _RECONCILIATION_LINEAGE = (
     "require a new dependent review."
 )
 
+_DEPENDENT_REVIEW_REFRESH = (
+    "All nine new facts and the operating package have new evidence/case identities. "
+    "Dependent analysis must be refreshed; no old analyst answer, operating review or "
+    "cash-flow review is transferred. The pending cash-flow package has review null "
+    "and requires a separate independent review after operating attachment."
+)
+
 
 def _component(name, text, *, status, reader_treatment, scope):
     return {
@@ -105,6 +113,40 @@ def _component(name, text, *, status, reader_treatment, scope):
 
 
 _COMPOUND_PROFILES = {
+    _DEPENDENT_REVIEW_REFRESH: {
+        "profile": "dependent_review_refresh_and_current_cashflow_scope",
+        "requires_operating_evidence": False,
+        "requires_cashflow_evidence": True,
+        "evidence_binding_id": "dependent_cashflow_review",
+        "verification_repair_only": True,
+        "components": (
+            _component(
+                "current_dependent_cashflow_review",
+                "The current conditional cash-flow package has a separate independent "
+                "review bound to the current case, evidence and reviewed operating package; "
+                "the historical pending-review status no longer describes this package.",
+                status="satisfied_current_evidence", reader_treatment="audit_only_satisfied",
+                scope="conditional_cashflow_review_only",
+            ),
+            _component(
+                "new_identities_and_dependent_refresh_control",
+                "The nine added facts and operating package changed evidence/case identities. "
+                "Dependent analysis must use those identities; no old analyst answer or "
+                "review transfers to changed inputs. This rule remains protected audit "
+                "history, not an attestation that every dependent analysis is fresh.",
+                status="open_procedural", reader_treatment="audit_only_procedural",
+                scope="dependent_analysis_and_review_reexecution_control",
+            ),
+            _component(
+                "conditional_cashflow_review_scope",
+                "The separate cash-flow review covers stated assumptions and calculations, "
+                "not approval of economic forecasts, financial schedules, valuation, "
+                "per-share value or company-wide funding adequacy.",
+                status="current_boundary", reader_treatment="reader_required",
+                scope="conditional_cashflow_not_financial_or_economic_approval",
+            ),
+        ),
+    },
     _RECONCILIATION_LINEAGE: {
         "profile": "reconciliation_review_lineage_only",
         "requires_operating_evidence": False,
@@ -310,6 +352,89 @@ def _operating_package_binding(evidence):
     }
 
 
+def _cashflow_package_binding(evidence):
+    """Bind only current evaluated reviews and their complete eligible cash catalog.
+
+    This does not attest analysis freshness, source authenticity or economics.
+    The producer is the opt-in catalog of a validated CaseContext, not reader prose.
+    """
+    operating_binding = _operating_package_binding(evidence)
+    if operating_binding is None:
+        return None
+    reference = "review:cashflow_bridge"
+    try:
+        operating = json.loads(evidence["review:operating_scenarios"])
+        review = json.loads(evidence[reference])
+        if not isinstance(review, dict):
+            return None
+        dates = (review["reviewed_at"], operating["reviewed_at"])
+        if not all(isinstance(value, str) for value in dates):
+            return None
+        # Python 3.10 does not accept the ISO UTC Z suffix.
+        reviewed_at, operating_at = (
+            datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value)
+            for value in dates
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+    if (
+        reviewed_at.utcoffset() is None or operating_at.utcoffset() is None
+        or reviewed_at < operating_at
+        or review.get("context_kind") != "reviewed_conditional_cash_flow_bridge"
+        or review.get("reviewed") is not True
+        or review.get("decision") != "conditional_cash_flow_bridge"
+        or review.get("review_status") != "independently_reviewed_conditional_not_approval"
+        or any(not isinstance(review.get(key), str)
+               or re.fullmatch(r"[a-f0-9]{64}", review[key]) is None
+               for key in ("package_sha256", "case_sha256", "evidence_sha256",
+                           "operating_package_sha256", "model_result_sha256", "review_sha256",
+                           "operating_review_sha256"))
+        or not isinstance(operating.get("review_sha256"), str)
+        or re.fullmatch(r"[a-f0-9]{64}", operating["review_sha256"]) is None
+        or review["operating_package_sha256"] != operating["package_sha256"]
+        or review["operating_review_sha256"] != operating["review_sha256"]
+        or any(review[key] != operating[key] for key in ("case_sha256", "evidence_sha256"))
+    ):
+        return None
+    identifiers = review.get("calculated_value_ids")
+    if (not isinstance(identifiers, list) or not identifiers
+            or not all(isinstance(i, str) and i.startswith("cashflow_bridge.") for i in identifiers)
+            or len(set(identifiers)) != len(identifiers)
+            or "cashflow_bridge.historical.bridge_cash_flow" not in identifiers
+            or {"calculation:" + i for i in identifiers} != {
+                key for key in evidence if key.startswith("calculation:cashflow_bridge.")}):
+        return None
+    bound = {reference: evidence[reference],
+             "review:operating_scenarios": evidence["review:operating_scenarios"]}
+    for identifier in identifiers:
+        key = "calculation:" + identifier
+        try:
+            record = json.loads(evidence[key])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if (not isinstance(record, dict) or record.get("id") != identifier
+                or record.get("valuation_method") != "cashflow_bridge"
+                or record.get("model_input_sha256") != review["package_sha256"]
+                or record.get("model_result_sha256") != review["model_result_sha256"]
+                or record.get("unit") != "USD" or record.get("currency") != "USD"
+                or not record.get("evidence_ids")):
+            return None
+        bound[key] = evidence[key]
+    return {
+        "binding_id": "dependent_cashflow_review",
+        "catalog_sha256": digest(bound),
+        "package_sha256": review["package_sha256"],
+        "operating_binding": operating_binding,
+        "witnesses": [
+            {"reference": reference, "excerpt": evidence[reference]},
+            {"reference": "review:operating_scenarios",
+             "excerpt": evidence["review:operating_scenarios"]},
+            *({"reference": "calculation:" + identifier,
+               "excerpt": f'"id":"{identifier}"'} for identifier in identifiers),
+        ],
+    }
+
+
 def _compound_payload(issue, profile, evidence_binding):
     components = []
     for component in profile["components"]:
@@ -364,8 +489,9 @@ def compound_obligation_contract_valid(issue):
         item = deepcopy(component)
         item["component_id"] = f'{issue.get("issue_id")}#component:{item["name"]}'
         if item["status"] == "satisfied_current_evidence":
-            item["evidence_binding_id"] = "operating_package"
-            if "operating_package" not in binding_ids:
+            binding_id = profile.get("evidence_binding_id", "operating_package")
+            item["evidence_binding_id"] = binding_id
+            if binding_id not in binding_ids:
                 return False
         expected.append(item)
     if compound.get("components") != expected:
@@ -380,14 +506,14 @@ def compound_obligation_evidence_valid(issue, evidence):
     if not compound_obligation_contract_valid(issue):
         return False
     profile = _COMPOUND_PROFILES[issue["text"]]
-    expected = (
-        [_operating_package_binding(evidence)]
-        if profile["requires_operating_evidence"] else []
-    )
+    expected = ([_cashflow_package_binding(evidence)] if profile.get("requires_cashflow_evidence")
+                else [_operating_package_binding(evidence)]
+                if profile["requires_operating_evidence"] else [])
     return None not in expected and issue["compound_obligation"]["evidence_bindings"] == expected
 
 
-def split_compound_obligations(issues, evidence, *, reader_revision=False):
+def split_compound_obligations(issues, evidence, *, reader_revision=False,
+                               verification_repair=False):
     """Attach conservative atomic coverage components to exact known legacy issues.
 
     Original issue IDs and text are never replaced. Similar or unmatched prose is
@@ -404,7 +530,10 @@ def split_compound_obligations(issues, evidence, *, reader_revision=False):
         if profile is None or (profile.get("revision_only") and not reader_revision):
             result.append(item)
             continue
-        if profile.get("revision_only") and any(
+        if profile.get("verification_repair_only") and not verification_repair:
+            result.append(item)
+            continue
+        if (profile.get("revision_only") or profile.get("verification_repair_only")) and any(
             finding.get("category") == "security" or (
                 finding.get("category") == "numerical" and finding.get("severity") == "critical")
             for finding in item.get("prior_findings", ())
@@ -415,6 +544,11 @@ def split_compound_obligations(issues, evidence, *, reader_revision=False):
             result.append(item)
             continue
         binding = operating_binding if profile["requires_operating_evidence"] else None
+        if profile.get("requires_cashflow_evidence"):
+            binding = _cashflow_package_binding(evidence)
+            if binding is None:
+                result.append(item)
+                continue
         item["compound_obligation"] = _compound_payload(item, profile, binding)
         reasons = tuple(item.get("resolution_protection_reasons", ()))
         reason = "compound_obligation_has_current_or_open_components"
@@ -587,7 +721,7 @@ def enrich_issues(issues, outputs, prior_findings, protected_texts=(), limitatio
 
 def _catalog_reference(reference):
     """Return the catalog namespace for an exact, admissible reference."""
-    if reference == "review:operating_scenarios":
+    if reference in {"review:operating_scenarios", "review:cashflow_bridge"}:
         return "review"
     for namespace in ("fact", "calculation"):
         prefix = namespace + ":"
@@ -614,7 +748,8 @@ def resolution_witness_contract(evidence, reader):
     if invalid:
         raise ValueError("resolution evidence contains non-catalog references")
     return {
-        "catalog_key_formats": EVIDENCE_REFERENCE_CONTRACT,
+        "catalog_key_formats": (*EVIDENCE_REFERENCE_CONTRACT, "review:cashflow_bridge")
+        if "review:cashflow_bridge" in evidence else EVIDENCE_REFERENCE_CONTRACT,
         "catalog_keys": tuple(sorted(evidence)),
         "claim_change": {
             "allowed_issue_subject": "historical_claim_defect",
@@ -683,7 +818,7 @@ def claim_change_evidence(issues, reader):
 
 
 def evidence_catalog(snapshot, calculated_values, *, eligible_ids=None, case_context=None,
-                     issues=None, reader=None):
+                     issues=None, reader=None, verification_repair=False):
     # Facts and calculations have validated provenance. The verifier also receives
     # the normal source-context payload; existence of a witness is not entailment.
     records = [("fact:" + f.id, f) for f in snapshot.facts
@@ -697,11 +832,30 @@ def evidence_catalog(snapshot, calculated_values, *, eligible_ids=None, case_con
                 catalog[f"passage:{passage.source_id}:{passage.start}:{passage.end}"] = passage.text
         operating = case_context.operating_scenarios
         if operating is not None and operating.reviewed:
-            catalog["review:operating_scenarios"] = canonical_json({
+            operating_record = {
                 key: operating.model_context[key] for key in (
                     "context_kind", "reviewed", "decision", "package_sha256", "case_sha256", "evidence_sha256"
                 )
-            }).decode("utf-8")
+            }
+            if verification_repair:
+                operating_record.update(
+                    review_sha256=digest(operating.model_context["review"]),
+                    reviewed_at=operating.model_context["review"]["reviewed_at"],
+                )
+            catalog["review:operating_scenarios"] = canonical_json(operating_record).decode("utf-8")
+            if verification_repair:
+                cashflow = case_context.cashflow_bridge
+                if cashflow is not None and cashflow.reviewed:
+                    context = cashflow.model_context
+                    record = {key: context[key] for key in (
+                        "context_kind", "reviewed", "decision", "review_status", "package_sha256",
+                        "case_sha256", "evidence_sha256", "operating_package_sha256",
+                        "model_result_sha256", "calculated_value_ids",
+                    )}
+                    record.update(review_sha256=digest(context["review"]),
+                                  reviewed_at=context["review"]["reviewed_at"],
+                                  operating_review_sha256=operating_record["review_sha256"])
+                    catalog["review:cashflow_bridge"] = canonical_json(record).decode("utf-8")
     if (issues is None) != (reader is None):
         raise ValueError("issues and reader are both required for claim-change evidence")
     if issues is not None:

@@ -3,6 +3,19 @@
 READER_REVISION_POLICY = "frozen-candidate-revision-v1"
 REVISE_STAGE = "revise_report"
 REVISED_REVIEW_STAGE = "verify_revised_report"
+VERIFICATION_REPAIR_POLICY = "frozen-candidate-verification-v1"
+FROZEN_REVIEW_STAGE = "verify_frozen_report"
+
+VERIFICATION_REPAIR_REQUIREMENTS = (
+    "This is a new attestation of the unchanged candidate, not permission to edit "
+    "the reader or waive a finding. Reevaluate materiality and evidence independently. "
+    "For audit_only_operational or audit_only_immaterial decisions, reader_excerpt "
+    "must be an empty string and reader_excerpts must be empty. Do not attach contextual reader "
+    "quotes to audit-only decisions. If a material caveat requires reader prose, use "
+    "reader_covered with exact spans or unresolved; never force audit-only to satisfy "
+    "the schema. Code-owned satisfied components are limited to their exact bound "
+    "review scope; no financial, valuation, funding or user acceptance transfers."
+)
 
 REVISION_REQUIREMENTS = (
     "Revise the exact failed candidate using the frozen evidence and every remaining "

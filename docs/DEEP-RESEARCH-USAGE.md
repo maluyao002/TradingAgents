@@ -455,6 +455,29 @@ are not blanket-reclassified. Exact reader excerpts remain mandatory; mismatches
 are failures, never silently normalized. Failure still withholds export. Reader,
 financial and production acceptance remain separate gates.
 
+### Frozen-reader verification repair
+
+Use `--repair-verification` (instead of `--revise-reader`) on both preparation
+and execution to recheck a **terminal failed `verify_revised_report` candidate**
+whose factual review is clean and complete coverage history/usage are settled.
+This mode binds `frozen-candidate-verification-v1` into the plan and authorization,
+replays the complete exact prefix, then permits only `verify_frozen_report` and
+its coverage batches. It cannot write a new reader, change the candidate hash,
+renew itself or redispatch a paid call whose output was lost. The exact factual
+and complete coverage path is reserved before the first new call; unknown usage
+stops further dispatch. Use a fresh destination and a separately authorized
+incremental allowance, under the existing process supervisor and call deadlines.
+
+The new attestation explicitly distinguishes audit-only decisions (empty excerpt
+fields) from material reader coverage (literal supporting spans). Saved malformed
+responses are retained unchanged, not stripped or silently accepted. An exact
+known mixed dependency-review obligation can be split only when current evaluated
+operating and cash-flow reviews and calculation identities bind together; its
+procedural history remains protected, and conditional-review economic/financial
+limits remain reader-required. Historical payloads do not acquire this policy.
+Any new warning or invalid disposition still withholds export. This is verification
+of unchanged reader bytes, not fresh analysis, financial approval or user acceptance.
+
 ### Separate one-call valuation diagnostic
 
 After explicit live authorization, `scripts.research_model_probe` accepts a normal

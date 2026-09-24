@@ -25,7 +25,13 @@ from typing import Any, Literal
 from pydantic import AwareDatetime, Field, field_validator
 
 from .contracts import Budget, Contract, ResearchRequest, Usage
-from .reader_revision import READER_REVISION_POLICY, REVISE_STAGE
+from .reader_revision import (
+    FROZEN_REVIEW_STAGE,
+    READER_REVISION_POLICY,
+    REVISE_STAGE,
+    REVISED_REVIEW_STAGE,
+    VERIFICATION_REPAIR_POLICY,
+)
 from .review_lifecycle import compound_coverage_issues
 from .services import ModelReply
 from .storage import (
@@ -111,6 +117,7 @@ class FinalizationContinuationPlan:
     candidate_review_stage: str
     new_request_identity: str
     reader_revision_policy: str | None = None
+    verification_repair_policy: str | None = None
 
     def manifest(self) -> dict[str, Any]:
         return {
@@ -145,6 +152,8 @@ class FinalizationContinuationPlan:
             "automatic_or_live_action": False,
             **({"reader_revision_policy": self.reader_revision_policy}
                if self.reader_revision_policy is not None else {}),
+            **({"verification_repair_policy": self.verification_repair_policy}
+               if self.verification_repair_policy is not None else {}),
         }
 
     @property
@@ -304,14 +313,16 @@ def _parse_stages(raw: Any) -> tuple[ImportedFinalizationStage, ...]:
 
 
 def _validate_candidate(
-    checkpoint: dict[str, Any], imported: tuple[ImportedFinalizationStage, ...]
+    checkpoint: dict[str, Any], imported: tuple[ImportedFinalizationStage, ...],
+    *, repair_verification: bool = False,
 ) -> tuple[dict[str, Any], str]:
     candidate = checkpoint["candidate"]
     review_stage = checkpoint["candidate_review_stage"]
     if (
         not isinstance(candidate, dict)
         or set(candidate) != {"stage", "reader_sha256", "reader_text"}
-        or candidate.get("stage") not in _SUPPORTED_CANDIDATE_STAGES
+        or candidate.get("stage") not in (
+            {REVISED_REVIEW_STAGE} if repair_verification else _SUPPORTED_CANDIDATE_STAGES)
         or not _is_hash(candidate.get("reader_sha256"))
         or not isinstance(candidate.get("reader_text"), str)
         or hashlib.sha256(candidate["reader_text"].encode("utf-8")).hexdigest()
@@ -321,7 +332,8 @@ def _validate_candidate(
         raise ValueError("invalid factual-reviewed reader candidate")
     by_stage = {item.stage: item for item in imported}
     factual = by_stage.get(review_stage)
-    draft_stage = "editor" if review_stage == "verify_report" else "repair_report"
+    draft_stage = (REVISE_STAGE if repair_verification else
+                   "editor" if review_stage == "verify_report" else "repair_report")
     if (
         factual is None
         or factual.role != "verifier"
@@ -366,9 +378,10 @@ def _validate_source_lineage(
     return {"recovery_provenance.json": hashlib.sha256(content).hexdigest()}
 
 
-def _revision_artifacts(source_dir, candidate, imported, source_usage):
+def _revision_artifacts(source_dir, candidate, imported, source_usage, *, repair_verification=False):
     """Bind a terminal failed repair, never an in-flight or already revised reader."""
-    if candidate["stage"] != "verify_repaired_report":
+    review_stage = REVISED_REVIEW_STAGE if repair_verification else "verify_repaired_report"
+    if candidate["stage"] != review_stage:
         raise ValueError("reader revision requires a previously repaired candidate")
     contents = {name: _read_regular(source_dir / name)
                 for name in ("result.json", "reader_verification.json")}
@@ -404,22 +417,30 @@ def _revision_artifacts(source_dir, candidate, imported, source_usage):
             or not all(isinstance(i, str) for i in b["issue_ids"]) for b in batches)
             or Counter(i for b in batches for i in b["issue_ids"]) != Counter(expected_ids)):
         raise ValueError("reader revision coverage does not cover every required obligation")
-    expected = {f"verify_repaired_report-coverage-{i}" for i in range(len(batches))}
-    if (expected != {name for name in stages if name.startswith("verify_repaired_report-coverage-")}
-            or any(batch.get("stage") != f"verify_repaired_report-coverage-{i}"
+    expected = {f"{review_stage}-coverage-{i}" for i in range(len(batches))}
+    if (expected != {name for name in stages if name.startswith(f"{review_stage}-coverage-")}
+            or any(batch.get("stage") != f"{review_stage}-coverage-{i}"
                    or batch.get("reader_sha256") != candidate["reader_sha256"]
                    or not stages[batch["stage"]].output.get("reviewed_report")
                    for i, batch in enumerate(batches))):
         raise ValueError("reader revision coverage inventory differs from checkpoint")
-    if any(item.stage.startswith(("revise_report", "verify_revised_report")) for item in imported):
+    if repair_verification:
+        factual = stages[review_stage].output
+        if (factual.get("findings") or factual.get("contradicted_claim_ids")
+                or any(item.stage.startswith(FROZEN_REVIEW_STAGE) for item in imported)):
+            raise ValueError("verification repair requires clean factual review and cannot renew itself")
+    elif any(item.stage.startswith(("revise_report", "verify_revised_report")) for item in imported):
         raise ValueError("reader revision cannot renew a previous revision")
     return {name: hashlib.sha256(content).hexdigest() for name, content in contents.items()}
 
 
 def prepare_finalization_continuation(
-    source_dir: Path, destination_request: ResearchRequest, *, revise_reader: bool = False
+    source_dir: Path, destination_request: ResearchRequest, *, revise_reader: bool = False,
+    repair_verification: bool = False,
 ) -> FinalizationContinuationPlan:
     """Prepare and content-bind a candidate continuation without live calls."""
+    if revise_reader and repair_verification:
+        raise ValueError("writer revision and verification repair are mutually exclusive")
     source_dir = Path(source_dir)
     if source_dir.is_symlink() or not source_dir.is_dir():
         raise ValueError("source run must be a real directory")
@@ -469,9 +490,11 @@ def prepare_finalization_continuation(
         if any(sum(getattr(item.usage, field) for item in imported) > getattr(source_usage, field)
                for field in ("input_tokens", "output_tokens", "cached_input_tokens", "reasoning_output_tokens")):
             raise ValueError("source cumulative usage omits saved stage usage")
-        candidate, review_stage = _validate_candidate(checkpoint, imported)
-        revision_artifacts = (_revision_artifacts(source_dir, candidate, imported, source_usage)
-                              if revise_reader else {})
+        candidate, review_stage = _validate_candidate(
+            checkpoint, imported, repair_verification=repair_verification)
+        revision_artifacts = (_revision_artifacts(source_dir, candidate, imported, source_usage,
+                                                  repair_verification=repair_verification)
+                              if revise_reader or repair_verification else {})
         source_request_id = request_identity(source_request, source_inputs)
         lineage_hashes = _validate_source_lineage(
             source_dir,
@@ -505,6 +528,7 @@ def prepare_finalization_continuation(
                 destination_request, destination_inputs
             ),
             reader_revision_policy=READER_REVISION_POLICY if revise_reader else None,
+            verification_repair_policy=VERIFICATION_REPAIR_POLICY if repair_verification else None,
         )
     assert_finalization_source_unchanged(plan)
     return plan
@@ -516,10 +540,16 @@ def _validate_plan_content(plan: FinalizationContinuationPlan) -> None:
         raise ValueError("prepared finalization checkpoint bytes are invalid")
     source_request = ResearchRequest.model_validate(checkpoint["request"])
     imported = _parse_stages(checkpoint["stages"])
-    candidate, review_stage = _validate_candidate(checkpoint, imported)
+    candidate, review_stage = _validate_candidate(
+        checkpoint, imported, repair_verification=plan.verification_repair_policy is not None)
     expected_input_paths = _request_input_paths(source_request)
     source_request_id = request_identity(source_request, plan.frozen_inputs)
     expected_artifact_names = {FINALIZATION_CHECKPOINT_NAME}
+    if plan.verification_repair_policy is not None:
+        if (plan.verification_repair_policy != VERIFICATION_REPAIR_POLICY
+                or plan.reader_revision_policy is not None or review_stage != REVISED_REVIEW_STAGE):
+            raise ValueError("invalid verification repair policy or source candidate")
+        expected_artifact_names.update({"result.json", "reader_verification.json"})
     if plan.reader_revision_policy is not None:
         if (plan.reader_revision_policy != READER_REVISION_POLICY
                 or review_stage != "verify_repaired_report"):
@@ -566,9 +596,10 @@ def assert_finalization_source_unchanged(
     prepared = plan.plan if isinstance(plan, AuthorizedFinalizationContinuation) else plan
     _validate_plan_content(prepared)
     with _source_lock(prepared.source_dir):
-        if prepared.reader_revision_policy is not None:
+        if prepared.reader_revision_policy is not None or prepared.verification_repair_policy is not None:
             revision_hashes = _revision_artifacts(prepared.source_dir, prepared.candidate,
-                                                 prepared.imported_stages, prepared.source_usage)
+                                                 prepared.imported_stages, prepared.source_usage,
+                                                 repair_verification=prepared.verification_repair_policy is not None)
             if any(prepared.source_artifact_hashes.get(name) != value
                    for name, value in revision_hashes.items()):
                 raise ValueError("reader revision terminal artifacts changed")
@@ -749,6 +780,8 @@ class FinalizationRecoveryModelService:
             "candidate_review_stage": plan.candidate_review_stage,
             **({"reader_revision_policy": plan.reader_revision_policy}
                if plan.reader_revision_policy is not None else {}),
+            **({"verification_repair_policy": plan.verification_repair_policy}
+               if plan.verification_repair_policy is not None else {}),
             "authorization": {
                 **self.plan.authorization.model_dump(mode="json"),
                 "authorization_sha256": self.plan.authorization.authorization_sha256,
@@ -864,6 +897,13 @@ class FinalizationRecoveryModelService:
                 or state["live_boundary"]["role"] != "editor"
             ):
                 raise ValueError("reader revision restored state lacks the complete prefix/revision boundary")
+            if self.plan.plan.verification_repair_policy is not None and (
+                set(call_names) != set(saved_by_stage)
+                or state["live_boundary"]["stage"] != FROZEN_REVIEW_STAGE
+                or any(call["role"] != "verifier" or not self._verification_stage(call["stage"])
+                       for call in calls)
+            ):
+                raise ValueError("verification repair restored state violates its frozen verifier boundary")
         elif state["live_boundary"] is not None or calls:
             raise ValueError("candidate-recovery non-live state contains current calls")
         self._imported_stage_names = set(state["imported_stage_names"])
@@ -923,10 +963,17 @@ class FinalizationRecoveryModelService:
             raise ValueError(
                 "candidate factual-review stage must be replayed before live continuation"
             )
-        if self.plan.plan.reader_revision_policy is not None and self._imported_stage_names != {
+        if (self.plan.plan.reader_revision_policy is not None
+                or self.plan.plan.verification_repair_policy is not None) and self._imported_stage_names != {
             item.stage for item in self.plan.plan.imported_stages
         }:
             raise ValueError("reader revision requires the complete exact source prefix")
+
+    @staticmethod
+    def _verification_stage(stage):
+        return stage == FROZEN_REVIEW_STAGE or (
+            isinstance(stage, str) and stage.startswith(FROZEN_REVIEW_STAGE + "-coverage-")
+            and stage.removeprefix(FROZEN_REVIEW_STAGE + "-coverage-").isdigit())
 
     def call_origin(self, role: str, payload: dict[str, Any], request: ResearchRequest) -> str:
         self._require_validated_request(request)
@@ -956,6 +1003,15 @@ class FinalizationRecoveryModelService:
             self._require_candidate_boundary()
             if self.plan.plan.reader_revision_policy is not None and stage != REVISE_STAGE:
                 raise ValueError("reader revision must start at its explicit revision boundary")
+            if self.plan.plan.verification_repair_policy is not None and stage != FROZEN_REVIEW_STAGE:
+                raise ValueError("verification repair must start at its explicit factual boundary")
+        if self.plan.plan.verification_repair_policy is not None:
+            research = engine_payload.get("research", {})
+            if (role != "verifier" or not self._verification_stage(stage)
+                    or engine_payload.get("verification_repair_policy") != VERIFICATION_REPAIR_POLICY
+                    or research.get("rendered_reader") != self.plan.plan.candidate["reader_text"]
+                    or research.get("rendered_reader_sha256") != self.plan.plan.candidate["reader_sha256"]):
+                raise ValueError("verification repair may only verify the unchanged authorized reader")
         return "current_live"
 
     def complete(self, role: str, payload: dict[str, Any], request: ResearchRequest) -> ModelReply:
