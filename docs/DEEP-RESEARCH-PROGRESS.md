@@ -7,7 +7,36 @@ The [original implementation plan](DEEP-RESEARCH-PLAN.md) is preserved.
 
 ## Numbered reader repair and latest validation — September 24
 
-Latest offline increment is reviewed and committed in **`fa997fb` / `b1b2654`**
+The subsequent v5 repair is implemented in **`72f2495`** with CLI support in
+**`50983e9`**, on PR #28 and not merged. It preserves v3/v4 replay, carries the
+two unresolved response-error obligations from hash-verified original contexts,
+and keeps lifecycle and source-followup witness fields separate. Fresh accepted
+single-issue factual corrections now reach coverage as bound context, not issue
+retirement or financial approval. Invalid quotes remain rejected. Pinned coverage
+slots plus a bounded sum of positive complete-input/prompt growth prevent that
+context from silently creating extra calls; no truncation or fallback rebatching.
+
+Independent review fixed origin-directory write protection, exact factual-input
+binding and the pre-factual coverage reserve/call-count gap. The adjusted hard-cap
+status is also recomputed truthfully. **159 distinct targeted tests pass** (124
+recovery/contract/scheduling, 30 correction-context and five CLI); independent
+rechecks overlap and are not added. Ruff and whitespace checks pass. No actionable
+findings remain in the reviewed scopes. The first 129-stage rehearsal preserved
+history but stopped before any provider call on a 7,180,148-token estimate against
+a 6m draft allowance. After the reviewed global-delta reserve fix, the full
+**129-stage rehearsal passes**: writer **852,866 bytes**, baseline factual
+**982,216** plus 16,384-byte headroom, synthetic factual **982,485**, and twenty
+base coverage prompts **33,812–42,114** (worst allowed decorated prompt **106,114**).
+Both large boundaries roundtrip exactly; original source integrity and frozen
+code fingerprint are unchanged. Complete-path reserve is **5,900,148 tokens /
+22 calls**. The prepared `reader_repair_plan_3` binds 7m additional tokens
+best-effort / 5,400 seconds / 600 seconds per call, zero investigation cycles,
+with run 2 as source and run 1 as its explicit hash-verified pending origin.
+Runtime metadata checks passed for Astra/high and Sol/xhigh. Synthetic sizing is
+not research validation; no third live repair has launched. The latest settled
+outcome remains the failed v4 attempt below.
+
+The preceding v4 increment was reviewed and committed in **`fa997fb` / `b1b2654`**
 on PR #28, not merged. It adds affected-issue source retrieval, per-generation
 contract ownership and narrowly deferred response-format reconciliation. The
 source's v3 payloads retain their exact identity; v4 uses indexed lossless packing

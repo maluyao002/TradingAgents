@@ -926,3 +926,48 @@ No reader exported; `reader_report.md` is diagnostic. Provisional inspection fou
 3,185 whitespace-delimited words, ten used/defined footnotes and sixteen matching
 calculation links. This is not an exported-reader check or user acceptance.
 Financial approval, PR merge and production activation remain separate.
+
+### V5 offline closure and prepared third reader repair — September 24
+
+PR #28 contains research commit `72f2495` and CLI commit `50983e9`, unmerged.
+The six invalid lifecycle resolutions used source-followup witness references in
+the wrong field. Four reported corrections contained five invalid quotes: collapsed
+source line breaks or a sentence outside its exact referenced excerpt. Two pending
+obligations disappeared when authored limitations were paraphrased. Frozen sources
+already support the narrow remaining commitment-timing and Q3 comparison disclosures.
+
+V5 keeps witness interfaces strict, restores proof-bound pending contexts, and sends
+only accepted current single-issue factual corrections to coverage. Original issues
+remain open/required; this is not economic closure. Pinned atomic slots preserve call
+counts while a separately bounded sum of positive complete-input and prompt deltas
+accounts for correction growth. No response normalization, historical edits, evidence
+truncation or fallback rebatching. An explicit `--pending-origin-dir` locator must
+match the already-bound origin artifact hashes and is protected from new writes.
+
+Independent review fixed origin-directory overlap, exact factual-input checkpoint
+binding, incomplete coverage reserve accounting and the adjusted hard-cap status.
+159 distinct targeted tests pass: 124 recovery/contract/scheduling, 30 context and
+five CLI. Independent rechecks overlap; Ruff and whitespace checks pass. No remaining
+actionable finding in the reviewed scopes. Research-code fingerprint:
+`11b2ceb7a565438e3a1c17aa4cafb576b3193a281f8ea4ecb4fac141cf17dcd0`.
+
+The first 129-stage rehearsal stopped before any provider call at a 7,180,148-token
+reserve versus a 6m draft. After the reserve fix, the final 129-stage rehearsal passes:
+writer 852,866 bytes; baseline factual 982,216 plus 16,384-byte headroom; synthetic
+factual 982,485; twenty base coverage prompts 33,812–42,114, with a maximum allowed
+decorated prompt of 106,114. The unchanged provider limit is 1,048,576 bytes. Both
+large boundaries roundtrip exactly; code and historical source integrity checks pass.
+Reserve: 5,900,148 tokens / 22 calls. Synthetic text is sizing-only, not validation.
+
+Prepared `reader_repair_plan_3` uses run 2 as source and run 1 as the explicit proven
+origin for two unresolved pending obligations. Bounds: 7m additional tokens
+best-effort, 5,400 seconds total, 600 per call, 1m-token / 2,400-second reserve,
+zero investigation cycles. One writer plus fresh factual/full coverage, no analysts
+or evidence changes. Plan:
+`e73d11a192642473aeb98c0e902f2f10c2c3fc183ad0ab3db900708e4003f810`.
+Request:
+`115725922a397404ae45a45cdb628975ae5b5eb0b21409cf97e1d936622be12c`.
+Contract:
+`08cfb6ff09b61a6f1c2f2518a331055bca5391006ccf7ad1d2675efd75760097`.
+Metadata-only runtime checks passed for Astra/high and Sol/xhigh. No third live
+attempt has launched at this checkpoint. Reader acceptance and release remain open.

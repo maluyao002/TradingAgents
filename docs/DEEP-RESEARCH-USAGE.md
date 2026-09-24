@@ -459,8 +459,10 @@ financial and production acceptance remain separate gates.
 
 ### Numbered, evidence-backed reader repair
 
-The same `--revise-reader` flag selects `frozen-candidate-revision-v4` when the
-source is a terminal failed `verify_frozen_report` or numbered revised reader.
+The same `--revise-reader` flag selects a versioned contract when the source is
+a terminal failed `verify_frozen_report` or numbered revised reader. V4 remains
+the transition from older contracts; a source already owned by v4 or v5 selects
+`frozen-candidate-revision-v5`.
 Preparation binds the exact candidate, source writer, complete terminal review,
 policy contract, eligible exact source-passage witnesses and full saved prefix.
 Generation 2 uses `revise_report-2` / `verify_revised_report-2`; each later
@@ -470,8 +472,8 @@ missing coverage, inconsistent generation history and lost paid outputs fail
 closed. Original policies and historical payloads retain their identities.
 
 The plan binds per-generation policy/contract ownership to source provenance and
-exact saved stage hashes. Historical v3 generations execute their frozen contract;
-new v4 generations use their separately bound instructions, retrieval and packing.
+exact saved stage hashes. Historical v3/v4 generations execute their frozen contracts;
+new generations use their separately bound instructions, retrieval and packing.
 The immediate source can establish its own generation; subsequent provenance
 retains a cumulative ownership map. Missing or ambiguous older ownership is
 rejected, never inferred from the latest contract.
@@ -493,6 +495,33 @@ cannot close it. The original failure remains in the audit. Material caveats and
 all other findings retain their normal repair requirements. Indexed references
 shorten repeated context while retaining full original-value hashes; strict
 roundtrip, cycle, reference and unused-entry checks remain enforced.
+
+V5 carries unresolved pending obligations independently of writer-authored
+limitations. It binds the complete original issue context and validates the prior
+receipt partition before preparing a new run. When transitioning from v4 with an
+inherited pending ledger, supply `--pending-origin-dir /path/to/bound-origin-run`
+on both `prepare` and `run`. This path is only an explicit locator: the origin
+artifacts must match the parent hashes already recorded in source provenance.
+No directory search or guessed context can substitute for that proof. Later v5
+generations retain the bound context envelope for replay. Missing context,
+conflicting identity or attempted factual retirement of a pending obligation
+fails closed; fresh same-issue coverage remains mandatory.
+
+Witness fields have different scopes. `issue_resolutions[].witnesses` may use only
+the supplied `resolution_evidence` catalog. Finding-bound `source_passage:` keys
+are for `source_finding_followups[].witnesses`, not issue retirement. Every quote
+must be an exact substring of its own referenced catalog value, including source
+whitespace and line breaks; text elsewhere in the source is not interchangeable.
+Historical responses are never silently corrected or normalized.
+
+For a still-open single-issue obligation, v5 may supply current factual-correction
+context to coverage. This is drawn only from accepted follow-ups, bound to the exact
+factual input/output checkpoint, reader, source finding and evidence catalogs. Raw
+responses labelled `corrected` are insufficient. The original issue and every
+remaining material proposition stay required; coverage must judge them independently.
+Context is not inherited by aliases or compound children and does not retire the
+parent, grant financial approval, or turn a deployment into commercial-cost evidence.
+The complete bounded context participates in payload hashes and admission estimates.
 
 Pre-writer admission reserves the complete reopened verification path with
 growth allowances. The writer's exact prompt is checked before dispatch; once

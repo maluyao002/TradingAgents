@@ -133,6 +133,16 @@ diagnostic or merged code increment is not a completed or accepted report.
   DOE and concentration/source-scope conflicts. Diagnose these offline before
   another separately bounded attempt. All 30 artifact hashes, original-plan
   integrity and six hosted checks pass; no admitted reader or financial approval.
+- The follow-up v5 engineering is reviewed and committed as `72f2495` / `50983e9`
+  on PR #28. It restores proof-bound pending obligations, separates witness fields,
+  supplies accepted current factual context without retiring whole issues, and
+  reserves bounded correction growth over pinned coverage calls. All **159 distinct
+  targeted tests** pass; origin-path, factual-input binding and reserve review fixes
+  are closed. The full 129-stage no-provider rehearsal passes; writer/factual and
+  all coverage prompts fit, with a 5,900,148-token complete-path reserve. The
+  separately prepared `reader_repair_plan_3` binds 7m additional tokens / 90 minutes /
+  600 seconds per call. Runtime metadata checks pass; hosted CI and the last narrow
+  evidence-delivery check are pending. No third live repair or admitted export yet.
 
 See the [concise implementation record](DEEP-RESEARCH-PROGRESS.md) for completed
 checkpoints and the [latest validation evidence](archive/deep-research/DEEP-RESEARCH-FRESH-VALIDATION.md)
@@ -143,7 +153,7 @@ for exact attempts, bounds and usage.
 | Order | Deliverable | Completion evidence |
 | --- | --- | --- |
 | 1 — Done (engineering) | Integrate reviewed reader inputs and typed reconciliation | PRs #23 and #26 merged; reader assumption table, typed reconciliation and packet-validation fixes tested/reviewed. This is not final-reader delivery |
-| 2 — Offline diagnosis / repair | Complete bounded NVDA finalization | `reader_repair_run_2` settled `verification_failed`, 202/211. Diagnose lifecycle/witness and pending-receipt failures, correct genuine disclosures, then prove offline readiness before a separately bounded continuation |
+| 2 — Prepared bounded validation | Complete bounded NVDA finalization | `reader_repair_run_2` settled `verification_failed`, 202/211. V5 fixes are reviewed/tested and real-prefix readiness passes; complete the last delivery/CI checks, then execute the separately prepared plan and inspect its actual result |
 | 3 | Inspect the actual exported English reader | Still open: the revised candidate was independently inspected and its footnotes/calculation links checked, but no admitted export exists. Verify exported bytes and reader usefulness before user review |
 | 4 | Close targeted financial and independent-evidence gaps | Typed issuer-FCF/residual reconciliation and fresh source/arithmetic reviews delivered in PR #26; dependent fresh analysis completed, but the reader is blocked and economic/independent-demand gaps remain |
 | 5 | Prove HOOD generality | Distinct broker-equity/funding workflow, English reader and comparator review using the same core contracts |
@@ -153,6 +163,30 @@ Steps 2–3 may produce a useful conditional operating report without a price ta
 They do not close Step 4's financial underwriting. Do not transplant the successful
 diagnostic into an admitted continuation: that capsule forbids attestation reuse.
 Do not run another probe unless it addresses a named residual risk.
+
+### Immediate offline acceptance criteria
+
+The settled second reader repair requires a versioned contract fix before retry:
+
+The engineering items below are implemented and reviewed in v5, and the real-data
+rehearsal passes; actual new-reader corrections and verification remain open.
+
+- Preserve v3/v4 replay and all 129 completed calls. Restrict lifecycle-resolution
+  witnesses to the existing resolution catalog; finding-followup source witnesses
+  are a separate interface, not broader authority to retire historical claims.
+  Four claimed corrections used nonliteral evidence excerpts; validate exact
+  supplied passages and preserve rejection of paraphrased witness quotes.
+- Restore the two missing pending obligations from hash-verified original issue
+  contexts. Carry them independently of writer-authored limitations until fresh
+  complete coverage produces valid receipts; disappearance is never resolution.
+- Reconcile historical source-delivery statements separately from remaining
+  economic questions. A retained DOE deployment excerpt cannot close the missing
+  commercial-AI comparison. Partial support cannot retire a whole compound issue.
+- Correct the two genuine reader omissions: the contingent $18bn commitment's
+  remainder-FY2027 horizon and Q3 actual results being unavailable at the cutoff.
+- Require focused negative tests, independent review and exact-prefix/no-provider
+  prompt-and-budget admission before a new separately bounded live plan. No new
+  external evidence or user decision is required for these scoped repairs.
 
 ## Delivery stages: implementation versus acceptance
 
