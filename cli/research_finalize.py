@@ -33,11 +33,13 @@ class _FinalizationWorker:
     codex_home: Path
     revise_reader: bool = False
     repair_verification: bool = False
+    pending_origin_dir: Path | None = None
 
     def __call__(self, request: ResearchRequest) -> ResearchResult:
         plan = prepare_finalization_continuation(self.source_dir, request,
                                                  revise_reader=self.revise_reader,
-                                                 repair_verification=self.repair_verification)
+                                                 repair_verification=self.repair_verification,
+                                                 pending_origin_dir=self.pending_origin_dir)
         authorization = load_finalization_authorization(self.authorization_file)
         authorized = authorize_finalization_continuation(plan, authorization, request)
         snapshot = EvidenceSnapshot.model_validate(parse_json(plan.frozen_inputs["evidence_path"]))
@@ -56,6 +58,8 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--source-dir", required=True, type=Path)
     prepare.add_argument("--config", required=True, type=Path, help="destination request JSON")
     prepare.add_argument("--output", required=True, type=Path, help="reviewable plan JSON")
+    prepare.add_argument("--pending-origin-dir", type=Path,
+                         help="explicit hash-verified origin for inherited pending coverage")
     prepare_mode = prepare.add_mutually_exclusive_group()
     prepare_mode.add_argument("--revise-reader", action="store_true",
                          help="authorize one new revision of a failed repaired candidate")
@@ -68,6 +72,8 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--authorization-file", required=True, type=Path)
     run.add_argument("--codex-home", required=True, type=Path)
     run.add_argument("--allow-live", action="store_true")
+    run.add_argument("--pending-origin-dir", type=Path,
+                     help="same hash-verified pending origin used when preparing the plan")
     run_mode = run.add_mutually_exclusive_group()
     run_mode.add_argument("--revise-reader", action="store_true")
     run_mode.add_argument("--repair-verification", action="store_true")
@@ -80,7 +86,8 @@ def main(argv=None) -> int:
         request = load_request(args.config.resolve())
         plan = prepare_finalization_continuation(args.source_dir, request,
                                                  revise_reader=args.revise_reader,
-                                                 repair_verification=args.repair_verification)
+                                                 repair_verification=args.repair_verification,
+                                                 pending_origin_dir=args.pending_origin_dir)
         if args.command == "prepare":
             write_finalization_continuation_plan(plan, args.output)
             payload = {
@@ -116,6 +123,7 @@ def main(argv=None) -> int:
             codex_home,
             args.revise_reader,
             args.repair_verification,
+            args.pending_origin_dir.resolve() if args.pending_origin_dir is not None else None,
         )
         outcome = run_supervised(worker, request)
         if outcome.result is None:
