@@ -424,7 +424,9 @@ publishable report. Unknown usage stops subsequent admissions and automatic retr
 `cli.research_finalize prepare` and `run` accept `--revise-reader` for one new
 revision of a **terminal `verification_failed` repaired candidate**. The source
 must have complete usage, matching terminal reader/checkpoint identities and
-settled coverage history. A revised candidate cannot authorize another revision.
+settled coverage history. The legacy revision cannot renew itself. A completed
+verification-only failure or numbered revision failure can instead enter the
+versioned numbered transition described below, under a fresh bound allowance.
 Use a fresh destination and a new plan-bound incremental authorization; neither
 the flag nor a successful offline preparation is live-run permission.
 
@@ -454,6 +456,34 @@ in the audit. Source-quality, financial, security and critical numerical caveats
 are not blanket-reclassified. Exact reader excerpts remain mandatory; mismatches
 are failures, never silently normalized. Failure still withholds export. Reader,
 financial and production acceptance remain separate gates.
+
+### Numbered, evidence-backed reader repair
+
+The same `--revise-reader` flag selects `frozen-candidate-revision-v3` when the
+source is a terminal failed `verify_frozen_report` or numbered revised reader.
+Preparation binds the exact candidate, source writer, complete terminal review,
+policy contract, eligible exact source-passage witnesses and full saved prefix.
+Generation 2 uses `revise_report-2` / `verify_revised_report-2`; each later
+generation requires a separate plan, fresh destination and explicit allowance.
+There is no automatic retry loop or analyst redispatch. Incomplete usage,
+missing coverage, inconsistent generation history and lost paid outputs fail
+closed. Original policies and historical payloads retain their identities.
+
+One writer is followed by new factual review and full atomic coverage. Every
+terminal source finding needs an explicit follow-up; a corrected disposition
+requires exact new-reader spans and exact evidence witnesses. Source passages
+bind their source content hash and character bounds. Availability of a table,
+arithmetic review and economic underwriting are distinct claims. A scoped
+`review:cashflow_bridge` witness does not grant valuation or funding approval.
+Old warnings remain immutable audit history, not automatic claims of current
+evidence absence. Unsupported or still-open findings continue to block export.
+
+Pre-writer admission reserves the complete reopened verification path with
+growth allowances. The writer's exact prompt is checked before dispatch; once
+the new candidate exists, exact factual and coverage prompt sizes and remaining
+resources are checked again. Lossless sharing is opt-in to this policy; evidence
+is not truncated. Estimates are not token/wall-time guarantees, and a passing
+offline rehearsal is not an admitted reader or authorization by itself.
 
 ### Frozen-reader verification repair
 

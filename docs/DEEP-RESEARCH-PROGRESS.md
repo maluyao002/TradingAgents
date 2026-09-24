@@ -5,7 +5,76 @@ and validation checkpoints, **not a second work queue**. For current priorities,
 open gates and user decisions, use the [current roadmap](DEEP-RESEARCH-STATUS.md).
 The [original implementation plan](DEEP-RESEARCH-PLAN.md) is preserved.
 
-## Frozen-reader verification outcome — September 24
+## Numbered reader repair and latest validation — September 24
+
+Follow-up offline work is implemented in **`2b60ba3`**, not a new live outcome. The numbered
+one-writer transition carries every terminal finding into mandatory evidence-backed
+follow-up, reopens full factual/atomic coverage and never redispatches analysts.
+Review fixes cover missing exact proxy witnesses, malformed generation allocation,
+and explicit witness association for a related deterministic critical finding.
+Unrelated findings cannot borrow that association; critical follow-up stays required.
+
+Actual 87-stage no-provider rehearsal initially caught oversized writer and factual
+requests. The writer no longer duplicates the prior lifecycle audit; it retains the
+complete terminal review, current applicability and source-review hash. Opt-in
+lossless packing now uses cost-aware references and original-value table-row
+packing. An invalid encoded-table hashing experiment was rejected by roundtrip
+checks before any provider call. Legacy and frozen-verification bytes stay unchanged.
+The passing rehearsal measures **939,140 writer bytes** and **1,013,107 factual
+bytes**, with **35,469 bytes** of factual headroom under the unchanged 1,048,576-byte
+cap. All 19 pre-retirement coverage requests fit. The factual check uses an explicitly
+synthetic candidate solely for sizing; it is not new research or reader validation.
+Both boundaries pass canonical roundtrip equality, and frozen source integrity
+remains intact. Pre-writer reserve is **4,493,296 tokens / 21 planned calls**.
+The prepared fresh request selects 5m additional tokens best-effort / 5,400 seconds
+maximum / 600 seconds per call, no investigation cycles. Astra/high and Sol/xhigh
+metadata-only capability checks passed. Independent review found no remaining
+actionable issues. **167 distinct targeted tests** passed across the worker/main
+selections (146 + 30 minus nine overlapping prompt tests); reviewer checks also
+cover the legacy recovery/engine boundaries, 80 canonical roundtrips and 240
+legacy/frozen byte comparisons. Overlapping reviewer counts are not added. Ruff
+and whitespace checks pass. The reviewed code is on PR #28's feature branch,
+not merged. The supervised `reader_repair_run_1` launched around **09:01 UTC**
+September 24 from `reader_repair_plan_1`, on frozen research commit `2b60ba3`.
+It completed **87 imported + 20 new calls** in **2,302.01 seconds / 38m22s**:
+**798,418 input + 111,562 output = 909,980 additional tokens**, complete telemetry.
+Selected-lineage usage is **4,946,458 tokens**, excluding coordinator/team usage
+and the separately preserved incomplete first-verification ledger. All six hosted
+checks passed on frozen `2b60ba3`; all 30 result hashes and source-plan/input
+integrity were verified after settlement.
+
+Result: **`verification_failed`**, not a provider, prompt-size or budget failure.
+All five prior finding follow-ups are evidence-backed and corrected, but final
+coverage is **197/207**; **12 findings** comprise three authored findings and nine
+deterministic dispositions, not 12 independent report defects. No reader was
+exported; `reader_report.md` remains diagnostic. The candidate hash is `10e4f7a4…20a7e`.
+Remaining work is:
+
+- **Outcome delivery:** raw proxy support exists, but the exact factual payload
+  quoted goals/grants, not certified achievements. The reviewed company-neutral
+  outcome query is integrated as **`01a662e`** after settlement (isolated `72bd509`):
+  56 targeted tests and independent 45-test recheck passed. Old five-finding catalog
+  bytes and saved generation-2 writer/factual input hashes remain unchanged.
+- **Substantive reader omissions:** add qualified lab-business scale, NVIDIA
+  direct-customer concentration and CoreWeave concentration/nonpayment exposure.
+  These facts exist in frozen sources; they are not assertions of realized losses.
+- **DOE lifecycle scope:** current retained content/excerpts support the deployment,
+  while the historical no-excerpt issue and unresolved commercial-AI comparison
+  must be distinguished. Do not restate a false current-source absence.
+- **Verification-response errors:** three audit-only decisions contain reader spans.
+  Correct the future response contract and bind supersession to actual fresh
+  coverage; do not strip historical responses or turn every warning into audit-only.
+
+The actual factual prompt fit at **1,015,948 bytes**. Independent provisional
+inspection found the original three textual repairs sound, all 10 footnotes defined
+and all 16 calculation links matched; its raw-source check did not prove delivered
+verifier support. The candidate is 3,223 whitespace-delimited words, with a dense
+182-word guarantee paragraph. These are candidate observations, not export or user
+acceptance. No second live repair has launched: a request draft alone is not a
+bound plan or authorization. Close evidence delivery, versioned replay contracts
+and response-error scope offline before another bounded run. PR #28 is unmerged.
+
+## Earlier frozen-reader verification outcome — September 24
 
 `verification_run_2` completed on frozen **`2d20333`** (research fix `af367fd`):
 68 imported stages plus **19 new verifier calls**, **2,035.43 seconds / 33m55s**,

@@ -793,3 +793,72 @@ Next work uses the same frozen evidence, not another analyst research run: a
 reviewed versioned one-writer transition, complete terminal-finding follow-up with
 exact evidence/reader witnesses, then fresh factual and full coverage validation.
 The reader text is not patched in historical artifacts, and no finding is waived.
+
+### Numbered reader repair attempt 1 — September 24
+
+The reviewed `frozen-candidate-revision-v3` transition is committed as `2b60ba3`
+on PR #28. Source is settled `verification_run_2`, including 87 completed stages;
+all original evidence, responses and usage records remain immutable. Numbered
+generation 2 permits one writer, then full factual/atomic coverage checks, with
+an explicit evidence-backed follow-up for each terminal source finding. A related
+critical disposition retains its own finding-bound witness and mandatory follow-up.
+
+Offline review found and fixed missing proxy-table witnesses, huge generation
+allocation, invalid table-first hashes and a related-critical witness gap. The
+final independent review found no remaining actionable issues. Worker/main tests
+total 167 distinct passes; reviewer tests additionally cover legacy recovery/engine
+boundaries, 80 canonical roundtrips and 240 legacy/frozen byte comparisons. Review
+counts overlap and are not added. Lint/whitespace checks pass.
+
+The actual 87-stage no-provider rehearsal passes at 939,140 writer bytes and
+1,013,107 factual bytes under the unchanged 1,048,576-byte cap. The latter uses
+a deliberately synthetic candidate solely for admission sizing. All 19 initial
+coverage prompts fit (33,747–41,319 bytes); both large boundaries roundtrip exactly.
+Pre-writer complete-path reserve is 4,493,296 tokens for 21 calls. A baseline factual
+headroom gate and exact post-writer checks remain enforced. Synthetic output is
+not evidence of fresh research quality or reader acceptance.
+
+`reader_repair_plan_1` records a fresh allowance under the user's standing approval:
+5m additional tokens best-effort / 5,400 seconds total / 600 seconds per call,
+1m-token and 2,400-second reserve, zero investigation cycles. Plan hash:
+`40adc1d1eb53e13e2cdd8055e01508833b0b3d175ee8a6a94b1200c43c4c232f`;
+request identity:
+`571fed59600437b08fd2c1c1046ba9c00c0e281e97f88d4c7ab22efbc67bd57c`.
+Authorization timestamp 08:59:57 UTC is the transcription time, not the time of
+a new user message. Supported Astra/high writer and Sol/xhigh verifier were checked
+through metadata-only isolated-runtime preflight. The supervised run launched
+around **09:01 UTC** on frozen `2b60ba3`.
+
+Terminal outcome: **`verification_failed`**, after **2,302.0053 seconds** and
+**87 imported + 20 new calls**. New usage is **798,418 input + 111,562 output =
+909,980 tokens**, complete. Cached input 31,360 and reasoning output 56,604 are
+subsets. Selected-lineage usage is **4,946,458 tokens**, complete; coordinator/team
+usage and the separately retained incomplete verification attempt are excluded.
+All 30 result artifact hashes and the original plan/frozen-input hashes were
+checked after settlement. All six hosted checks passed on `2b60ba3`.
+
+All five prior source-finding follow-ups corrected their exact defects, but new
+coverage validates **197 of 207 parent IDs**. Twelve findings consist of three
+authored findings and nine deterministic disposition failures: unsupported
+delivered incentive-outcome inventory, DOE historical/current provenance scope,
+five material concentration/financing omissions, and three audit-only replies
+containing reader spans. This is a verification failure, not a provider, budget
+or prompt-size failure. The factual request fit at **1,015,948 bytes**.
+
+Candidate hash:
+`10e4f7a40ef23f2580e029aecdd4ff4e0b42d2898cd8be6c06503383e4520a7e`.
+No reader exported; `reader_report.md` is a diagnostic placeholder. Provisional
+inspection found 3,223 whitespace-delimited words, all ten footnotes defined and
+all sixteen calculation links bound correctly. Raw-source support is not proof
+that the verifier received the necessary passages. Admission remains incomplete,
+financial conclusions blocked and production activation false.
+
+The outcome-passage selector fix was reviewed and integrated as `01a662e` after
+settlement: 56 targeted tests and an overlapping independent 45-test recheck pass.
+Historical five-finding witness bytes and generation-2 writer/factual payloads
+remain unchanged. Before another live attempt, close the remaining witness
+delivery gaps and implement versioned per-generation replay plus fresh-coverage-
+bound handling of mechanically proven response-format defects. A draft
+`reader_repair_plan_2/request.json` is neither an authorized plan nor a launched run.
+PR #28 remains open. PR merge, financial underwriting, reader acceptance and
+production are not granted.

@@ -90,8 +90,8 @@ diagnostic or merged code increment is not a completed or accepted report.
   preserved. Follow-up lossless nested packing and pre-dispatch size admission
   passed 139 targeted tests and independent review. `verification_plan_2` retains
   3m additional tokens / 60 minutes / 600 seconds per call, using the completed
-  original revision as source. Supported Sol/xhigh preflight passed; no successful
-  verification-only live outcome yet.
+  original revision as source. Supported Sol/xhigh preflight passed; the
+  subsequent terminal outcome is recorded below.
   Exact offline rehearsal confirms all 20 planned prompts fit, with the largest
   at 1,044,357 bytes and lossless canonical roundtrip equality; reserve 1,962,791.
 - `verification_run_2` completed on frozen `2d20333`: 19 new verifier calls,
@@ -101,8 +101,21 @@ diagnostic or merged code increment is not a completed or accepted report.
   export. Three subjects remain: omitted qualified guarantee scale, incentive-table
   prerequisite scope, and current typed residual review versus historical/economic
   limits. The latter two also produce deterministic disposition failures. A bounded
-  one-writer transition with explicit prior-finding follow-up is under development
-  in an isolated checkout; no new user data is needed for the guarantee finding.
+  one-writer transition with explicit prior-finding follow-up is implemented and
+  independently reviewed in PR #28 at `2b60ba3`. It adds exact finding-bound source
+  witnesses, linked-critical follow-up, generation guards and lossless packing.
+  167 distinct worker/main targeted tests passed; legacy recovery/engine and
+  roundtrip checks also passed. The actual 87-stage no-provider rehearsal fits
+  writer and synthetic factual/coverage requests without changing evidence.
+  `reader_repair_run_1` completed under a fresh 5m-token best-effort / 90-minute
+  maximum / 600-second-call allowance: **909,980 additional tokens / 38m22s**,
+  complete telemetry, 87 imported + 20 new stages. All six hosted checks passed
+  on `2b60ba3`. All five prior finding follow-ups corrected, but export remains
+  withheld at **197/207** coverage. Remaining blockers are outcome-passage delivery,
+  material concentration/financing caveats, DOE historical/current source scope and
+  three malformed audit-only decisions. The first targeted delivery fix is reviewed
+  and integrated as `01a662e`; no follow-up live run has started. No new external
+  evidence is required for the identified source-supported corrections.
 
 See the [concise implementation record](DEEP-RESEARCH-PROGRESS.md) for completed
 checkpoints and the [latest validation evidence](archive/deep-research/DEEP-RESEARCH-FRESH-VALIDATION.md)
@@ -113,7 +126,7 @@ for exact attempts, bounds and usage.
 | Order | Deliverable | Completion evidence |
 | --- | --- | --- |
 | 1 — Done (engineering) | Integrate reviewed reader inputs and typed reconciliation | PRs #23 and #26 merged; reader assumption table, typed reconciliation and packet-validation fixes tested/reviewed. This is not final-reader delivery |
-| 2 — Original five issues closed; export still blocked | Complete bounded NVDA finalization | Review/test the separately authorized one-writer transition, clarify the three terminal finding subjects, then run fresh exact-reader factual/full coverage checks. Latest completed verification is 198/200; no analysts need rerunning |
+| 2 — Offline closure before next bounded run | Complete bounded NVDA finalization | Latest attempt is `verification_failed`, 197/207. Finish targeted witness delivery, truthful historical/current scope and response-error repair with versioned exact replay; review/test and rehearse the full saved prefix before a fresh bounded plan |
 | 3 | Inspect the actual exported English reader | Still open: the revised candidate was independently inspected and its footnotes/calculation links checked, but no admitted export exists. Verify exported bytes and reader usefulness before user review |
 | 4 | Close targeted financial and independent-evidence gaps | Typed issuer-FCF/residual reconciliation and fresh source/arithmetic reviews delivered in PR #26; dependent fresh analysis completed, but the reader is blocked and economic/independent-demand gaps remain |
 | 5 | Prove HOOD generality | Distinct broker-equity/funding workflow, English reader and comparator review using the same core contracts |
@@ -168,13 +181,16 @@ useful fresh reader but remain part of the full release.
   missing-disclosure control. Do not switch coverage defaults on efficiency alone.
   The latest revision addresses repurchase wording, partial working-capital scope,
   commitment timing, guarantee terms, source-extraction limits and the false
-  incentive-evidence absence. Its remaining export blockers are a different mixed
+  incentive-evidence absence. The later verification-only pass closed the mixed
   inherited review-status/dependency obligation and four invalid audit-only
-  dispositions containing reader spans. Implement scoped applicability and
-  bounded attestation repair without changing historical responses or silently
-  normalizing invalid replies. Exact spans alone do not make an audit-only decision
-  well-formed. The explicit one-revision path has now been used; unused allowance
-  is not automatic authority for another writer pass. Editorial depth still needs
+  dispositions. The numbered repair corrected those prior finding subjects but
+  exposed specific concentration omissions, an outcome-quote delivery gap, DOE
+  historical/current excerpt scope and three new malformed audit-only responses.
+  Finish exact witness delivery and versioned response-error supersession before
+  another writer/full-verification run; do not simply waive or normalize them.
+  Each generation needs its own bound
+  allowance; unused allowance never authorizes an automatic writer loop.
+  Editorial depth still needs
   lighter tables, better use of supplied evidence and concrete observation plans.
 - **Broader release:** dependency-aware reuse/updates, forecast-vintage evaluation,
   wider source/history/company coverage, ADR/FX/mixed-business cases, matched
