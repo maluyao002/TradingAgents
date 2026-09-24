@@ -15,6 +15,7 @@ import os
 import re
 import stat
 import uuid
+from collections import Counter
 from contextlib import contextmanager, suppress
 from copy import deepcopy
 from dataclasses import dataclass
@@ -24,6 +25,8 @@ from typing import Any, Literal
 from pydantic import AwareDatetime, Field, field_validator
 
 from .contracts import Budget, Contract, ResearchRequest, Usage
+from .reader_revision import READER_REVISION_POLICY, REVISE_STAGE
+from .review_lifecycle import compound_coverage_issues
 from .services import ModelReply
 from .storage import (
     ENGINE_VERSION,
@@ -107,6 +110,7 @@ class FinalizationContinuationPlan:
     candidate: dict[str, Any]
     candidate_review_stage: str
     new_request_identity: str
+    reader_revision_policy: str | None = None
 
     def manifest(self) -> dict[str, Any]:
         return {
@@ -139,6 +143,8 @@ class FinalizationContinuationPlan:
             "new_request_identity": self.new_request_identity,
             "incremental_budget": self.destination_request.budget.model_dump(mode="json"),
             "automatic_or_live_action": False,
+            **({"reader_revision_policy": self.reader_revision_policy}
+               if self.reader_revision_policy is not None else {}),
         }
 
     @property
@@ -360,8 +366,58 @@ def _validate_source_lineage(
     return {"recovery_provenance.json": hashlib.sha256(content).hexdigest()}
 
 
+def _revision_artifacts(source_dir, candidate, imported, source_usage):
+    """Bind a terminal failed repair, never an in-flight or already revised reader."""
+    if candidate["stage"] != "verify_repaired_report":
+        raise ValueError("reader revision requires a previously repaired candidate")
+    contents = {name: _read_regular(source_dir / name)
+                for name in ("result.json", "reader_verification.json")}
+    result = parse_json(contents["result.json"])
+    verification = parse_json(contents["reader_verification.json"])
+    reader = verification.get("English", {}) if isinstance(verification, dict) else {}
+    review = reader.get("review") if isinstance(reader, dict) else None
+    if (not isinstance(result, dict) or result.get("stop_reason") != "verification_failed"
+            or Usage.model_validate(result.get("usage")) != source_usage
+            or not isinstance(reader, dict) or reader.get("exported") is not False
+            or reader.get("stage") != candidate["stage"]
+            or reader.get("reader_sha256") != candidate["reader_sha256"]
+            or not isinstance(review, dict) or review.get("reviewed_report") is not True
+            or not isinstance(review.get("findings"), list)
+            or not all(isinstance(f, dict) for f in review["findings"])
+            or not any(f.get("severity") in {"warning", "critical"}
+                       for f in review["findings"])):
+        raise ValueError("reader revision requires a settled bound verification failure")
+    stages = {item.stage: item for item in imported}
+    batches = reader.get("coverage_batches")
+    required_ids = reader.get("required_limitation_ids")
+    lifecycle = reader.get("issue_lifecycle")
+    if (not isinstance(batches, list) or not all(isinstance(b, dict) for b in batches)
+            or not isinstance(required_ids, list) or not all(isinstance(i, str) for i in required_ids)
+            or not isinstance(lifecycle, dict) or not isinstance(lifecycle.get("issues"), list)
+            or not all(isinstance(i, dict) for i in lifecycle["issues"])):
+        raise ValueError("reader revision requires complete coverage history")
+    open_issues = [i for i in lifecycle["issues"] if i.get("status") == "open"]
+    if Counter(i.get("issue_id") for i in open_issues) != Counter(required_ids):
+        raise ValueError("reader revision required obligations differ from lifecycle")
+    expected_ids = [i["issue_id"] for i in compound_coverage_issues(open_issues)]
+    if (any(not isinstance(b.get("issue_ids"), list)
+            or not all(isinstance(i, str) for i in b["issue_ids"]) for b in batches)
+            or Counter(i for b in batches for i in b["issue_ids"]) != Counter(expected_ids)):
+        raise ValueError("reader revision coverage does not cover every required obligation")
+    expected = {f"verify_repaired_report-coverage-{i}" for i in range(len(batches))}
+    if (expected != {name for name in stages if name.startswith("verify_repaired_report-coverage-")}
+            or any(batch.get("stage") != f"verify_repaired_report-coverage-{i}"
+                   or batch.get("reader_sha256") != candidate["reader_sha256"]
+                   or not stages[batch["stage"]].output.get("reviewed_report")
+                   for i, batch in enumerate(batches))):
+        raise ValueError("reader revision coverage inventory differs from checkpoint")
+    if any(item.stage.startswith(("revise_report", "verify_revised_report")) for item in imported):
+        raise ValueError("reader revision cannot renew a previous revision")
+    return {name: hashlib.sha256(content).hexdigest() for name, content in contents.items()}
+
+
 def prepare_finalization_continuation(
-    source_dir: Path, destination_request: ResearchRequest
+    source_dir: Path, destination_request: ResearchRequest, *, revise_reader: bool = False
 ) -> FinalizationContinuationPlan:
     """Prepare and content-bind a candidate continuation without live calls."""
     source_dir = Path(source_dir)
@@ -414,6 +470,8 @@ def prepare_finalization_continuation(
                for field in ("input_tokens", "output_tokens", "cached_input_tokens", "reasoning_output_tokens")):
             raise ValueError("source cumulative usage omits saved stage usage")
         candidate, review_stage = _validate_candidate(checkpoint, imported)
+        revision_artifacts = (_revision_artifacts(source_dir, candidate, imported, source_usage)
+                              if revise_reader else {})
         source_request_id = request_identity(source_request, source_inputs)
         lineage_hashes = _validate_source_lineage(
             source_dir,
@@ -424,6 +482,7 @@ def prepare_finalization_continuation(
         artifact_hashes = {
             FINALIZATION_CHECKPOINT_NAME: hashlib.sha256(checkpoint_bytes).hexdigest(),
             **lineage_hashes,
+            **revision_artifacts,
         }
         plan = FinalizationContinuationPlan(
             source_dir=source_dir,
@@ -445,6 +504,7 @@ def prepare_finalization_continuation(
             new_request_identity=finalization_continuation_request_identity(
                 destination_request, destination_inputs
             ),
+            reader_revision_policy=READER_REVISION_POLICY if revise_reader else None,
         )
     assert_finalization_source_unchanged(plan)
     return plan
@@ -460,6 +520,11 @@ def _validate_plan_content(plan: FinalizationContinuationPlan) -> None:
     expected_input_paths = _request_input_paths(source_request)
     source_request_id = request_identity(source_request, plan.frozen_inputs)
     expected_artifact_names = {FINALIZATION_CHECKPOINT_NAME}
+    if plan.reader_revision_policy is not None:
+        if (plan.reader_revision_policy != READER_REVISION_POLICY
+                or review_stage != "verify_repaired_report"):
+            raise ValueError("invalid reader revision policy or source candidate")
+        expected_artifact_names.update({"result.json", "reader_verification.json"})
     if plan.source_run_identity != digest(
         {"request": source_request_id, "model_service": plan.source_model_identity}
     ):
@@ -501,6 +566,12 @@ def assert_finalization_source_unchanged(
     prepared = plan.plan if isinstance(plan, AuthorizedFinalizationContinuation) else plan
     _validate_plan_content(prepared)
     with _source_lock(prepared.source_dir):
+        if prepared.reader_revision_policy is not None:
+            revision_hashes = _revision_artifacts(prepared.source_dir, prepared.candidate,
+                                                 prepared.imported_stages, prepared.source_usage)
+            if any(prepared.source_artifact_hashes.get(name) != value
+                   for name, value in revision_hashes.items()):
+                raise ValueError("reader revision terminal artifacts changed")
         artifact_hashes = {
             name: hashlib.sha256(_read_regular(prepared.source_dir / name)).hexdigest()
             for name in prepared.source_artifact_hashes
@@ -676,6 +747,8 @@ class FinalizationRecoveryModelService:
                 "reader_sha256": plan.candidate["reader_sha256"],
             },
             "candidate_review_stage": plan.candidate_review_stage,
+            **({"reader_revision_policy": plan.reader_revision_policy}
+               if plan.reader_revision_policy is not None else {}),
             "authorization": {
                 **self.plan.authorization.model_dump(mode="json"),
                 "authorization_sha256": self.plan.authorization.authorization_sha256,
@@ -785,6 +858,12 @@ class FinalizationRecoveryModelService:
                     or state["live_boundary"] != {key: calls[0][key]
                                                    for key in ("stage", "role", "inputs_hash")}):
                 raise ValueError("candidate-recovery live state lacks its exact candidate/boundary proof")
+            if self.plan.plan.reader_revision_policy is not None and (
+                set(call_names) != set(saved_by_stage)
+                or state["live_boundary"]["stage"] != REVISE_STAGE
+                or state["live_boundary"]["role"] != "editor"
+            ):
+                raise ValueError("reader revision restored state lacks the complete prefix/revision boundary")
         elif state["live_boundary"] is not None or calls:
             raise ValueError("candidate-recovery non-live state contains current calls")
         self._imported_stage_names = set(state["imported_stage_names"])
@@ -844,6 +923,10 @@ class FinalizationRecoveryModelService:
             raise ValueError(
                 "candidate factual-review stage must be replayed before live continuation"
             )
+        if self.plan.plan.reader_revision_policy is not None and self._imported_stage_names != {
+            item.stage for item in self.plan.plan.imported_stages
+        }:
+            raise ValueError("reader revision requires the complete exact source prefix")
 
     def call_origin(self, role: str, payload: dict[str, Any], request: ResearchRequest) -> str:
         self._require_validated_request(request)
@@ -871,6 +954,8 @@ class FinalizationRecoveryModelService:
             return "imported_historical"
         if not self._live_started:
             self._require_candidate_boundary()
+            if self.plan.plan.reader_revision_policy is not None and stage != REVISE_STAGE:
+                raise ValueError("reader revision must start at its explicit revision boundary")
         return "current_live"
 
     def complete(self, role: str, payload: dict[str, Any], request: ResearchRequest) -> ModelReply:

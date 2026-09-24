@@ -419,6 +419,42 @@ Selective closure and semantic rerun routing are still future work. Failed revie
 retains an unverified reader candidate and partial batches for diagnosis, not a
 publishable report. Unknown usage stops subsequent admissions and automatic retry.
 
+### One separately authorized reader revision
+
+`cli.research_finalize prepare` and `run` accept `--revise-reader` for one new
+revision of a **terminal `verification_failed` repaired candidate**. The source
+must have complete usage, matching terminal reader/checkpoint identities and
+settled coverage history. A revised candidate cannot authorize another revision.
+Use a fresh destination and a new plan-bound incremental authorization; neither
+the flag nor a successful offline preparation is live-run permission.
+
+```sh
+.venv/bin/python -m cli.research_finalize prepare \
+  --source-dir /path/to/failed-repair --config /path/to/new-request.json \
+  --output /path/to/new-plan.json --revise-reader
+.venv/bin/python -m cli.research_finalize run \
+  --source-dir /path/to/failed-repair --config /path/to/new-request.json \
+  --authorization-file /path/to/new-authorization.json \
+  --codex-home /path/to/isolated-runtime --allow-live --revise-reader
+```
+
+The explicit `frozen-candidate-revision-v1` policy is bound into the plan,
+authorization and service/cache identity. It leaves the default preview-12
+rendering and historical payloads unchanged: the entire exact prefix must replay
+before `revise_report`. `verify_revised_report` and every coverage batch receive
+the new policy identity and must run against the new candidate, even if the writer
+returns identical text. No old retirement or coverage decision attests new bytes.
+Writer-path estimates and exact post-writer reserves include full factual/coverage
+work; per-call and total bounds remain mandatory. A lost paid output is not
+permission to redispatch or reset the allowance.
+
+Only the exact known reconciliation-lineage obligation receives an opt-in
+procedural applicability component. Its original text/ID stays open and protected
+in the audit. Source-quality, financial, security and critical numerical caveats
+are not blanket-reclassified. Exact reader excerpts remain mandatory; mismatches
+are failures, never silently normalized. Failure still withholds export. Reader,
+financial and production acceptance remain separate gates.
+
 ### Separate one-call valuation diagnostic
 
 After explicit live authorization, `scripts.research_model_probe` accepts a normal

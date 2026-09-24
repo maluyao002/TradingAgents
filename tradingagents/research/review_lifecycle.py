@@ -86,6 +86,13 @@ _OPERATING_REVIEW_BOUNDARY = (
     "matching hashes."
 )
 
+_RECONCILIATION_LINEAGE = (
+    "This is a new typed source-statement reconciliation in the new package. It does "
+    "not create a missing historical attribution artifact, revise the old packet or "
+    "transfer an old review. Changed package, case, evidence or operating identities "
+    "require a new dependent review."
+)
+
 
 def _component(name, text, *, status, reader_treatment, scope):
     return {
@@ -98,6 +105,20 @@ def _component(name, text, *, status, reader_treatment, scope):
 
 
 _COMPOUND_PROFILES = {
+    _RECONCILIATION_LINEAGE: {
+        "profile": "reconciliation_review_lineage_only",
+        "requires_operating_evidence": False,
+        "revision_only": True,
+        "components": (
+            _component(
+                "immutable_history_and_dependent_review",
+                _RECONCILIATION_LINEAGE,
+                status="open_procedural",
+                reader_treatment="audit_only_procedural",
+                scope="review_reexecution_control",
+            ),
+        ),
+    },
     _SCENARIO_AND_VALUATION_GAP: {
         "profile": "conditional_operating_vs_market_valuation_inputs",
         "requires_operating_evidence": True,
@@ -366,7 +387,7 @@ def compound_obligation_evidence_valid(issue, evidence):
     return None not in expected and issue["compound_obligation"]["evidence_bindings"] == expected
 
 
-def split_compound_obligations(issues, evidence):
+def split_compound_obligations(issues, evidence, *, reader_revision=False):
     """Attach conservative atomic coverage components to exact known legacy issues.
 
     Original issue IDs and text are never replaced. Similar or unmatched prose is
@@ -380,7 +401,14 @@ def split_compound_obligations(issues, evidence):
     for source in issues:
         item = deepcopy(source)
         profile = _COMPOUND_PROFILES.get(item.get("text"))
-        if profile is None:
+        if profile is None or (profile.get("revision_only") and not reader_revision):
+            result.append(item)
+            continue
+        if profile.get("revision_only") and any(
+            finding.get("category") == "security" or (
+                finding.get("category") == "numerical" and finding.get("severity") == "critical")
+            for finding in item.get("prior_findings", ())
+        ):
             result.append(item)
             continue
         if profile["requires_operating_evidence"] and operating_binding is None:

@@ -1,0 +1,27 @@
+"""Opt-in, single-candidate revision contract; never a waiver or automatic retry."""
+
+READER_REVISION_POLICY = "frozen-candidate-revision-v1"
+REVISE_STAGE = "revise_report"
+REVISED_REVIEW_STAGE = "verify_revised_report"
+
+REVISION_REQUIREMENTS = (
+    "Revise the exact failed candidate using the frozen evidence and every remaining "
+    "finding. This is one bounded revision, not permission to omit checks or invent facts. "
+    "Distinguish repurchase authorization, evidence of execution, disclosed amounts and "
+    "net dilution; do not convert missing amounts into absence of any execution. "
+    "Keep the separate draft financial-case working-capital schedule distinct from "
+    "reviewed narrow cash bridges and legacy proxies, including unresolved mixed rows. "
+    "Preserve commitment dates/horizons, later obligations, guarantee default triggers "
+    "and defined contractual coverage when supplied; contingency alone is not a complete "
+    "description. Disclose material source-selection/truncation, retrieval completeness "
+    "and table-extraction risks concisely. Distinguish supplied incentive mechanics and "
+    "earned outcomes from unresolved target difficulty, realized pay sensitivity and "
+    "investment returns. Never label supplied evidence absent merely because economic "
+    "underwriting is incomplete. Procedural components explicitly classified by the "
+    "code-owned applicability contract stay in the immutable audit; material economic "
+    "and source-quality limits remain in the reader. Retain precise paragraph citations "
+    "and calculation bindings, improve scenario interpretation and observable follow-up "
+    "tests, and avoid implementation jargon and repeated caveats. Do not assert valuation, "
+    "per-share value or company-wide funding approval. The new reader requires its own "
+    "full factual and per-issue coverage verification; old attestations do not transfer."
+)

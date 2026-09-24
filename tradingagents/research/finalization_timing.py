@@ -12,11 +12,11 @@ from math import isfinite
 def call_family(stage):
     if not isinstance(stage, str):
         return None
-    if re.fullmatch(r"verify_(?:repaired_)?report-coverage-\d+", stage):
+    if re.fullmatch(r"verify_(?:(?:repaired|revised)_)?report-coverage-\d+", stage):
         return "coverage"
-    if stage in {"verify_report", "verify_repaired_report"}:
+    if stage in {"verify_report", "verify_repaired_report", "verify_revised_report"}:
         return "factual"
-    if stage in {"editor", "repair_report"}:
+    if stage in {"editor", "repair_report", "revise_report"}:
         return "writer"
     return None
 

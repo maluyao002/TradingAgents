@@ -7,6 +7,32 @@ The [original implementation plan](DEEP-RESEARCH-PLAN.md) is preserved.
 
 ## Authorized NVDA finalization — September 24 UTC / September 23 PDT
 
+Follow-up engineering (not yet integrated): the user approved scoped pipeline
+fixes and bounded revalidation after the failed continuation below. An explicit
+`--revise-reader` mode binds one further revision to the terminal failed repaired
+candidate, complete frozen prefix, destination and fresh incremental allowance.
+All old payloads remain byte-compatible; revised writer/factual/coverage stages
+have a separate policy identity. Even identical candidate text receives fresh
+checks. Prior retirement decisions do not attest the new candidate. Exact
+procedural reconciliation lineage stays protected in the audit; material source,
+economic, security and critical numerical caveats are not waived. Missing exact
+excerpts still fail closed.
+
+The initial 84 targeted offline tests passed. Independent review identified two
+P2 recovery-validation gaps: incomplete restored prefix/boundary proofs and empty
+coverage inventories despite required obligations. Both were fixed, along with
+controlled rejection of a null terminal review; six new negative cases pass in
+a 56-test focused recheck. A no-provider rehearsal of the real history replayed
+all 48 stages and reached `revise_report`. The 4m-token writer-plus-full-review
+estimate reserved 3,290,807 tokens; time estimates are cold/unknown and the
+90-minute supervisor cap still applies. No live outcome is implied by preparation.
+Final targeted verification: **114 passed, one optional local frozen-packet test
+skipped**; lint and whitespace checks passed. Independent re-review found no
+remaining actionable findings and reported 49 focused tests (overlapping, not
+additive). Metadata-only preflight passed for GPT-6 Astra/high and Sol/xhigh in
+the unchanged isolated provider home. The sandboxed metadata process initially
+closed stdout; the permission-enabled metadata retry succeeded without inference.
+
 After PR #27 integrated the documentation closeout rules, the user explicitly
 approved offline applicability/readiness, bounded NVDA finalization and actual
 export inspection, including the required run allowance. The coordinator selected

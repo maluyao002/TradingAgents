@@ -145,7 +145,7 @@ especially the substantive-closure, packet, disclosure-control and validation re
 
 | Checkpoint | User action |
 | --- | --- |
-| Concrete live run / recovery | Approved 4m-token/90-minute continuation completed within bounds, but export was withheld. Budget approval is not the blocker. A scoped pipeline-fix follow-up was proposed for confirmation; no further retry or gate override has occurred. Reader and production acceptance remain separate |
+| Concrete live run / recovery | Approved continuation completed within bounds, but export was withheld. The user subsequently approved the scoped pipeline fix and bounded revalidation; engineering/review and a new bound plan must precede another run. Reader and production acceptance remain separate |
 | Completed NVDA / HOOD reader | Review usefulness and readability, not every intermediate assumption |
 | Human reference validation / blind comparison | Review a prepared finite packet, or designate a qualified reviewer |
 | Paid/private data, changed scope or acceptance thresholds | Decide only after engineering explains the actual need and alternatives |

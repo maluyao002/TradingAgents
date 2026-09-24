@@ -31,9 +31,11 @@ class _FinalizationWorker:
     source_dir: Path
     authorization_file: Path
     codex_home: Path
+    revise_reader: bool = False
 
     def __call__(self, request: ResearchRequest) -> ResearchResult:
-        plan = prepare_finalization_continuation(self.source_dir, request)
+        plan = prepare_finalization_continuation(self.source_dir, request,
+                                                 revise_reader=self.revise_reader)
         authorization = load_finalization_authorization(self.authorization_file)
         authorized = authorize_finalization_continuation(plan, authorization, request)
         snapshot = EvidenceSnapshot.model_validate(parse_json(plan.frozen_inputs["evidence_path"]))
@@ -52,6 +54,8 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--source-dir", required=True, type=Path)
     prepare.add_argument("--config", required=True, type=Path, help="destination request JSON")
     prepare.add_argument("--output", required=True, type=Path, help="reviewable plan JSON")
+    prepare.add_argument("--revise-reader", action="store_true",
+                         help="authorize one new revision of a failed repaired candidate")
 
     run = subparsers.add_parser("run", help="run only under the existing process supervisor")
     run.add_argument("--source-dir", required=True, type=Path)
@@ -59,6 +63,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--authorization-file", required=True, type=Path)
     run.add_argument("--codex-home", required=True, type=Path)
     run.add_argument("--allow-live", action="store_true")
+    run.add_argument("--revise-reader", action="store_true")
     return parser
 
 
@@ -66,7 +71,8 @@ def main(argv=None) -> int:
     args = _parser().parse_args(argv)
     try:
         request = load_request(args.config.resolve())
-        plan = prepare_finalization_continuation(args.source_dir, request)
+        plan = prepare_finalization_continuation(args.source_dir, request,
+                                                 revise_reader=args.revise_reader)
         if args.command == "prepare":
             write_finalization_continuation_plan(plan, args.output)
             payload = {
@@ -100,6 +106,7 @@ def main(argv=None) -> int:
             args.source_dir.resolve(),
             args.authorization_file.resolve(),
             codex_home,
+            args.revise_reader,
         )
         outcome = run_supervised(worker, request)
         if outcome.result is None:
