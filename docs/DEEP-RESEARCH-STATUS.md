@@ -13,6 +13,19 @@ but **Stage 3 is still open: no admitted final improved English NVDA reader
 has been delivered**. The HOOD contrast remains Stage 4 work. A successful
 diagnostic or merged code increment is not a completed or accepted report.
 
+- **PR #28 merged** into `codex/deep-research-v2` as `9cc0ace` on September 24
+  at 09:59 PDT / 16:59 UTC. All six hosted checks passed on final head `4c1a2df`;
+  the review thread is resolved, final independent code review is clear, and 63
+  focused offline tests pass. This integrates the bounded recovery, v6 inventory/
+  witness fixes and retry-convergence rule. Offline readiness is complete; no
+  run 4 or admitted export exists. The verified receipt is in the
+  [implementation record](DEEP-RESEARCH-PROGRESS.md#latest-integrated-increment--pr-28-september-24).
+  Its post-merge documentation update is local on `codex/nvda-finalization-closeout`,
+  pending the next reviewed PR; no additional bookkeeping PR was opened.
+
+The following bullets retain the dated development/validation sequence. Earlier
+open-PR statements are historical; the merge receipt above is current.
+
 - PR #24 merged as `d9bb516` into `codex/research-substantive-closure`.
   Its local/remote sub-branch was removed. All six checks passed on final PR head
   `7aca54c`; its review finding is resolved and re-review found no new inline findings.
@@ -64,7 +77,7 @@ diagnostic or merged code increment is not a completed or accepted report.
   (six authored plus six deterministic, not 12 distinct defects).
   This is `verification_failed`, not a provider/source-access or budget failure.
   Changing inputs/runtime still requires a new compatibility assessment.
-- PR #28 is open against `codex/deep-research-v2`, not main. It adds an explicitly
+- At the first revision checkpoint, PR #28 was open against `codex/deep-research-v2`, not main. It adds an explicitly
   authorized single revision after complete exact-prefix replay, scoped procedural
   lineage and full new factual/coverage checks. Independent review fixes and
   114 targeted tests passed (one optional packet test skipped); all six hosted
@@ -77,7 +90,7 @@ diagnostic or merged code increment is not a completed or accepted report.
   The original substantive wording/disclosure defects are addressed at candidate
   level; this is not an exported or accepted reader. A later reserve-planning
   review fix, `740015e`, passed 42 focused tests and all six hosted checks; its
-  review thread is resolved. The run stayed frozen at `2f0b8d2`; PR #28 is not merged.
+  review thread is resolved. The run stayed frozen at `2f0b8d2`; PR #28 was not yet merged.
 - Follow-up verification-only repair is implemented and reviewed in PR #28;
   155 targeted tests passed (one optional packet test skipped). The unchanged candidate can receive fresh factual/complete coverage
   checks after replaying all 68 saved calls, without another analyst or writer run.
@@ -151,7 +164,7 @@ diagnostic or merged code increment is not a completed or accepted report.
   coverage ID, proxy-passage delivery and compressed financial/exposure caveats.
   There is no admitted export. Continue offline applicability/delivery diagnosis;
   no historical response normalization, acceptance override or blind retry.
-- The narrow v6 follow-up is implemented on unmerged PR #28 (`8fbdf42`, with
+- The narrow v6 follow-up was implemented before PR #28 merged (`8fbdf42`, with
   helper commits `1b2ef04` / `75ab791`). It pins the complete original inventory
   for the missing/foreign-ID pair and requires a fresh atomic coverage receipt;
   it never aliases a malformed ID or clears unrelated findings. Exact historical

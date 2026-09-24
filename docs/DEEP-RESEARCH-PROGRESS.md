@@ -5,6 +5,37 @@ and validation checkpoints, **not a second work queue**. For current priorities,
 open gates and user decisions, use the [current roadmap](DEEP-RESEARCH-STATUS.md).
 The [original implementation plan](DEEP-RESEARCH-PLAN.md) is preserved.
 
+## Latest integrated increment — PR #28, September 24
+
+[PR #28](https://github.com/maluyao002/TradingAgents/pull/28) merged into
+`codex/deep-research-v2` as `9cc0ace68707b175ba91c60756571a8bc608b42f` on
+September 24, 2026 at 09:59 PDT / 16:59 UTC. Final head `4c1a2df` passed all six
+hosted checks: Python 3.10–3.13, clean locked install and container privacy/import.
+The existing coverage-reserve review thread is resolved. Coordinator and independent
+Astra/high review found no remaining actionable code findings; final review corrected
+stale revision-policy routing and current validation gates in the operating docs.
+
+Delivered: explicitly bounded reader revision and verification-only recovery,
+versioned exact replay, lossless prompt packing/admission, scoped lifecycle and
+source witnesses, pending-obligation/correction carryover, pinned coverage reserve,
+v6 atomic inventory recovery and validated operating-source witness delivery.
+The campaign retry-convergence rule and final 150-stage offline readiness record
+are included. Final focused offline revalidation passed **63 tests**; the independent
+47-test subset overlaps and is not added. Affected-production Ruff and whitespace
+checks passed. Earlier live failures and incomplete usage remain preserved.
+
+The merged feature branch and temporary worktrees are retained; no cleanup was
+requested in this merge turn. Main and the user's dirty configuration checkout
+are untouched. This verified merge receipt is recorded on the separate local
+`codex/nvda-finalization-closeout` branch for the next reviewed documentation/code
+PR; it has not itself been integrated, and no bookkeeping PR was opened.
+
+Stage 3 remains open: there is no admitted improved NVDA export. The replacement
+plan is prepared offline only; this merge does not authorize run 4, renew a budget,
+accept the reader/financial case or activate production. The entries below are
+chronological checkpoint history: their open/unmerged PR #28 statements describe
+the time of those checks, not the current integration status.
+
 ## Retry-loop policy and offline readiness closeout — September 24
 
 The [operating rule](DEEP-RESEARCH-USAGE.md#open-ended-retry-loop-rule) now requires
