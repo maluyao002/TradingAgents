@@ -491,9 +491,10 @@ financial and production acceptance remain separate gates.
 ### Numbered, evidence-backed reader repair
 
 The same `--revise-reader` flag selects a versioned contract when the source is
-a terminal failed `verify_frozen_report` or numbered revised reader. V4 remains
-the transition from older contracts; a source already owned by v4 or v5 selects
-`frozen-candidate-revision-v5`.
+a terminal failed `verify_frozen_report` or numbered revised reader. Older sources
+select v4; a v4 source selects `frozen-candidate-revision-v5`; v5 and v6 sources
+select `frozen-candidate-revision-v6`. Imported generations retain their original
+contracts; this selection governs only the new generation.
 Preparation binds the exact candidate, source writer, complete terminal review,
 policy contract, eligible exact source-passage witnesses and full saved prefix.
 Generation 2 uses `revise_report-2` / `verify_revised_report-2`; each later
@@ -560,6 +561,21 @@ the new candidate exists, exact factual and coverage prompt sizes and remaining
 resources are checked again. Lossless sharing is opt-in to this policy; evidence
 is not truncated. Estimates are not token/wall-time guarantees, and a passing
 offline rehearsal is not an admitted reader or authorization by itself.
+
+V6 can carry one proven missing/foreign coverage-ID pair as an immutable inventory
+envelope. It never maps the foreign ID to the missing one. The complete original,
+undecorated batch is pinned, its historical payload is reconstructed during exact
+replay, and only fresh valid coverage of every obligation earns one atomic receipt
+for both response errors. Partial coverage, changed contexts or additional unmatched
+inventory errors fail closed. Unrelated factual findings and financial gates remain
+independent; broader decorated-origin recovery is unsupported.
+
+The v6 finding-bound source catalog additionally considers exact validated operating
+source locators and current finding prose for explicitly affected eligible sources.
+Every passage retains its source hash and exact offsets. This is delivery, not
+semantic approval or broader issue-resolution authority. The bounded catalog may
+omit candidates when full; exact prompt admission remains mandatory. Historical
+v3–v5 selectors and payloads are unchanged.
 
 ### Frozen-reader verification repair
 

@@ -279,11 +279,12 @@ useful fresh reader but remain part of the full release.
   dispositions. The numbered repair corrected those prior finding subjects but
   exposed specific concentration omissions, an outcome-quote delivery gap, DOE
   historical/current excerpt scope and three new malformed audit-only responses.
-  V4 witness delivery and versioned response-error handling are implemented, but
-  run 2 exposed remaining lifecycle/witness and receipt failures. Diagnose the
-  actual terminal audit, correct timing/Q3 disclosures and preserve substantive
-  caveats before another writer/full-verification run; do not waive or normalize
-  failed historical responses.
+  Subsequent v5/v6 changes address receipt carryover, exact inventory recovery and
+  finding-bound source delivery. Run 3 still withheld export; the final 150-stage
+  v6 offline rehearsal passes, but the narrowed proxy claim, timing/Q3 wording and
+  material financial/exposure caveats need fresh live reader verification. Preserve
+  failed historical responses; apply the campaign convergence checkpoint before
+  another writer/full-verification run.
   Each generation needs its own bound
   allowance; unused allowance never authorizes an automatic writer loop.
   Editorial depth still needs
@@ -299,7 +300,7 @@ especially the substantive-closure, packet, disclosure-control and validation re
 
 | Checkpoint | User action |
 | --- | --- |
-| Concrete live run / recovery | Standing approval covers reasonable bounded validation. Run 2 settled without export; remaining diagnosis/repair is engineering and needs no new user input. Each subsequent run still needs its own explicit bounds, plan and offline readiness; no blind retry or waiver of findings. Reader and production acceptance remain separate |
+| Concrete live run / recovery | Standing approval covered reasonable bounded validation; the latest request closes offline readiness and reviews/merges code only. Run 3 settled without export and no run 4 has launched. Apply the campaign convergence checkpoint and applicable authorization before live continuation; each run still needs explicit bounds and a bound plan. Reader and production acceptance remain separate |
 | Completed NVDA / HOOD reader | Review usefulness and readability, not every intermediate assumption |
 | Human reference validation / blind comparison | Review a prepared finite packet, or designate a qualified reviewer |
 | Paid/private data, changed scope or acceptance thresholds | Decide only after engineering explains the actual need and alternatives |
