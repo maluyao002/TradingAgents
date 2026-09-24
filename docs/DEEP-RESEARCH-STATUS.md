@@ -19,7 +19,7 @@ has been delivered**. A successful diagnostic is not a completed or accepted rep
   after all six checks passed and all seven review threads were resolved.
   The fully merged local/remote `codex/research-substantive-closure` sub-branch
   was removed; its history remains in the merge. Main remains unchanged.
-  Follow-up work is on `codex/nvda-reader-financial-closure`.
+  PR #26 delivers the next reviewed increment against that integration branch.
 - Active Sol/Luna selections now use GPT-6. Runtime capability checks, API effort
   forwarding, conservative input-size admission and lossless packing are implemented.
 - The latest exact-reader factual diagnostic succeeded in **237.17 seconds /
@@ -33,8 +33,11 @@ has been delivered**. A successful diagnostic is not a completed or accepted rep
   HOOD and release acceptance are not part of this increment. Reader inputs are
   now code-owned and tested (`f3a7967`); typed reconciliation and immutable packet
   preparation are implemented (`ecd2fc3`). Fresh source/operating and cash-flow
-  reviews passed and are attached in `reviewed_inputs_2`. PR #26 is open against
-  `codex/deep-research-v2`; all six hosted checks passed on `d65b3ba`.
+  reviews passed and are attached in `reviewed_inputs_2`. PR #26 targets
+  `codex/deep-research-v2`. Its pre-merge re-review also fixed truncated source
+  cells and Decimal-rounded anchor comparisons; see the implementation record
+  and [PR #26](https://github.com/maluyao002/TradingAgents/pull/26) for final checks
+  and integration state. Historical reports and live allowances are unchanged.
 - Fresh English attempt 3 completed 28 model calls, including all fresh analyses,
   the writer, factual review and 18 coverage batches. It stopped before repair at
   `repair_path_budget_insufficient`: **1,642,733 tokens / 3,593.84 seconds**, with

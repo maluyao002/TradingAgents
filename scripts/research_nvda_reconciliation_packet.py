@@ -15,6 +15,7 @@ from tradingagents.research.case_context import FinancialCaseEnvelope, load_case
 from tradingagents.research.cashflow_bridge import (
     CashFlowBridgePackage,
     HistoricalCashFlowReconciliationSelector,
+    _exact_product,
     evaluate_cashflow_bridge,
 )
 from tradingagents.research.contracts import EvidenceSnapshot, FinancialFact, ResearchRequest
@@ -43,6 +44,8 @@ _ROW_LABELS.update(net_income="Net income", stock_compensation="Stock-based comp
                    reported_cfo="Net cash provided by operating activities")
 _TABLE_HEADER = ("Condensed Consolidated Statements of Cash Flows\n(In millions)\n(Unaudited)\n"
                  "\u00a0 Six Months Ended\n\u00a0 Jul 26, 2026 Jul 27, 2025\nCash flows from operating activities:\n")
+_INTEGER_CELL = r"(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)"
+_SIGNED_CELL = rf"(?:-?{_INTEGER_CELL}|\({_INTEGER_CELL}\))"
 
 
 def prepare_packet(source: Path, mapping_path: Path, output: Path):
@@ -90,15 +93,28 @@ def prepare_packet(source: Path, mapping_path: Path, output: Path):
         label = re.split(r"\(?-?\d", row["text"], maxsplit=1)[0].replace("$", "").strip()
         if label != _ROW_LABELS[role]:
             raise ValueError("source mapping role differs from the reported row label")
+        line_start = filing.content.rfind("\n", 0, row["start"]) + 1
+        line_end = filing.content.find("\n", row["end"])
+        if line_end < 0:
+            line_end = len(filing.content)
+        if ("\n" in row["text"] or "\r" in row["text"]
+                or filing.content[line_start:row["start"]].strip()
+                or filing.content[row["end"]:line_end].strip()):
+            raise ValueError("source mapping must select a complete statement row")
         # The first numeric cell belongs to current six-month period; preserve
-        # the signed value rather than deriving it from a balance-sheet movement.
-        cells = re.findall(r"\(?-?\d[\d,]*\)?", row["text"])
-        first = cells[0].replace(",", "").replace("(", "-").replace(")", "")
+        # complete cells, including balanced parentheses and thousands groups.
+        cells = re.fullmatch(
+            re.escape(_ROW_LABELS[role]) + rf"\s+\$?\s*({_SIGNED_CELL})\s+\$?\s*{_SIGNED_CELL}\s*",
+            row["text"],
+        )
+        if cells is None:
+            raise ValueError("source mapping requires two complete integer cells")
+        first = cells[1].replace(",", "").replace("(", "-").replace(")", "")
         if Decimal(first) != Decimal(str(row["signed_value_millions"])):
             raise ValueError("source mapping number differs from the first reported cell")
         if role in anchor_ids:
             fact = original_facts[anchor_ids[role]]
-            if (fact.value * fact.scale != Decimal(first) * Decimal("1000000")
+            if (_exact_product(fact.value, fact.scale) != _exact_product(Decimal(first), Decimal("1000000"))
                     or str(fact.period_start) != mapping["period_start"]
                     or str(fact.period_end) != mapping["period_end"]
                     or fact.unit != "USD" or fact.currency != "USD"):

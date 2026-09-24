@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from hashlib import sha256
 
 import pytest
@@ -69,7 +69,8 @@ def _redate(value):
     return _DATES.get(value, value) if isinstance(value, str) else value
 
 
-def _source_bundle(tmp_path, *, label_override=None, value_override=None):
+def _source_bundle(tmp_path, *, label_override=None, value_override=None,
+                   cell_override=None, net_income_value="410"):
     """A manifest-bound source with NVDA IDs and fully synthetic financial rows."""
 
     snapshot, case, operating, cashflow = bridge_setup(tmp_path / "base", reviewed=True)
@@ -83,6 +84,7 @@ def _source_bundle(tmp_path, *, label_override=None, value_override=None):
     for role, default_signed in _SOURCE_ROWS:
         signed = (value_override or {}).get(role, default_signed)
         cell = f"({abs(int(signed)):,})" if signed.startswith("-") else f"{int(signed):,}"
+        cell = (cell_override or {}).get(role, cell)
         label = (label_override or {}).get(role, _ROW_LABELS[role])
         line = f"{label}  {cell}  1"
         start = len(content)
@@ -111,7 +113,7 @@ def _source_bundle(tmp_path, *, label_override=None, value_override=None):
         "period_type": "duration", "location": "Synthetic source row",
     }
     reused = (
-        FinancialFact(id="nvda-net_income-h1", metric="net_income", value="410", **duration),
+        FinancialFact(id="nvda-net_income-h1", metric="net_income", value=net_income_value, **duration),
         FinancialFact(id="nvda-stock_based_compensation-h1", metric="stock_based_compensation",
                       value="10", **duration),
         FinancialFact(id="nvda-asset_principal_cashflow-h1", metric="asset_principal_cashflow",
@@ -371,6 +373,51 @@ def test_exact_foreign_label_inside_statement_is_rejected(tmp_path):
     output = tmp_path / "rejected"
     with pytest.raises(ValueError, match="role differs from the reported row label"):
         prepare_packet(source, mapping_path, output)
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("role,value,prefix,claimed", [
+    ("inventory_movement", "-10204", "Inventories  (10", -10),
+    ("payables_movement", "4125", "Accounts payable  4", 4),
+    ("inventory_movement", "-10204", "Inventories  (10,204)", -10204),
+])
+def test_truncated_statement_rows_cannot_publish(tmp_path, role, value, prefix, claimed):
+    source, mapping_path, mapping = _source_bundle(tmp_path, value_override={role: value})
+    before = _source_bytes(source)
+    row = next(item for item in mapping["rows"] if item["role"] == role)
+    assert row["text"].startswith(prefix)
+    row.update(text=prefix, end=row["start"] + len(prefix), signed_value_millions=claimed)
+    mapping_path.write_bytes(canonical_json(mapping))
+    output = tmp_path / "rejected"
+    with pytest.raises(ValueError, match="complete statement row"):
+        prepare_packet(source, mapping_path, output)
+    assert not output.exists() and _source_bytes(source) == before
+
+
+@pytest.mark.parametrize("cell", ["(10", "-10)", "(1,0)", "(10).5"])
+def test_malformed_complete_numeric_cells_cannot_publish(tmp_path, cell):
+    source, mapping_path, _ = _source_bundle(tmp_path, cell_override={"inventory_movement": cell})
+    output = tmp_path / "rejected"
+    with pytest.raises(ValueError, match="two complete integer cells"):
+        prepare_packet(source, mapping_path, output)
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("precision,fact_value,row_value", [
+    (2, "410", "411"),
+    (28, "410.000000000000000000000000001", "410"),
+])
+def test_reused_row_comparison_is_exact_under_decimal_rounding(
+    tmp_path, precision, fact_value, row_value
+):
+    source, mapping_path, _ = _source_bundle(
+        tmp_path, net_income_value=fact_value, value_override={"net_income": row_value}
+    )
+    output = tmp_path / "rejected"
+    with localcontext() as context:
+        context.prec = precision
+        with pytest.raises(ValueError, match="reused statement row differs from existing anchor fact"):
+            prepare_packet(source, mapping_path, output)
     assert not output.exists()
 
 

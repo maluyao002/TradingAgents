@@ -5,6 +5,31 @@ and validation checkpoints, **not a second work queue**. For current priorities,
 open gates and user decisions, use the [current roadmap](DEEP-RESEARCH-STATUS.md).
 The [original implementation plan](DEEP-RESEARCH-PLAN.md) is preserved.
 
+## PR #26 pre-merge re-review — September 23
+
+The coordinator and the reused independent Sol reviewer re-examined the exact
+PR #26 diff. Two packet-builder defects were found and fixed: partial numeric
+source excerpts could be accepted as complete cells, and ambient Decimal
+rounding could hide a mismatch with an existing anchor fact. The builder now
+requires complete statement rows with two valid integer cells and uses exact
+multiplication for reused-fact comparisons. Nine negative regressions cover
+truncation, malformed cells, low precision and long fractional mismatches.
+
+Before the fixes, **103 targeted offline tests** passed across reconciliation,
+packet preparation, reader/provenance, legacy cache/preview and finalization.
+After the fixes, **46 packet/reconciliation tests** passed, with lint and
+whitespace checks clean. Offline preparation from the preserved actual mapping
+into a fresh temporary directory produced byte-identical evidence, case input
+and pending cash-flow package. Historical bundles were not changed; no live
+calls or continuation were authorized. GitHub records the final reviewed head,
+hosted checks and merge outcome for [PR #26](https://github.com/maluyao002/TradingAgents/pull/26).
+The same independent reviewer rechecked both fixes and the actual frozen
+mapping; no remaining actionable findings were reported in the reviewed delta.
+
+This is source-validation hardening, not acceptance of the reader or economic
+model. Any continuation still needs its own allowance and runtime-compatibility
+assessment; no historical run or preflight attestation is rewritten by this fix.
+
 ## Feature integration and next increment — September 23
 
 PR #23 merged into `codex/deep-research-v2` as `bb580cb` after six successful
