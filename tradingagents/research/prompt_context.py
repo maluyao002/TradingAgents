@@ -5,6 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
+from .reader_revision import VERIFICATION_REPAIR_POLICY
 from .storage import canonical_json, digest
 from .wire import codec_for, system_instruction_suffix
 
@@ -62,7 +63,7 @@ def _has_reserved_marker(value, active=None):
         active.remove(id(value))
 
 
-def _shared_packet(payload):
+def _shared_packet(payload, *, recursive=False):
     """Keep the historical v1 shared-subtree selection unchanged."""
     counts, values = Counter(), {}
 
@@ -87,7 +88,8 @@ def _shared_packet(payload):
         if not root and isinstance(value, (dict, list, tuple, str)):
             key = digest(value)
             if counts[key] > 1:
-                shared[key] = deepcopy(values[key])
+                if key not in shared:
+                    shared[key] = replace(values[key], root=True) if recursive else deepcopy(values[key])
                 return {_REF: key}
         if isinstance(value, dict):
             return {key: replace(child) for key, child in value.items()}
@@ -117,7 +119,7 @@ def _table_pack(value):
     return table if len(canonical_json(table)) < len(canonical_json(items)) else items
 
 
-def compact_prompt_context(payload):
+def compact_prompt_context(payload, *, recursive_shared=False):
     """Choose the smallest lossless encoding, except when a root tag needs escaping."""
     if (isinstance(payload, dict)
             and type(payload.get("context_encoding")) is str
@@ -144,6 +146,17 @@ def compact_prompt_context(payload):
                              for key, value in shared["shared_context"].items()}}
     candidates = ((raw_size, original), (len(canonical_json(v1)), v1),
                   (len(canonical_json(v2)), v2))
+    if recursive_shared:
+        # The existing v2 decoder supports nested, hash-checked references.
+        # Recurse into shared values too, but only under the new opt-in policy:
+        # legacy prompts/provider identities must remain byte-compatible.
+        nested = _shared_packet(payload, recursive=True)
+        packet = {"context_encoding": PROMPT_CONTEXT_ENCODING_VERSION,
+                  "context_policy": TABLE_CONTEXT_POLICY,
+                  "payload": _table_pack(nested["payload"]),
+                  "shared_context": {key: _table_pack(value)
+                                     for key, value in nested["shared_context"].items()}}
+        candidates = (*candidates, (len(canonical_json(packet)), packet))
     return min(candidates, key=lambda item: item[0])[1]
 
 
@@ -274,7 +287,7 @@ def model_prompt(payload):
     return canonical_json(compact_prompt_context({
         key: value for key, value in payload.items()
         if key not in {"system", "response_schema", "timeout_seconds", "max_output_tokens"}
-    }))
+    }, recursive_shared=payload.get("verification_repair_policy") == VERIFICATION_REPAIR_POLICY))
 
 
 def model_boundary(role, payload, *, output_token_envelope, valuation_method):

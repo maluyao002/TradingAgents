@@ -737,6 +737,7 @@ class FinalizationRecoveryModelService:
         self.live_service = live_service
         self.source_model_identity = authorized.plan.source_model_identity
         self.supports_hard_output_cap = getattr(live_service, "supports_hard_output_cap", False)
+        self.max_prompt_utf8_bytes = getattr(live_service, "max_prompt_utf8_bytes", None)
         self.identity = digest(
             {
                 "service": "candidate-finalization-recovery-v1",

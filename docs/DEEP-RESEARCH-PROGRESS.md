@@ -34,6 +34,32 @@ tokens / 3,600 seconds / 600 seconds per call**, with no investigation cycles.
 The existing provider identity is unchanged and metadata-only GPT-6 Sol/xhigh
 preflight passed. Preparation is not a successful live run or reader acceptance.
 
+The first verification-only attempt ran on `e16567c` and settled after **51.87
+seconds**, before inference at `verify_frozen_report`: `local_prompt_size_limit`
+in adapter preflight, **1,065,321 request bytes > 1,048,576**. All 68 imported
+calls replayed. No additional tokens were reported, but the generic dispatch ledger
+conservatively marks usage incomplete; this record is retained, not rewritten as
+measured zero. This is a local request-size stop, not an external-source failure.
+
+The follow-up v2 policy adds opt-in lossless recursive sharing of repeated JSON
+context, not evidence truncation or a larger adapter limit. It also admits the
+exact prompt-byte sizes of the full known verification path before any new call
+and checks again per dispatch. A tiny-cap regression proves no dispatch and
+complete unchanged usage. **139 targeted tests** passed across prompt/transport,
+decoder, recovery and engine boundaries; independent re-review found no actionable
+findings. The reviewer additionally checked roundtrip/legacy-compatibility cases;
+its overlapping counts are not added. A fresh `verification_plan_2` retains the
+same bounded scope and starts from completed `revision_run_1`, never the incomplete
+failed verification attempt. The original failed plan/run remain immutable.
+The exact 68-stage no-provider rehearsal passed with canonical byte-for-byte
+roundtrip equality: factual prompt **1,044,357 bytes**, leaving **4,219 bytes**
+under the unchanged cap. All 20 pre-retirement planned prompts fit; the revised
+reserve is **1,962,791 tokens**. Initial `e16567c` CI passed five checks but the
+Python 3.13 job classified the weekly deliberate-crash fixture as a two-second
+startup timeout. Only that fixture's startup allowance was increased to ten
+seconds; crash assertions, the separate timeout regression and production limits
+are unchanged. This is not a research-runtime failure or a disabled CI gate.
+
 Targeted recovery/revision tests passed **54**, and directly affected engine,
 timing, compound-obligation, rendering and case regressions passed **74**, with
 one optional local-packet test skipped. Lint and whitespace checks passed.

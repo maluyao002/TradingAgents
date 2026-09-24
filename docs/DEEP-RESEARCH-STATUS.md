@@ -85,8 +85,15 @@ diagnostic or merged code increment is not a completed or accepted report.
   statement; financial scope limits remain reader-required. The new attestation
   contract explicitly requires empty spans for audit-only decisions. Offline
   rehearsal reached the exact frozen-reader boundary, reserving 1,983,755 tokens.
-  `verification_plan_1` is prepared at 3m additional tokens / 60 minutes / 600
-  seconds per call; supported Sol/xhigh preflight passed. No live outcome yet.
+  The first attempt stopped locally before inference: its 1,065,321-byte prompt
+  exceeded the 1,048,576-byte cap; the conservative unknown-usage marker is
+  preserved. Follow-up lossless nested packing and pre-dispatch size admission
+  passed 139 targeted tests and independent review. `verification_plan_2` retains
+  3m additional tokens / 60 minutes / 600 seconds per call, using the completed
+  original revision as source. Supported Sol/xhigh preflight passed; no successful
+  verification-only live outcome yet.
+  Exact offline rehearsal confirms all 20 planned prompts fit, with the largest
+  at 1,044,357 bytes and lossless canonical roundtrip equality; reserve 1,962,791.
 
 See the [concise implementation record](DEEP-RESEARCH-PROGRESS.md) for completed
 checkpoints and the [latest validation evidence](archive/deep-research/DEEP-RESEARCH-FRESH-VALIDATION.md)
@@ -97,7 +104,7 @@ for exact attempts, bounds and usage.
 | Order | Deliverable | Completion evidence |
 | --- | --- | --- |
 | 1 — Done (engineering) | Integrate reviewed reader inputs and typed reconciliation | PRs #23 and #26 merged; reader assumption table, typed reconciliation and packet-validation fixes tested/reviewed. This is not final-reader delivery |
-| 2 — Verification repair reviewed; export blocked | Complete bounded NVDA finalization | Run bounded unchanged-reader factual/coverage checks under `verification_plan_1`. Latest completed run has clean factual review and 195/200 coverage IDs. Preserve original responses and gates; no blind writer restart |
+| 2 — Prompt-size fix reviewed; export blocked | Complete bounded NVDA finalization | Run bounded unchanged-reader factual/coverage checks under `verification_plan_2` after exact serialized-size rehearsal. Latest completed reader review has clean factual review and 195/200 coverage IDs. Preserve original responses and gates; no blind writer restart |
 | 3 | Inspect the actual exported English reader | Still open: the revised candidate was independently inspected and its footnotes/calculation links checked, but no admitted export exists. Verify exported bytes and reader usefulness before user review |
 | 4 | Close targeted financial and independent-evidence gaps | Typed issuer-FCF/residual reconciliation and fresh source/arithmetic reviews delivered in PR #26; dependent fresh analysis completed, but the reader is blocked and economic/independent-demand gaps remain |
 | 5 | Prove HOOD generality | Distinct broker-equity/funding workflow, English reader and comparator review using the same core contracts |

@@ -1,0 +1,79 @@
+"""Lossless verification-only nesting and pre-dispatch provider-byte admission."""
+
+import json
+from copy import deepcopy
+
+import pytest
+
+from tests.test_research_verification_repair import _verification
+from tradingagents.research.engine import run_research
+from tradingagents.research.prompt_context import (
+    compact_prompt_context,
+    expand_prompt_context,
+    model_prompt,
+)
+from tradingagents.research.reader_revision import VERIFICATION_REPAIR_POLICY
+from tradingagents.research.services import ResearchServices
+from tradingagents.research.storage import canonical_json, read_json
+
+
+def _nested_payload():
+    parents = [{"scope": str(i), "common": "Exact evidence with Unicode 中文. " * 3200,
+                "detail": str(i) * 1100} for i in range(12)]
+    return {"original": parents, "repeat": deepcopy(parents),
+            "individual": [deepcopy(p) for p in reversed(parents)]}
+
+
+def test_nested_sharing_is_lossless_smaller_and_opt_in():
+    payload = _nested_payload()
+    before = deepcopy(payload)
+    legacy = compact_prompt_context(payload)
+    nested = compact_prompt_context(payload, recursive_shared=True)
+    assert len(canonical_json(legacy)) > 1_048_576
+    assert len(canonical_json(nested)) < 1_048_576
+    assert expand_prompt_context(nested) == before == payload
+    assert model_prompt(payload) == canonical_json(legacy)
+    flagged = {**payload, "verification_repair_policy": VERIFICATION_REPAIR_POLICY}
+    assert expand_prompt_context(json.loads(model_prompt(flagged))) == flagged
+    assert len(model_prompt(flagged)) < len(canonical_json(legacy))
+
+
+@pytest.mark.parametrize("marker", ["research_context_ref", "research_context_table"])
+def test_nested_sharing_never_interprets_source_owned_tags(marker):
+    payload = {**_nested_payload(), "source_owned": {marker: "untrusted"}}
+    packed = compact_prompt_context(payload, recursive_shared=True)
+    assert packed == payload
+
+
+def test_nested_sharing_preserves_literal_root_escaping():
+    payload = {"context_encoding": "exact-shared-context-v2", **_nested_payload()}
+    packed = compact_prompt_context(payload, recursive_shared=True)
+    assert packed["literal_payload"] is True
+    assert expand_prompt_context(packed) == payload
+
+
+def test_nested_sharing_rejects_cycles_and_tampered_catalog():
+    cycle = {}
+    cycle["self"] = cycle
+    with pytest.raises(ValueError, match="cycle"):
+        compact_prompt_context(cycle, recursive_shared=True)
+    packed = compact_prompt_context(_nested_payload(), recursive_shared=True)
+    key = next(iter(packed["shared_context"]))
+    packed["shared_context"][key] = "changed"
+    with pytest.raises(ValueError, match="hash mismatch"):
+        expand_prompt_context(packed)
+
+
+def test_prompt_size_admission_stops_before_dispatch_with_complete_usage(tmp_path):
+    _, request, evidence, service, provider = _verification(tmp_path)
+    service.max_prompt_utf8_bytes = 10
+    result = run_research(request, ResearchServices(evidence, service))
+    assert result.stop_reason == "verification_prompt_size_limit"
+    assert not provider.calls
+    assert result.usage == service.plan.plan.source_usage and result.usage.complete
+    resources = read_json(request.output_dir / "stages/resources.json")["output"]
+    assert not resources["dispatched"] and resources["budget_usage"]["complete"]
+    admission = read_json(request.output_dir / "stages/reverification-admission.json")["output"]
+    assert not admission["prompt_admission"]["fits"]
+    assert admission["prompt_admission"]["calls"][0]["stage"] == "verify_frozen_report"
+    assert not service.candidate_recovery_context["current_calls"]

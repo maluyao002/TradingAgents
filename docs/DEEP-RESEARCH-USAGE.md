@@ -460,13 +460,18 @@ financial and production acceptance remain separate gates.
 Use `--repair-verification` (instead of `--revise-reader`) on both preparation
 and execution to recheck a **terminal failed `verify_revised_report` candidate**
 whose factual review is clean and complete coverage history/usage are settled.
-This mode binds `frozen-candidate-verification-v1` into the plan and authorization,
+This mode binds `frozen-candidate-verification-v2` into the plan and authorization,
 replays the complete exact prefix, then permits only `verify_frozen_report` and
 its coverage batches. It cannot write a new reader, change the candidate hash,
 renew itself or redispatch a paid call whose output was lost. The exact factual
 and complete coverage path is reserved before the first new call; unknown usage
 stops further dispatch. Use a fresh destination and a separately authorized
 incremental allowance, under the existing process supervisor and call deadlines.
+The v2 policy enables lossless nested sharing of repeated context, using the
+existing hash-checked decoder. Legacy prompt bytes remain unchanged. Exact packed
+prompt sizes for the known factual/coverage path are checked against the provider's
+local prompt cap before the first new call, and again before each dispatch; no
+evidence is truncated to fit. A local size stop here preserves complete usage.
 
 The new attestation explicitly distinguishes audit-only decisions (empty excerpt
 fields) from material reader coverage (literal supporting spans). Saved malformed

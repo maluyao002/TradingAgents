@@ -13,7 +13,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from tradingagents.codex.adapter import CodexAdapter
+from tradingagents.codex.adapter import _MAX_PROMPT_UTF8_BYTES, CodexAdapter
 
 from .contracts import ResearchRequest, Usage
 from .prompt_context import PROMPT_CONTEXT_ENCODING_VERSION, model_boundary
@@ -79,6 +79,7 @@ def _call_deadline(seconds: float):
 class CodexModelService:
     kind = "codex"
     supports_hard_output_cap = False
+    max_prompt_utf8_bytes = _MAX_PROMPT_UTF8_BYTES
 
     def __init__(self, home: Path, *, adapter_factory=_ClosingSafeAdapter):
         self.home = Path(home).resolve()

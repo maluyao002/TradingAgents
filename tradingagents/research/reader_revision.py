@@ -3,7 +3,7 @@
 READER_REVISION_POLICY = "frozen-candidate-revision-v1"
 REVISE_STAGE = "revise_report"
 REVISED_REVIEW_STAGE = "verify_revised_report"
-VERIFICATION_REPAIR_POLICY = "frozen-candidate-verification-v1"
+VERIFICATION_REPAIR_POLICY = "frozen-candidate-verification-v2"
 FROZEN_REVIEW_STAGE = "verify_frozen_report"
 
 VERIFICATION_REPAIR_REQUIREMENTS = (

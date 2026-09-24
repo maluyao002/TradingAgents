@@ -715,3 +715,36 @@ findings affect five obligations; every nonempty quoted span is literal. The
 audit-only protocol violations are not four new substantive reader omissions.
 Future protocol repair must still reassess the audit-only judgments themselves,
 not conflate ingestion metadata with consequential source-quality uncertainty.
+
+## Frozen-reader verification — September 24
+
+User-approved scoped follow-up implemented as `e16567c` in PR #28 (unmerged).
+The new mode preserves the revised candidate and imports all 68 completed calls,
+then permits only a new factual and full coverage pass. Exact current cash-flow
+review applicability preserves dependent-review history and economic scope limits;
+audit-only response instructions require empty excerpt fields. 155 targeted tests
+passed (one optional skip), with main and reused Sol/high code reviews.
+
+`verification_plan_1` bound candidate `7d9bfe93…3f06`, unchanged provider/frozen
+inputs and 3m incremental tokens / 3,600 seconds / 600 seconds per call. Its
+authorization timestamp is approval transcription. The run settled after
+**51.867 seconds** at `verify_frozen_report`, **`stage_failed` /
+`local_prompt_size_limit`**, adapter phase `preflight`: request **1,065,321 bytes**,
+limit **1,048,576 bytes**. All 68 stages replayed; no new inference response or
+measured tokens exist. The generic attempt ledger marks dispatch/usage unresolved,
+so retained cumulative usage is **3,391,844 known tokens, incomplete**. The safe
+preflight diagnostic identifies a local before-inference stop, not a data-source
+failure. Neither the old ledger nor candidate was changed. No reader exported.
+
+Follow-up policy `frozen-candidate-verification-v2` adds lossless nested shared
+context and exact pre-dispatch prompt-size admission. It does not raise the cap,
+truncate evidence, alter legacy prompts or soften verification. **139 focused
+tests** passed; independent review found no actionable findings. A separate
+`verification_plan_2` uses the completed original revision source and a fresh
+destination/authorization under the same bounded limits. The failed attempt is
+not reused as complete telemetry; any next successful lineage counter must be
+distinguished from this separately retained incomplete attempt.
+The exact no-provider rehearsal reimported all 68 calls and verified canonical
+roundtrip equality for the complete factual payload: **1,044,357 bytes**, **4,219
+bytes** under the local cap. All 20 planned factual/coverage prompts fit, with
+**1,962,791 tokens** reserved. This is readiness, not a semantic reader check.

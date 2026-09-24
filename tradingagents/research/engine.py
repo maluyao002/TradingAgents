@@ -49,7 +49,7 @@ from .evidence import validate_snapshot
 from .finalization_timing import finalization_time_plan
 from .investigation import collect_tasks, make_ledger
 from .investigation_review import InvestigationReview
-from .prompt_context import model_input_bytes
+from .prompt_context import model_input_bytes, model_prompt
 from .reader import ReaderIssue, render_reader
 from .reader_provenance import RENDERED_READER_POLICY, case_model_appendix, reader_provenance
 from .reader_revision import (
@@ -690,6 +690,15 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 raise BudgetExhausted("validated_diagnostic_already_consumed")
             permit = None
             if origin == "current_live":
+                if payload.get("verification_repair_policy") == VERIFICATION_REPAIR_POLICY:
+                    prompt_limit = getattr(services.models, "max_prompt_utf8_bytes", None)
+                    prompt_bytes = len(model_prompt(payload))
+                    if prompt_limit is not None and prompt_bytes > prompt_limit:
+                        store.save_stage("verification-prompt-admission", {}, {
+                            "stage": stage, "prompt_bytes": prompt_bytes,
+                            "limit_bytes": prompt_limit, "fits": False,
+                        })
+                        raise BudgetExhausted("verification_prompt_size_limit")
                 permit = tracker.reserve(envelope, finalization=finalization)
                 dispatch_unsettled = True
                 save_resources()
@@ -1007,8 +1016,21 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                             "remaining_path": workload, "assumes_no_future_issue_retirement": True,
                             "wall_time": time_plan(workload),
                             "fits_reserve": workload["conservative_reserve_tokens"] < remaining}
+                        if stage == FROZEN_REVIEW_STAGE:
+                            prompt_limit = getattr(services.models, "max_prompt_utf8_bytes", None)
+                            precheck["prompt_admission"] = {
+                                "limit_bytes": prompt_limit,
+                                "calls": [{"stage": item.call_id,
+                                           "prompt_bytes": len(model_prompt(item.payload))}
+                                          for item in precheck_calls if not item.cache_hit],
+                            }
+                            precheck["prompt_admission"]["fits"] = prompt_limit is None or all(
+                                item["prompt_bytes"] <= prompt_limit
+                                for item in precheck["prompt_admission"]["calls"])
                         finalization_plans["reverification_admission"] = precheck
                         store.save_stage("reverification-admission", {}, precheck)
+                        if not precheck.get("prompt_admission", {}).get("fits", True):
+                            raise BudgetExhausted("verification_prompt_size_limit")
                         if not precheck["fits_reserve"]:
                             raise BudgetExhausted("reverification_path_budget_insufficient")
                         if precheck["wall_time"]["stop_before_dispatch"]:
