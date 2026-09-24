@@ -1,7 +1,7 @@
 """Numbered candidate revision uses only offline synthetic replies."""
 
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from types import SimpleNamespace
 
@@ -147,6 +147,43 @@ def test_five_terminal_findings_bind_proxy_to_linked_critical_only():
         catalog[critical_reference][:40], catalog, snapshot, digest(findings[2]))
     assert not source_passage_witness_valid(critical_reference,
         catalog[critical_reference][:40], catalog, snapshot, digest(findings[4]))
+
+
+def test_new_incentive_outcome_finding_adds_separate_certified_result_witness():
+    cutoff = datetime(2026, 9, 22, tzinfo=timezone.utc)
+    goals = ("Incentive compensation threshold, target and maximum payout goals. " * 12)
+    results = ("In March the committee certified performance achievement with the "
+               "following payouts: PERFORMANCE ACHIEVEMENT AND PAYOUTS. Revenue "
+               "reached 215.9 billion and the variable cash plan paid 200 percent "
+               "of target opportunity. ") * 6
+    content = goals + ("Other governance discussion. " * 80) + results
+    source = SourceDocument(id="issuer_incentive_proxy", url="https://example.test/proxy",
+        title="Issuer incentive compensation tables", publisher="Issuer",
+        published_at=cutoff, retrieved_at=cutoff, content=content,
+        content_sha256=sha256(content.encode()).hexdigest())
+    unrelated = source.model_copy(update={"id": "other_company_governance",
+        "title": "Other company governance", "content": results,
+        "content_sha256": sha256(results.encode()).hexdigest()})
+    snapshot = EvidenceSnapshot(ticker="ISS", cutoff=cutoff, sources=(source, unrelated))
+    prior = {"code": "incentive_tables_gap", "message": "Integrate incentive tables."}
+    current = {"code": "unsupported_incentive_outcome_inventory",
+               "message": "Selected realized outcomes need exact source support."}
+    old_catalog = source_passage_witnesses(snapshot, [prior])
+    catalog = source_passage_witnesses(snapshot, [current])
+    certified = [(reference, excerpt) for reference, excerpt in catalog.items()
+                 if "PERFORMANCE ACHIEVEMENT AND PAYOUTS" in excerpt
+                 and "215.9 billion" in excerpt]
+    assert certified and len(catalog) > len(old_catalog)
+    assert all("other_company_governance" not in reference for reference in catalog)
+    reference, excerpt = certified[0]
+    assert source_passage_witness_valid(reference, excerpt[:50], catalog, snapshot, digest(current))
+    assert not source_passage_witness_valid(reference, excerpt[:50], catalog, snapshot, digest(prior))
+    damaged = reference.replace(source.content_sha256, "a" * 64)
+    assert not source_passage_witness_valid(damaged, excerpt[:50], catalog, snapshot, digest(current))
+    future = snapshot.model_copy(update={"sources": (
+        source.model_copy(update={"published_at": cutoff + timedelta(days=1)}), unrelated)})
+    assert not source_passage_witness_valid(reference, excerpt[:50], catalog, future, digest(current))
+    assert reference not in source_passage_witnesses(future, [current])
 
 
 def _generic(tmp_path, provider=None, *, tokens=4_000_000, wall_seconds=None):

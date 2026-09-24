@@ -688,6 +688,7 @@ _SOURCE_WITNESS_STOPWORDS = frozenset({
 _SOURCE_WITNESS_ALIASES = {
     "incentive": ("compensation", "threshold", "payout", "target"),
 }
+_SOURCE_WITNESS_OUTCOME_QUERY = "performance achievement payouts"
 
 
 def source_passage_witnesses(snapshot: EvidenceSnapshot, findings) -> dict[str, str]:
@@ -713,11 +714,19 @@ def source_passage_witnesses(snapshot: EvidenceSnapshot, findings) -> dict[str, 
                                     .replace("_", " ").casefold()))
         terms = code_terms - _SOURCE_WITNESS_STOPWORDS - {
             "verify", "frozen", "coverage", "omitted", "boundary", "tables", "scale"}
-        numbers = re.findall(r"\b\d+(?:\.\d+)?\b", str(query_finding.get("message", "")))[:4]
+        message = str(query_finding.get("message", ""))
+        numbers = re.findall(r"\b\d+(?:\.\d+)?\b", message)[:4]
         base_query = " ".join(sorted(terms) + numbers)[:512]
         aliases = sorted({word for term in terms
                           for word in _SOURCE_WITNESS_ALIASES.get(term, ())})
         queries = (base_query, " ".join(aliases)) if aliases else (base_query,)
+        # Keep the historical goals/grants queries byte-for-byte. A new finding
+        # about realized incentive outcomes needs a separate, narrow retrieval
+        # lead: merging these terms into the old query can select only targets.
+        if ("incentive" in terms and re.search(
+                r"\b(?:outcomes?|achievements?|earned|vesting|vested|realized)\b",
+                f"{query_finding.get('code', '')} {message}".replace("_", " ").casefold())):
+            queries = (*queries, _SOURCE_WITNESS_OUTCOME_QUERY)
         for query in queries:
             if not query or remaining < 500:
                 continue
@@ -738,6 +747,9 @@ def source_passage_witnesses(snapshot: EvidenceSnapshot, findings) -> dict[str, 
                     passage = value.casefold()
                     overlap = sum(term in passage for term in query_terms)
                     if not overlap:
+                        continue
+                    if (query == _SOURCE_WITNESS_OUTCOME_QUERY
+                            and not ("achievement" in passage and "payout" in passage)):
                         continue
                     source_overlap = sum(term in source_label for term in terms)
                     numeric_overlap = sum(number in passage for number in numbers)
