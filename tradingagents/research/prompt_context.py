@@ -5,7 +5,11 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
-from .reader_revision import VERIFICATION_REPAIR_POLICY
+from .reader_revision import (
+    GENERIC_REVISION_POLICY,
+    GENERIC_SHARED_CONTEXT_MIN_BYTES,
+    VERIFICATION_REPAIR_POLICY,
+)
 from .storage import canonical_json, digest
 from .wire import codec_for, system_instruction_suffix
 
@@ -63,7 +67,8 @@ def _has_reserved_marker(value, active=None):
         active.remove(id(value))
 
 
-def _shared_packet(payload, *, recursive=False):
+def _shared_packet(payload, *, recursive=False, min_shared_bytes=1024, cost_aware=False,
+                   tables_first=False):
     """Keep the historical v1 shared-subtree selection unchanged."""
     counts, values = Counter(), {}
 
@@ -76,7 +81,7 @@ def _shared_packet(payload, *, recursive=False):
                 inventory(child)
         if isinstance(value, (dict, list, tuple, str)):
             encoded = canonical_json(value)
-            if len(encoded) >= 1024:
+            if len(encoded) >= min_shared_bytes:
                 key = digest(value)
                 counts[key] += 1
                 values[key] = value
@@ -87,13 +92,29 @@ def _shared_packet(payload, *, recursive=False):
     def replace(value, *, root=False):
         if not root and isinstance(value, (dict, list, tuple, str)):
             key = digest(value)
-            if counts[key] > 1:
+            profitable = (not cost_aware or (counts[key] > 1
+                and (counts[key] - 1) * len(canonical_json(value)) >
+                counts[key] * len(canonical_json({_REF: key})) + len(key) + 4))
+            if counts[key] > 1 and profitable:
                 if key not in shared:
                     shared[key] = replace(values[key], root=True) if recursive else deepcopy(values[key])
                 return {_REF: key}
         if isinstance(value, dict):
             return {key: replace(child) for key, child in value.items()}
         if isinstance(value, (list, tuple)):
+            if tables_first and len(value) >= 2 and all(type(item) is dict for item in value):
+                columns = sorted(value[0])
+                if (columns and all(type(column) is str and column not in {_REF, _TABLE}
+                                    for column in columns)
+                        and all(set(item) == set(columns) for item in value)):
+                    raw_table = {_TABLE: {"columns": columns,
+                        "rows": [[item[column] for column in columns] for item in value]}}
+                    if len(canonical_json(raw_table)) < len(canonical_json(value)):
+                        # Intern original cell values, not the table's structural
+                        # columns/rows. All catalog keys still hash decoded values.
+                        return {_TABLE: {"columns": columns,
+                            "rows": [[replace(item[column]) for column in columns]
+                                     for item in value]}}
             return [replace(child) for child in value]
         return value
 
@@ -119,7 +140,7 @@ def _table_pack(value):
     return table if len(canonical_json(table)) < len(canonical_json(items)) else items
 
 
-def compact_prompt_context(payload, *, recursive_shared=False):
+def compact_prompt_context(payload, *, recursive_shared=False, aggressive_shared=False):
     """Choose the smallest lossless encoding, except when a root tag needs escaping."""
     if (isinstance(payload, dict)
             and type(payload.get("context_encoding")) is str
@@ -157,6 +178,33 @@ def compact_prompt_context(payload, *, recursive_shared=False):
                   "shared_context": {key: _table_pack(value)
                                      for key, value in nested["shared_context"].items()}}
         candidates = (*candidates, (len(canonical_json(packet)), packet))
+        if aggressive_shared:
+            nested_small = _shared_packet(payload, recursive=True,
+                                          min_shared_bytes=GENERIC_SHARED_CONTEXT_MIN_BYTES)
+            smaller = {"context_encoding": PROMPT_CONTEXT_ENCODING_VERSION,
+                       "context_policy": TABLE_CONTEXT_POLICY,
+                       "payload": _table_pack(nested_small["payload"]),
+                       "shared_context": {key: _table_pack(value)
+                                          for key, value in nested_small["shared_context"].items()}}
+            candidates = (*candidates, (len(canonical_json(smaller)), smaller))
+            # Avoid sharing short values whose references and catalog keys cost
+            # more bytes than repetition. Hash original values, then table-pack:
+            # hashing already encoded tables would break the strict decoder.
+            economical = _shared_packet(payload, recursive=True,
+                                        min_shared_bytes=128, cost_aware=True)
+            economical_packet = {
+                "context_encoding": PROMPT_CONTEXT_ENCODING_VERSION,
+                "context_policy": TABLE_CONTEXT_POLICY,
+                "payload": _table_pack(economical["payload"]),
+                "shared_context": {key: _table_pack(value)
+                                   for key, value in economical["shared_context"].items()},
+            }
+            candidates = (*candidates, (len(canonical_json(economical_packet)), economical_packet))
+            row_shared = _shared_packet(payload, recursive=True,
+                min_shared_bytes=GENERIC_SHARED_CONTEXT_MIN_BYTES, tables_first=True)
+            row_packet = {"context_encoding": PROMPT_CONTEXT_ENCODING_VERSION,
+                          "context_policy": TABLE_CONTEXT_POLICY, **row_shared}
+            candidates = (*candidates, (len(canonical_json(row_packet)), row_packet))
     return min(candidates, key=lambda item: item[0])[1]
 
 
@@ -287,7 +335,9 @@ def model_prompt(payload):
     return canonical_json(compact_prompt_context({
         key: value for key, value in payload.items()
         if key not in {"system", "response_schema", "timeout_seconds", "max_output_tokens"}
-    }, recursive_shared=payload.get("verification_repair_policy") == VERIFICATION_REPAIR_POLICY))
+    }, recursive_shared=(payload.get("verification_repair_policy") == VERIFICATION_REPAIR_POLICY
+                         or payload.get("reader_revision_policy") == GENERIC_REVISION_POLICY),
+       aggressive_shared=payload.get("reader_revision_policy") == GENERIC_REVISION_POLICY))
 
 
 def model_boundary(role, payload, *, output_token_envelope, valuation_method):

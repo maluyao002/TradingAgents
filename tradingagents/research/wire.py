@@ -19,7 +19,7 @@ from .case_report import CaseReportDraft, SectionPurpose
 from .contracts import Identifier
 from .investigation_review import InvestigationReview
 from .report_review import ReaderVerification
-from .review_lifecycle import LifecycleVerification
+from .review_lifecycle import LifecycleVerification, RevisionLifecycleVerification
 from .stages import AnalysisOutput, ReportDraft, ValuationProposal, VerificationOutput
 
 WIRE_SCHEMA_VERSION = "research-wire-v3"
@@ -245,6 +245,18 @@ class WireLifecycleVerification(WireVerificationOutput):
     finding_dispositions: tuple[WireFindingDisposition, ...]
 
 
+class WireRevisionFindingFollowup(_WireContract):
+    source_finding_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    disposition: Literal["corrected", "still_open"]
+    rationale: str = Field(min_length=1)
+    reader_excerpts: tuple[str, ...]
+    witnesses: tuple[WireEvidenceWitness, ...]
+
+
+class WireRevisionLifecycleVerification(WireLifecycleVerification):
+    source_finding_followups: tuple[WireRevisionFindingFollowup, ...]
+
+
 class WireReportSection(_WireContract):
     title: str = Field(min_length=1)
     text: str = Field(min_length=1)
@@ -346,6 +358,8 @@ def codec_for(role: str, response_schema: dict[str, Any], *, valuation_method="f
         domain_model, wire_model = ReaderVerification, WireReaderVerification
     if role == "verifier" and response_schema == LifecycleVerification.model_json_schema():
         domain_model, wire_model = LifecycleVerification, WireLifecycleVerification
+    if role == "verifier" and response_schema == RevisionLifecycleVerification.model_json_schema():
+        domain_model, wire_model = RevisionLifecycleVerification, WireRevisionLifecycleVerification
     if role == "editor" and response_schema == CaseReportDraft.model_json_schema():
         # Case-backed readers retain all eight purposes at the provider boundary.
         domain_model, wire_model = CaseReportDraft, WireCaseReportDraft

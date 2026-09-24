@@ -8,11 +8,17 @@ import pytest
 from tests.test_research_verification_repair import _verification
 from tradingagents.research.engine import run_research
 from tradingagents.research.prompt_context import (
+    PROMPT_CONTEXT_ENCODING_VERSION,
+    TABLE_CONTEXT_POLICY,
+    _shared_packet,
     compact_prompt_context,
     expand_prompt_context,
     model_prompt,
 )
-from tradingagents.research.reader_revision import VERIFICATION_REPAIR_POLICY
+from tradingagents.research.reader_revision import (
+    GENERIC_REVISION_POLICY,
+    VERIFICATION_REPAIR_POLICY,
+)
 from tradingagents.research.services import ResearchServices
 from tradingagents.research.storage import canonical_json, read_json
 
@@ -36,6 +42,45 @@ def test_nested_sharing_is_lossless_smaller_and_opt_in():
     flagged = {**payload, "verification_repair_policy": VERIFICATION_REPAIR_POLICY}
     assert expand_prompt_context(json.loads(model_prompt(flagged))) == flagged
     assert len(model_prompt(flagged)) < len(canonical_json(legacy))
+
+
+def test_numbered_revision_small_shared_context_is_lossless_and_scoped():
+    payload = {f"item_{i}": {"detail": "Evidence 中文 " * 30, "id": i}
+               for i in range(18)}
+    legacy = model_prompt(payload)
+    frozen = model_prompt({**payload, "verification_repair_policy": VERIFICATION_REPAIR_POLICY})
+    generic_data = {**payload, "reader_revision_policy": GENERIC_REVISION_POLICY}
+    generic = model_prompt(generic_data)
+    assert expand_prompt_context(json.loads(generic)) == generic_data
+    assert model_prompt(payload) == legacy
+    assert model_prompt({**payload, "verification_repair_policy": VERIFICATION_REPAIR_POLICY}) == frozen
+    assert len(generic) < len(frozen)
+
+
+def test_cost_aware_sharing_avoids_short_reference_overhead():
+    payload = {str(i): {"text": str(i % 10) * 180, "unique": i}
+               for i in range(20)}
+    naive = _shared_packet(payload, recursive=True, min_shared_bytes=128)
+    economical = _shared_packet(payload, recursive=True, min_shared_bytes=128,
+                                cost_aware=True)
+    assert len(canonical_json(economical)) < len(canonical_json(naive))
+    assert economical["payload"] == payload and not economical["shared_context"]
+
+
+def test_numbered_revision_nested_tables_hash_original_values():
+    rows = [{"description": "Repeated exact evidence " * 30,
+             "unusually_long_column_name": str(index), "amount": index}
+            for index in range(30)]
+    payload = {"reader_revision_policy": GENERIC_REVISION_POLICY,
+               "left": rows, "right": deepcopy(rows),
+               "different": [{**row, "amount": row["amount"] + 100} for row in rows]}
+    assert expand_prompt_context(json.loads(model_prompt(payload))) == payload
+    encoded = _shared_packet(payload, recursive=True, min_shared_bytes=256,
+                             tables_first=True)
+    packet = {"context_encoding": PROMPT_CONTEXT_ENCODING_VERSION,
+              "context_policy": TABLE_CONTEXT_POLICY, **encoded}
+    assert expand_prompt_context(packet) == payload
+    assert '"research_context_table"' in canonical_json(packet).decode()
 
 
 @pytest.mark.parametrize("marker", ["research_context_ref", "research_context_table"])

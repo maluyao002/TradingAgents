@@ -54,12 +54,20 @@ from .reader import ReaderIssue, render_reader
 from .reader_provenance import RENDERED_READER_POLICY, case_model_appendix, reader_provenance
 from .reader_revision import (
     FROZEN_REVIEW_STAGE,
+    GENERIC_CASHFLOW_POLICY,
+    GENERIC_FOLLOWUP_REQUIREMENTS,
+    GENERIC_REVISION_POLICY,
+    GENERIC_REVISION_REQUIREMENTS,
     READER_REVISION_POLICY,
     REVISE_STAGE,
     REVISED_REVIEW_STAGE,
     REVISION_REQUIREMENTS,
     VERIFICATION_REPAIR_POLICY,
     VERIFICATION_REPAIR_REQUIREMENTS,
+    generation_stages,
+    generic_coverage_stage,
+    generic_review_stage,
+    generic_writer_stage,
 )
 from .rendering import render_references
 from .report_review import (
@@ -86,11 +94,14 @@ from .review_batches import (
 from .review_lifecycle import (
     LIFECYCLE_POLICY,
     LifecycleVerification,
+    RevisionLifecycleVerification,
     compound_coverage_issues,
     enrich_issues,
     evidence_catalog,
     reconcile_review,
     resolution_witness_contract,
+    source_passage_witness_valid,
+    source_passage_witnesses,
     split_compound_obligations,
 )
 from .services import ModelReply, ResearchServices
@@ -539,6 +550,10 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 if stage.startswith(FROZEN_REVIEW_STAGE + "-coverage-"):
                     payload["verification_repair_policy"] = VERIFICATION_REPAIR_POLICY
                     payload["system"] += " " + VERIFICATION_REPAIR_REQUIREMENTS
+                if generic_coverage_stage(stage):
+                    payload["reader_revision_policy"] = GENERIC_REVISION_POLICY
+                    payload["revision_contract_sha256"] = candidate_recovery[
+                        "revision_contract_sha256"]
                 return payload
             payload = {**instruction(role, schema), "evidence": (
                 _prompt_evidence(snapshot, queries)),
@@ -570,6 +585,13 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             if stage == FROZEN_REVIEW_STAGE:
                 payload["verification_repair_policy"] = VERIFICATION_REPAIR_POLICY
                 payload["system"] += " " + VERIFICATION_REPAIR_REQUIREMENTS
+            if generic_writer_stage(stage) or generic_review_stage(stage):
+                payload["reader_revision_policy"] = GENERIC_REVISION_POLICY
+                payload["revision_contract_sha256"] = candidate_recovery[
+                    "revision_contract_sha256"]
+                payload["system"] += " " + (
+                    GENERIC_REVISION_REQUIREMENTS if generic_writer_stage(stage)
+                    else GENERIC_FOLLOWUP_REQUIREMENTS)
             if case_context is not None and not coverage_only and stage not in {"planner", "independent_challenge"}:
                 payload["financial_case"] = case_context.model_context()
                 payload["case_reader_delivery"] = case_reader_delivery(case_context)
@@ -579,7 +601,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                         limitation_packet(data.get("limitations", ())),
                         evidence_catalog(snapshot, calculated_values,
                                          eligible_ids=_known_ids(snapshot), case_context=case_context),
-                        reader_revision=stage == REVISE_STAGE,
+                        reader_revision=stage == REVISE_STAGE or generic_writer_stage(stage),
+                        verification_repair=generic_writer_stage(stage),
                     )
                     payload["compound_obligation_guidance"] = [
                         item for item in writer_issues if "compound_obligation" in item
@@ -649,6 +672,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 remember_coverage(output)
                 return output
             if (reuse_key is not None and reuse_key in coverage_reuse
+                    and not (candidate_recovery and candidate_recovery.get("revision_generation"))
                     and not (candidate_recovery and (
                         candidate_recovery.get("reader_revision_policy")
                         or candidate_recovery.get("verification_repair_policy"))
@@ -690,7 +714,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 raise BudgetExhausted("validated_diagnostic_already_consumed")
             permit = None
             if origin == "current_live":
-                if payload.get("verification_repair_policy") == VERIFICATION_REPAIR_POLICY:
+                if (payload.get("verification_repair_policy") == VERIFICATION_REPAIR_POLICY
+                        or payload.get("reader_revision_policy") == GENERIC_REVISION_POLICY):
                     prompt_limit = getattr(services.models, "max_prompt_utf8_bytes", None)
                     prompt_bytes = len(model_prompt(payload))
                     if prompt_limit is not None and prompt_bytes > prompt_limit:
@@ -698,7 +723,9 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                             "stage": stage, "prompt_bytes": prompt_bytes,
                             "limit_bytes": prompt_limit, "fits": False,
                         })
-                        raise BudgetExhausted("verification_prompt_size_limit")
+                        raise BudgetExhausted("revision_prompt_size_limit" if
+                            payload.get("reader_revision_policy") == GENERIC_REVISION_POLICY
+                            else "verification_prompt_size_limit")
                 permit = tracker.reserve(envelope, finalization=finalization)
                 dispatch_unsettled = True
                 save_resources()
@@ -861,8 +888,10 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             rendered_hash = hashlib.sha256(rendered.reader_text.encode("utf-8")).hexdigest()
             if stage == FROZEN_REVIEW_STAGE and (
                     not candidate_recovery
-                    or candidate_recovery.get("verification_repair_policy") != VERIFICATION_REPAIR_POLICY
-                    or rendered_hash != candidate_recovery["candidate"]["reader_sha256"]):
+                    or (candidate_recovery.get("verification_repair_policy") != VERIFICATION_REPAIR_POLICY
+                        and not candidate_recovery.get("revision_generation"))
+                    or (candidate_recovery.get("verification_repair_policy") == VERIFICATION_REPAIR_POLICY
+                        and rendered_hash != candidate_recovery["candidate"]["reader_sha256"])):
                 raise ValueError("verification repair changed the authorized reader bytes")
             limitations = limitation_packet([*required_limitations(), *candidate.limitations])
             if bounded_review:
@@ -933,17 +962,19 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 resolution_evidence = evidence_catalog(
                     snapshot, calculated_values, eligible_ids=_known_ids(snapshot), case_context=case_context,
                     issues=limitations, reader=rendered.reader_text,
-                    verification_repair=stage == FROZEN_REVIEW_STAGE,
+                    verification_repair=stage == FROZEN_REVIEW_STAGE or generic_review_stage(stage),
                 )
                 limitations = split_compound_obligations(
                     limitations, resolution_evidence,
-                    reader_revision=stage in {REVISED_REVIEW_STAGE, FROZEN_REVIEW_STAGE},
-                    verification_repair=stage == FROZEN_REVIEW_STAGE)
+                    reader_revision=stage in {REVISED_REVIEW_STAGE, FROZEN_REVIEW_STAGE}
+                        or generic_review_stage(stage),
+                    verification_repair=stage == FROZEN_REVIEW_STAGE or generic_review_stage(stage))
                 factual_data.update(
                     inherited_issues=limitations, resolution_evidence=resolution_evidence,
                     resolution_witness_contract=resolution_witness_contract(
                         resolution_evidence, rendered.reader_text),
-                    issue_resolution_policy=LIFECYCLE_POLICY,
+                    issue_resolution_policy=(LIFECYCLE_POLICY + GENERIC_CASHFLOW_POLICY
+                        if generic_review_stage(stage) else LIFECYCLE_POLICY),
                     conclusion_scope=case_context.scope.model_dump(mode="json") if case_context else None,
                     paragraph_citations=rendered.limitations_audit.get("paragraph_citations", []),
                     citation_policy="Assess citation scope at each factual paragraph or table. "
@@ -988,10 +1019,12 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     return coverage_review_data(items, rendered.reader_text,
                                                 review_data["limitation_policy"])
 
+                factual_schema = (RevisionLifecycleVerification if generic_review_stage(stage)
+                                  else LifecycleVerification)
                 factual_payloads[stage] = model_payload(
-                    stage, "verifier", factual_data, LifecycleVerification, language)
-                if stage in {"verify_repaired_report", REVISED_REVIEW_STAGE, FROZEN_REVIEW_STAGE}:
-                    factual_payload = model_payload(stage, "verifier", factual_data, LifecycleVerification, language)
+                    stage, "verifier", factual_data, factual_schema, language)
+                if stage in {"verify_repaired_report", REVISED_REVIEW_STAGE, FROZEN_REVIEW_STAGE} or generic_review_stage(stage):
+                    factual_payload = model_payload(stage, "verifier", factual_data, factual_schema, language)
                     factual_cached = (store.load_stage(stage, factual_payload) is not None
                         or getattr(services.models, "has_saved_reply", lambda *_: False)(stage, factual_payload))
                     # A saved repair does not make the factual recheck free.
@@ -1016,7 +1049,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                             "remaining_path": workload, "assumes_no_future_issue_retirement": True,
                             "wall_time": time_plan(workload),
                             "fits_reserve": workload["conservative_reserve_tokens"] < remaining}
-                        if stage == FROZEN_REVIEW_STAGE:
+                        if stage == FROZEN_REVIEW_STAGE or generic_review_stage(stage):
                             prompt_limit = getattr(services.models, "max_prompt_utf8_bytes", None)
                             precheck["prompt_admission"] = {
                                 "limit_bytes": prompt_limit,
@@ -1035,8 +1068,49 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                             raise BudgetExhausted("reverification_path_budget_insufficient")
                         if precheck["wall_time"]["stop_before_dispatch"]:
                             raise BudgetExhausted("reverification_path_time_insufficient")
-                factual_review = call(stage, "verifier", factual_data, LifecycleVerification,
+                factual_review = call(stage, "verifier", factual_data, factual_schema,
                                       True, language=language)
+                unresolved_source_findings = []
+                source_followup_audit = None
+                if generic_review_stage(stage):
+                    source_review = factual_data["source_terminal_review"]
+                    findings = {item["source_finding_sha256"]: item
+                                for item in source_review["findings"]}
+                    followups = {item.source_finding_sha256: item
+                                 for item in factual_review.source_finding_followups}
+                    if (len(followups) != len(factual_review.source_finding_followups)
+                            or set(followups) != set(findings)):
+                        raise ValueError("numbered revision omitted a terminal source finding")
+                    source_followup_audit = [item.model_dump(mode="json")
+                                             for item in factual_review.source_finding_followups]
+                    for finding_hash, finding in findings.items():
+                        followup = followups[finding_hash]
+                        if followup.disposition == "still_open":
+                            unresolved_source_findings.append(ReviewFinding.model_validate({
+                                key: value for key, value in finding.items()
+                                if key != "source_finding_sha256"}))
+                            continue
+                        if (rendered_hash == source_review["reader_sha256"]
+                                or not followup.reader_excerpts or not followup.witnesses
+                                or len(set(followup.reader_excerpts)) != len(followup.reader_excerpts)
+                                or len({(item.reference, item.excerpt) for item in followup.witnesses})
+                                != len(followup.witnesses)
+                                or any(not excerpt.strip() or excerpt not in rendered.reader_text
+                                       for excerpt in followup.reader_excerpts)
+                                or any(not witness.excerpt.strip()
+                                       or not (
+                                           witness.reference in resolution_evidence
+                                           and witness.excerpt in resolution_evidence[witness.reference]
+                                           or source_passage_witness_valid(
+                                               witness.reference, witness.excerpt,
+                                               factual_data["source_text_witnesses"], snapshot,
+                                               finding_hash)
+                                       ) for witness in followup.witnesses)):
+                            unresolved_source_findings.append(ReviewFinding.model_validate({
+                                key: value for key, value in finding.items()
+                                if key != "source_finding_sha256"}))
+                    factual_review = LifecycleVerification.model_validate(
+                        factual_review.model_dump(mode="json", exclude={"source_finding_followups"}))
                 if factual_review.reviewed_report and language == request.report_language:
                     finalization_candidate = {"stage": stage, "reader_sha256": rendered_hash,
                                               "reader_text": rendered.reader_text}
@@ -1046,6 +1120,14 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     factual_review, limitations, resolution_evidence, rendered.reader_text,
                     case_context.scope if case_context else None,
                 )
+                if source_followup_audit is not None:
+                    lifecycle["source_terminal_review"] = source_review
+                    lifecycle["source_terminal_review_sha256"] = factual_data[
+                        "source_terminal_review_sha256"]
+                    lifecycle["source_finding_followups"] = source_followup_audit
+                if unresolved_source_findings:
+                    main_review = main_review.model_copy(update={"findings": (
+                        *main_review.findings, *unresolved_source_findings)})
                 if rendered.limitations_audit.get("reader_compaction", {}).get("active"):
                     cited_sections = {item["section_index"] for item in rendered.limitations_audit.get(
                         "paragraph_citations", []) if item["source_ids"] or item.get("calculation_ids")}
@@ -1525,7 +1607,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                         draft, request.report_language, "verify_repaired_report", authored=source_draft)
                 if candidate_recovery and (candidate_recovery.get("reader_revision_policy")
                                            or candidate_recovery.get("verification_repair_policy")):
-                    replay_revision = bool(candidate_recovery.get("verification_repair_policy"))
+                    replay_revision = bool(candidate_recovery.get("verification_repair_policy")
+                        or candidate_recovery.get("revision_generation"))
                     if ((not replay_revision and candidate_recovery["reader_revision_policy"] != READER_REVISION_POLICY)
                             or reader_verifications[request.report_language]["stage"] != "verify_repaired_report"
                             or (not replay_revision and reader_verifications[request.report_language]["reader_sha256"]
@@ -1606,13 +1689,169 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                         draft, request.report_language, REVISED_REVIEW_STAGE, authored=source_draft)
                     if replay_revision:
                         if (reader_verifications[request.report_language]["reader_sha256"]
-                                != candidate_recovery["candidate"]["reader_sha256"]):
+                                != candidate_recovery["candidate"]["reader_sha256"]
+                                and not candidate_recovery.get("revision_generation")):
                             raise ValueError("verification source reconstruction differs from authorized candidate")
                         reviews.extend(final_review.findings)
                         retired_reader_texts.clear()
                         coverage_reuse.clear()
                         final_review, rendered = verify_reader(
                             draft, request.report_language, FROZEN_REVIEW_STAGE, authored=source_draft)
+                    if candidate_recovery.get("revision_generation"):
+                        target_generation = candidate_recovery["revision_generation"]
+                        for generation in range(2, target_generation + 1):
+                            writer_stage, review_stage = generation_stages(generation)
+                            source_stage = reader_verifications[request.report_language]["stage"]
+                            source_hash = reader_verifications[request.report_language]["reader_sha256"]
+                            source_writer = (REVISE_STAGE if generation == 2 else
+                                             generation_stages(generation - 1)[0])
+                            if generation == target_generation and (
+                                source_stage != candidate_recovery["candidate_review_stage"]
+                                or source_hash != candidate_recovery["candidate"]["reader_sha256"]
+                                or source_writer != candidate_recovery["source_writer_stage"]
+                                or digest(final_review.model_dump(mode="json"))
+                                != candidate_recovery["source_terminal_review_sha256"]
+                            ):
+                                raise ValueError("generic revision source candidate or writer differs")
+                            reviews.extend(final_review.findings)
+                            retired_reader_texts.clear()
+                            coverage_reuse.clear()
+                            previous_factual = factual_payloads[source_stage]["research"]
+                            reopened = split_compound_obligations(
+                                previous_factual["inherited_issues"],
+                                previous_factual["resolution_evidence"],
+                                reader_revision=True, verification_repair=True)
+                            atomic_reopened = compound_coverage_issues(reopened)
+                            source_findings = {
+                                digest(finding.model_dump(mode="json")): finding.model_dump(mode="json")
+                                for finding in final_review.findings
+                            }
+                            source_terminal_review = {"stage": source_stage,
+                                "reader_sha256": source_hash,
+                                "findings": [{"source_finding_sha256": key, **value}
+                                             for key, value in source_findings.items()]}
+                            source_text_witnesses = source_passage_witnesses(
+                                snapshot, source_terminal_review["findings"])
+                            if (generation == target_generation
+                                    and digest(source_text_witnesses)
+                                    != candidate_recovery["source_witness_catalog_sha256"]):
+                                raise ValueError("generic revision source witness catalog differs")
+                            revision_data = {
+                                **editor_data, "limitations": list(gaps),
+                                "draft_to_repair": source_draft.model_dump(mode="json"),
+                                "repair_findings": final_review.model_dump(mode="json"),
+                                "source_terminal_review_sha256": digest(
+                                    final_review.model_dump(mode="json")),
+                                "current_applicability": reopened,
+                                "source_candidate": {"stage": source_stage,
+                                    "reader_sha256": source_hash, "reader_text": rendered.reader_text},
+                                "source_writer_stage": source_writer,
+                                "source_text_witnesses": source_text_witnesses,
+                                "repair_policy": GENERIC_REVISION_REQUIREMENTS,
+                                "reader_revision_policy": GENERIC_REVISION_POLICY,
+                            }
+                            active_stage = writer_stage
+                            revision_payload = model_payload(writer_stage, "editor", revision_data,
+                                draft_schema, request.report_language)
+                            revision_cached = (store.load_stage(writer_stage, revision_payload) is not None
+                                or getattr(services.models, "has_saved_reply", lambda *_: False)(
+                                    writer_stage, revision_payload))
+                            reader_bytes = len(rendered.reader_text.encode("utf-8"))
+                            finding_growth = len(final_review.findings) * 4096
+                            future_growth = 2 * reader_bytes + finding_growth + 8192
+                            estimated_calls = [FinalizationCallPlan(
+                                writer_stage, "revision", revision_payload, 16_000,
+                                request.budget.call_timeout_seconds, cache_hit=revision_cached,
+                                role="editor", valuation_method=request.valuation_method),
+                                FinalizationCallPlan(review_stage, "revision_factual",
+                                    b" " * (model_input_bytes(factual_payloads[source_stage],
+                                        role="verifier", output_token_envelope=16_000,
+                                        valuation_method=request.valuation_method) + future_growth),
+                                    16_000, request.budget.call_timeout_seconds, role="verifier",
+                                    valuation_method=request.valuation_method)]
+                            for index, items in enumerate(coverage_batches(atomic_reopened)):
+                                batch_stage = f"{review_stage}-coverage-{index}"
+                                payload = model_payload(batch_stage, "verifier", coverage_review_data(
+                                    items, rendered.reader_text), ReaderVerification,
+                                    request.report_language, True,
+                                    role_call_index=role_indices["verifier"] + 1 + index)
+                                estimated_calls.append(FinalizationCallPlan(
+                                    batch_stage, "revision_coverage",
+                                    b" " * (model_input_bytes(payload, role="verifier",
+                                        output_token_envelope=coverage_envelope,
+                                        valuation_method=request.valuation_method) + future_growth),
+                                    coverage_envelope, request.budget.call_timeout_seconds,
+                                    role="verifier", valuation_method=request.valuation_method))
+                            workload = finalization_workload(estimated_calls)
+                            remaining = request.budget.total_tokens - tracker.usage.total_tokens
+                            prompt_limit = getattr(services.models, "max_prompt_utf8_bytes", None)
+                            writer_prompt_bytes = len(model_prompt(revision_payload))
+                            # The new reader is not known until the paid writer returns.
+                            # Admit the unchanged source reader under the *new* factual
+                            # contract now, with a bounded growth margin. The actual
+                            # post-writer factual and coverage prompts are still checked
+                            # exactly before their own dispatches.
+                            baseline_factual = {
+                                **previous_factual,
+                                "inherited_issues": reopened,
+                                "source_terminal_review": source_terminal_review,
+                                "source_terminal_review_sha256": digest(
+                                    final_review.model_dump(mode="json")),
+                                "source_text_witnesses": source_text_witnesses,
+                                "issue_resolution_policy": (LIFECYCLE_POLICY
+                                    + GENERIC_CASHFLOW_POLICY),
+                            }
+                            baseline_payload = model_payload(
+                                review_stage, "verifier", baseline_factual,
+                                RevisionLifecycleVerification, request.report_language)
+                            baseline_factual_bytes = len(model_prompt(baseline_payload))
+                            factual_headroom = min(32_768, max(16_384, reader_bytes // 2))
+                            revision_plan = {
+                                "policy": GENERIC_REVISION_POLICY, "generation": generation,
+                                "source_candidate_stage": source_stage,
+                                "source_reader_sha256": source_hash,
+                                "source_writer_stage": source_writer,
+                                "remaining_tokens": remaining, "remaining_path": workload,
+                                "wall_time": time_plan(workload),
+                                "fits_reserve": workload["conservative_reserve_tokens"] < remaining,
+                                "writer_prompt_admission": {"prompt_bytes": writer_prompt_bytes,
+                                    "limit_bytes": prompt_limit,
+                                    "fits": prompt_limit is None or writer_prompt_bytes <= prompt_limit},
+                                "baseline_factual_prompt_admission": {
+                                    "source_reader_prompt_bytes": baseline_factual_bytes,
+                                    "required_growth_headroom_bytes": factual_headroom,
+                                    "limit_bytes": prompt_limit,
+                                    "fits": prompt_limit is None or
+                                        baseline_factual_bytes + factual_headroom <= prompt_limit,
+                                    "future_candidate_is_estimated": True,
+                                },
+                                "reopened_issue_count": len(reopened),
+                                "atomic_reopened_issue_count": len(atomic_reopened),
+                                "future_prompt_growth_bytes": future_growth,
+                                "future_candidate_sizes_are_estimates": True,
+                            }
+                            finalization_plans["revision_admission"] = revision_plan
+                            store.save_stage("revision-admission", {}, revision_plan)
+                            if not revision_cached:
+                                if not revision_plan["writer_prompt_admission"]["fits"]:
+                                    raise BudgetExhausted("revision_prompt_size_limit")
+                                if not revision_plan["baseline_factual_prompt_admission"]["fits"]:
+                                    raise BudgetExhausted(
+                                        "revision_future_factual_prompt_headroom_insufficient")
+                                if not revision_plan["fits_reserve"]:
+                                    raise BudgetExhausted("revision_path_budget_insufficient")
+                                if revision_plan["wall_time"]["stop_before_dispatch"]:
+                                    raise BudgetExhausted("revision_path_time_insufficient")
+                            source_draft = call(writer_stage, "editor", revision_data, draft_schema,
+                                                True, language=request.report_language)
+                            draft = prepare_draft(source_draft, request.report_language)
+                            final_review, rendered = verify_reader(
+                                draft, request.report_language, review_stage,
+                                extra={"source_terminal_review": source_terminal_review,
+                                       "source_terminal_review_sha256": digest(
+                                           final_review.model_dump(mode="json")),
+                                       "source_text_witnesses": source_text_witnesses},
+                                authored=source_draft)
             else:
                 final_review = call("verify_report", "verifier",
                                     {"draft": draft.model_dump(mode="json"), "analyses": outputs,

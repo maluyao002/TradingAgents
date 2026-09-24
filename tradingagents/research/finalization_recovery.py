@@ -24,15 +24,25 @@ from typing import Any, Literal
 
 from pydantic import AwareDatetime, Field, field_validator
 
-from .contracts import Budget, Contract, ResearchRequest, Usage
+from .contracts import Budget, Contract, EvidenceSnapshot, ResearchRequest, Usage
+from .evidence import validate_snapshot
 from .reader_revision import (
     FROZEN_REVIEW_STAGE,
+    GENERATION_PATTERN,
+    GENERIC_CASHFLOW_POLICY,
+    GENERIC_FOLLOWUP_REQUIREMENTS,
+    GENERIC_REVISION_POLICY,
+    GENERIC_REVISION_REQUIREMENTS,
+    GENERIC_SHARED_CONTEXT_MIN_BYTES,
     READER_REVISION_POLICY,
     REVISE_STAGE,
     REVISED_REVIEW_STAGE,
     VERIFICATION_REPAIR_POLICY,
+    generation_stages,
+    generic_coverage_stage,
+    generic_review_stage,
 )
-from .review_lifecycle import compound_coverage_issues
+from .review_lifecycle import compound_coverage_issues, source_passage_witnesses
 from .services import ModelReply
 from .storage import (
     ENGINE_VERSION,
@@ -63,6 +73,19 @@ _CHECKPOINT_KEYS = {
     "candidate",
     "candidate_review_stage",
 }
+
+
+def _generic_revision_contract_sha256() -> str:
+    return digest({
+        "policy": GENERIC_REVISION_POLICY,
+        "writer_requirements": GENERIC_REVISION_REQUIREMENTS,
+        "factual_requirements": GENERIC_FOLLOWUP_REQUIREMENTS,
+        "cashflow_scope": GENERIC_CASHFLOW_POLICY,
+        "shared_context_min_bytes": GENERIC_SHARED_CONTEXT_MIN_BYTES,
+        "cost_aware_min_shared_bytes": 128,
+        "packing_policy": "original_value_row_tables_and_cost_aware_shared_v1",
+        "source_witness_policy": "finding_bound_exact_eligible_source_passage_v2",
+    })
 
 
 class FinalizationRecoveryAuthorization(Contract):
@@ -118,6 +141,12 @@ class FinalizationContinuationPlan:
     new_request_identity: str
     reader_revision_policy: str | None = None
     verification_repair_policy: str | None = None
+    revision_generation: int | None = None
+    source_writer_stage: str | None = None
+    source_terminal_review_sha256: str | None = None
+    revision_contract_sha256: str | None = None
+    source_witness_catalog: dict[str, str] | None = None
+    source_witness_catalog_sha256: str | None = None
 
     def manifest(self) -> dict[str, Any]:
         return {
@@ -154,6 +183,12 @@ class FinalizationContinuationPlan:
                if self.reader_revision_policy is not None else {}),
             **({"verification_repair_policy": self.verification_repair_policy}
                if self.verification_repair_policy is not None else {}),
+            **({"revision_generation": self.revision_generation,
+                "source_writer_stage": self.source_writer_stage,
+                "source_terminal_review_sha256": self.source_terminal_review_sha256,
+                "revision_contract_sha256": self.revision_contract_sha256,
+                "source_witness_catalog_sha256": self.source_witness_catalog_sha256}
+               if self.revision_generation is not None else {}),
         }
 
     @property
@@ -314,15 +349,19 @@ def _parse_stages(raw: Any) -> tuple[ImportedFinalizationStage, ...]:
 
 def _validate_candidate(
     checkpoint: dict[str, Any], imported: tuple[ImportedFinalizationStage, ...],
-    *, repair_verification: bool = False,
+    *, repair_verification: bool = False, generic_revision: bool = False,
 ) -> tuple[dict[str, Any], str]:
     candidate = checkpoint["candidate"]
     review_stage = checkpoint["candidate_review_stage"]
+    allowed_stage = ({REVISED_REVIEW_STAGE} if repair_verification else
+                     {FROZEN_REVIEW_STAGE} if generic_revision and review_stage == FROZEN_REVIEW_STAGE
+                     else {review_stage} if generic_revision and isinstance(review_stage, str)
+                     and generic_review_stage(review_stage)
+                     else _SUPPORTED_CANDIDATE_STAGES)
     if (
         not isinstance(candidate, dict)
         or set(candidate) != {"stage", "reader_sha256", "reader_text"}
-        or candidate.get("stage") not in (
-            {REVISED_REVIEW_STAGE} if repair_verification else _SUPPORTED_CANDIDATE_STAGES)
+        or candidate.get("stage") not in allowed_stage
         or not _is_hash(candidate.get("reader_sha256"))
         or not isinstance(candidate.get("reader_text"), str)
         or hashlib.sha256(candidate["reader_text"].encode("utf-8")).hexdigest()
@@ -332,7 +371,9 @@ def _validate_candidate(
         raise ValueError("invalid factual-reviewed reader candidate")
     by_stage = {item.stage: item for item in imported}
     factual = by_stage.get(review_stage)
-    draft_stage = (REVISE_STAGE if repair_verification else
+    draft_stage = (REVISE_STAGE if repair_verification or review_stage == FROZEN_REVIEW_STAGE else
+                   generation_stages(int(review_stage.rsplit("-", 1)[1]))[0]
+                   if generic_revision and review_stage.startswith(REVISED_REVIEW_STAGE + "-") else
                    "editor" if review_stage == "verify_report" else "repair_report")
     if (
         factual is None
@@ -343,6 +384,68 @@ def _validate_candidate(
     ):
         raise ValueError("candidate lacks its exact editor and factual-review stages")
     return deepcopy(candidate), review_stage
+
+
+def _generic_source_generation(imported, review_stage):
+    """Require a contiguous, unambiguous writer/review lineage before a new writer."""
+    stages = {item.stage: item for item in imported}
+    if not {REVISE_STAGE, REVISED_REVIEW_STAGE, FROZEN_REVIEW_STAGE} <= stages.keys():
+        raise ValueError("generic revision source lacks the complete legacy revision prefix")
+    if (stages[REVISE_STAGE].role != "editor"
+            or any(stages[name].role != "verifier"
+                   for name in (REVISED_REVIEW_STAGE, FROZEN_REVIEW_STAGE))):
+        raise ValueError("generic revision legacy writer/reviewer roles differ")
+    for verifier in (REVISED_REVIEW_STAGE, FROZEN_REVIEW_STAGE):
+        baseline = {name for name in stages if name.startswith(verifier + "-coverage-")}
+        if (not baseline or baseline != {
+                f"{verifier}-coverage-{index}" for index in range(len(baseline))}
+                or any(stages[name].role != "verifier" for name in baseline)):
+            raise ValueError("generic revision legacy coverage stages are incomplete")
+    writers, reviews, coverage = set(), set(), {}
+    for name in stages:
+        if name.startswith(REVISE_STAGE + "-"):
+            match = re.fullmatch(rf"revise_report-({GENERATION_PATTERN})", name)
+            if match is None:
+                raise ValueError("generic revision stage collision")
+            writers.add(int(match[1]))
+        elif name.startswith(REVISED_REVIEW_STAGE + "-") and not name.startswith(
+            REVISED_REVIEW_STAGE + "-coverage-"
+        ):
+            match = re.fullmatch(rf"verify_revised_report-({GENERATION_PATTERN})(?:-coverage-([0-9]+))?", name)
+            if match is None:
+                raise ValueError("generic revision stage collision")
+            number = int(match[1])
+            if match[2] is None:
+                reviews.add(number)
+            else:
+                if name != f"{REVISED_REVIEW_STAGE}-{number}-coverage-{int(match[2])}":
+                    raise ValueError("generic revision stage collision")
+                coverage.setdefault(number, set()).add(int(match[2]))
+        elif name.startswith(FROZEN_REVIEW_STAGE + "-") and not name.startswith(
+            FROZEN_REVIEW_STAGE + "-coverage-"
+        ):
+            raise ValueError("generic revision stage collision")
+    generations = writers | reviews | set(coverage)
+    ordered = sorted(generations)
+    latest = ordered[-1] if ordered else 1
+    if (writers != generations or reviews != generations
+            or any(number != index for index, number in enumerate(ordered, start=2))):
+        raise ValueError("generic revision generation hole")
+    for number in ordered:
+        writer, verifier = generation_stages(number)
+        if writer not in stages or verifier not in stages or (
+            stages[writer].role != "editor" or stages[verifier].role != "verifier"
+        ):
+            raise ValueError("generic revision generation lacks its writer and factual review")
+        batch_numbers = coverage.get(number, set())
+        if (not batch_numbers or batch_numbers != set(range(len(batch_numbers)))
+                or any(stages[f"{verifier}-coverage-{index}"].role != "verifier"
+                       for index in batch_numbers)):
+            raise ValueError("generic revision generation has incomplete coverage stages")
+    expected = FROZEN_REVIEW_STAGE if latest == 1 else generation_stages(latest)[1]
+    if review_stage != expected:
+        raise ValueError("generic revision source generation is ambiguous")
+    return latest + 1, REVISE_STAGE if latest == 1 else generation_stages(latest)[0]
 
 
 def _validate_source_lineage(
@@ -378,9 +481,11 @@ def _validate_source_lineage(
     return {"recovery_provenance.json": hashlib.sha256(content).hexdigest()}
 
 
-def _revision_artifacts(source_dir, candidate, imported, source_usage, *, repair_verification=False):
+def _revision_artifacts(source_dir, candidate, imported, source_usage, *, repair_verification=False,
+                        generic_revision=False):
     """Bind a terminal failed repair, never an in-flight or already revised reader."""
-    review_stage = REVISED_REVIEW_STAGE if repair_verification else "verify_repaired_report"
+    review_stage = (candidate["stage"] if generic_revision else
+                    REVISED_REVIEW_STAGE if repair_verification else "verify_repaired_report")
     if candidate["stage"] != review_stage:
         raise ValueError("reader revision requires a previously repaired candidate")
     contents = {name: _read_regular(source_dir / name)
@@ -429,8 +534,10 @@ def _revision_artifacts(source_dir, candidate, imported, source_usage, *, repair
         if (factual.get("findings") or factual.get("contradicted_claim_ids")
                 or any(item.stage.startswith(FROZEN_REVIEW_STAGE) for item in imported)):
             raise ValueError("verification repair requires clean factual review and cannot renew itself")
-    elif any(item.stage.startswith(("revise_report", "verify_revised_report")) for item in imported):
+    elif not generic_revision and any(item.stage.startswith(("revise_report", "verify_revised_report")) for item in imported):
         raise ValueError("reader revision cannot renew a previous revision")
+    if generic_revision:
+        _generic_source_generation(imported, review_stage)
     return {name: hashlib.sha256(content).hexdigest() for name, content in contents.items()}
 
 
@@ -490,11 +597,28 @@ def prepare_finalization_continuation(
         if any(sum(getattr(item.usage, field) for item in imported) > getattr(source_usage, field)
                for field in ("input_tokens", "output_tokens", "cached_input_tokens", "reasoning_output_tokens")):
             raise ValueError("source cumulative usage omits saved stage usage")
+        generic_revision = revise_reader and checkpoint["candidate_review_stage"] == FROZEN_REVIEW_STAGE
+        if revise_reader and isinstance(checkpoint["candidate_review_stage"], str) and generic_review_stage(
+            checkpoint["candidate_review_stage"]
+        ):
+            generic_revision = True
         candidate, review_stage = _validate_candidate(
-            checkpoint, imported, repair_verification=repair_verification)
+            checkpoint, imported, repair_verification=repair_verification,
+            generic_revision=generic_revision)
+        generation, source_writer = (_generic_source_generation(imported, review_stage)
+                                     if generic_revision else (None, None))
         revision_artifacts = (_revision_artifacts(source_dir, candidate, imported, source_usage,
-                                                  repair_verification=repair_verification)
+                                                  repair_verification=repair_verification,
+                                                  generic_revision=generic_revision)
                               if revise_reader or repair_verification else {})
+        terminal_review = (_read_object(source_dir / "reader_verification.json")[
+            "English"]["review"] if generic_revision else None)
+        source_terminal_review_sha256 = digest(terminal_review) if generic_revision else None
+        source_witness_catalog = (source_passage_witnesses(
+            validate_snapshot(EvidenceSnapshot.model_validate(
+                parse_json(source_inputs["evidence_path"])), source_request),
+            terminal_review["findings"])
+            if generic_revision else None)
         source_request_id = request_identity(source_request, source_inputs)
         lineage_hashes = _validate_source_lineage(
             source_dir,
@@ -527,8 +651,17 @@ def prepare_finalization_continuation(
             new_request_identity=finalization_continuation_request_identity(
                 destination_request, destination_inputs
             ),
-            reader_revision_policy=READER_REVISION_POLICY if revise_reader else None,
+            reader_revision_policy=(GENERIC_REVISION_POLICY if generic_revision else
+                                    READER_REVISION_POLICY if revise_reader else None),
             verification_repair_policy=VERIFICATION_REPAIR_POLICY if repair_verification else None,
+            revision_generation=generation,
+            source_writer_stage=source_writer,
+            source_terminal_review_sha256=source_terminal_review_sha256,
+            revision_contract_sha256=(_generic_revision_contract_sha256()
+                                      if generic_revision else None),
+            source_witness_catalog=source_witness_catalog,
+            source_witness_catalog_sha256=(digest(source_witness_catalog)
+                                           if generic_revision else None),
         )
     assert_finalization_source_unchanged(plan)
     return plan
@@ -541,7 +674,8 @@ def _validate_plan_content(plan: FinalizationContinuationPlan) -> None:
     source_request = ResearchRequest.model_validate(checkpoint["request"])
     imported = _parse_stages(checkpoint["stages"])
     candidate, review_stage = _validate_candidate(
-        checkpoint, imported, repair_verification=plan.verification_repair_policy is not None)
+        checkpoint, imported, repair_verification=plan.verification_repair_policy is not None,
+        generic_revision=plan.revision_generation is not None)
     expected_input_paths = _request_input_paths(source_request)
     source_request_id = request_identity(source_request, plan.frozen_inputs)
     expected_artifact_names = {FINALIZATION_CHECKPOINT_NAME}
@@ -551,10 +685,26 @@ def _validate_plan_content(plan: FinalizationContinuationPlan) -> None:
             raise ValueError("invalid verification repair policy or source candidate")
         expected_artifact_names.update({"result.json", "reader_verification.json"})
     if plan.reader_revision_policy is not None:
-        if (plan.reader_revision_policy != READER_REVISION_POLICY
-                or review_stage != "verify_repaired_report"):
+        if plan.revision_generation is not None:
+            generation, writer = _generic_source_generation(imported, review_stage)
+            if (plan.reader_revision_policy != GENERIC_REVISION_POLICY
+                    or plan.verification_repair_policy is not None
+                    or not _is_hash(plan.source_terminal_review_sha256)
+                    or plan.revision_contract_sha256 != _generic_revision_contract_sha256()
+                    or not isinstance(plan.source_witness_catalog, dict)
+                    or digest(plan.source_witness_catalog) != plan.source_witness_catalog_sha256
+                    or (generation, writer) != (plan.revision_generation, plan.source_writer_stage)):
+                raise ValueError("invalid generic revision policy or source writer")
+        elif (plan.reader_revision_policy != READER_REVISION_POLICY
+              or review_stage != "verify_repaired_report" or plan.source_writer_stage is not None):
             raise ValueError("invalid reader revision policy or source candidate")
         expected_artifact_names.update({"result.json", "reader_verification.json"})
+    elif (plan.revision_generation is not None or plan.source_writer_stage is not None
+          or plan.source_terminal_review_sha256 is not None
+          or plan.revision_contract_sha256 is not None
+          or plan.source_witness_catalog is not None
+          or plan.source_witness_catalog_sha256 is not None):
+        raise ValueError("unexpected generic revision generation")
     if plan.source_run_identity != digest(
         {"request": source_request_id, "model_service": plan.source_model_identity}
     ):
@@ -599,10 +749,15 @@ def assert_finalization_source_unchanged(
         if prepared.reader_revision_policy is not None or prepared.verification_repair_policy is not None:
             revision_hashes = _revision_artifacts(prepared.source_dir, prepared.candidate,
                                                  prepared.imported_stages, prepared.source_usage,
-                                                 repair_verification=prepared.verification_repair_policy is not None)
+                                                 repair_verification=prepared.verification_repair_policy is not None,
+                                                 generic_revision=prepared.revision_generation is not None)
             if any(prepared.source_artifact_hashes.get(name) != value
                    for name, value in revision_hashes.items()):
                 raise ValueError("reader revision terminal artifacts changed")
+            if prepared.revision_generation is not None and digest(_read_object(
+                prepared.source_dir / "reader_verification.json")["English"]["review"]
+            ) != prepared.source_terminal_review_sha256:
+                raise ValueError("reader revision terminal findings changed")
         artifact_hashes = {
             name: hashlib.sha256(_read_regular(prepared.source_dir / name)).hexdigest()
             for name in prepared.source_artifact_hashes
@@ -783,6 +938,12 @@ class FinalizationRecoveryModelService:
                if plan.reader_revision_policy is not None else {}),
             **({"verification_repair_policy": plan.verification_repair_policy}
                if plan.verification_repair_policy is not None else {}),
+            **({"revision_generation": plan.revision_generation,
+                "source_writer_stage": plan.source_writer_stage,
+                "source_terminal_review_sha256": plan.source_terminal_review_sha256,
+                "revision_contract_sha256": plan.revision_contract_sha256,
+                "source_witness_catalog_sha256": plan.source_witness_catalog_sha256}
+               if plan.revision_generation is not None else {}),
             "authorization": {
                 **self.plan.authorization.model_dump(mode="json"),
                 "authorization_sha256": self.plan.authorization.authorization_sha256,
@@ -892,7 +1053,7 @@ class FinalizationRecoveryModelService:
                     or state["live_boundary"] != {key: calls[0][key]
                                                    for key in ("stage", "role", "inputs_hash")}):
                 raise ValueError("candidate-recovery live state lacks its exact candidate/boundary proof")
-            if self.plan.plan.reader_revision_policy is not None and (
+            if self.plan.plan.reader_revision_policy == READER_REVISION_POLICY and (
                 set(call_names) != set(saved_by_stage)
                 or state["live_boundary"]["stage"] != REVISE_STAGE
                 or state["live_boundary"]["role"] != "editor"
@@ -905,6 +1066,22 @@ class FinalizationRecoveryModelService:
                        for call in calls)
             ):
                 raise ValueError("verification repair restored state violates its frozen verifier boundary")
+            if self.plan.plan.revision_generation is not None and (
+                set(call_names) != set(saved_by_stage)
+                or state["live_boundary"]["stage"] != generation_stages(
+                    self.plan.plan.revision_generation)[0]
+                or state["live_boundary"]["role"] != "editor"
+                or any(call["stage"] not in {
+                    generation_stages(self.plan.plan.revision_generation)[0],
+                    generation_stages(self.plan.plan.revision_generation)[1],
+                } and not (call["stage"].startswith(
+                    generation_stages(self.plan.plan.revision_generation)[1] + "-coverage-")
+                    and generic_coverage_stage(call["stage"]))
+                    for call in calls)
+                or any(call["role"] != ("editor" if call["stage"] == generation_stages(
+                    self.plan.plan.revision_generation)[0] else "verifier") for call in calls)
+            ):
+                raise ValueError("generic revision restored state violates its writer boundary")
         elif state["live_boundary"] is not None or calls:
             raise ValueError("candidate-recovery non-live state contains current calls")
         self._imported_stage_names = set(state["imported_stage_names"])
@@ -1002,7 +1179,10 @@ class FinalizationRecoveryModelService:
             return "imported_historical"
         if not self._live_started:
             self._require_candidate_boundary()
-            if self.plan.plan.reader_revision_policy is not None and stage != REVISE_STAGE:
+            if self.plan.plan.revision_generation is not None and stage != generation_stages(
+                self.plan.plan.revision_generation)[0]:
+                raise ValueError("generic revision must start at its authorized writer")
+            if self.plan.plan.reader_revision_policy == READER_REVISION_POLICY and stage != REVISE_STAGE:
                 raise ValueError("reader revision must start at its explicit revision boundary")
             if self.plan.plan.verification_repair_policy is not None and stage != FROZEN_REVIEW_STAGE:
                 raise ValueError("verification repair must start at its explicit factual boundary")
@@ -1013,6 +1193,44 @@ class FinalizationRecoveryModelService:
                     or research.get("rendered_reader") != self.plan.plan.candidate["reader_text"]
                     or research.get("rendered_reader_sha256") != self.plan.plan.candidate["reader_sha256"]):
                 raise ValueError("verification repair may only verify the unchanged authorized reader")
+        if self.plan.plan.revision_generation is not None:
+            writer, verifier = generation_stages(self.plan.plan.revision_generation)
+            allowed = stage in {writer, verifier} or (
+                stage.startswith(verifier + "-coverage-") and generic_coverage_stage(stage))
+            if (not allowed or role != ("editor" if stage == writer else "verifier")
+                    or engine_payload.get("reader_revision_policy") != GENERIC_REVISION_POLICY
+                    or engine_payload.get("revision_contract_sha256")
+                    != self.plan.plan.revision_contract_sha256):
+                raise ValueError("generic revision call is outside the authorized generation")
+            if stage == writer:
+                research = engine_payload.get("research")
+                if (not isinstance(research, dict)
+                        or research.get("source_candidate") != self.plan.plan.candidate
+                        or research.get("source_writer_stage") != self.plan.plan.source_writer_stage
+                        or digest(research.get("repair_findings"))
+                        != self.plan.plan.source_terminal_review_sha256
+                        or research.get("source_terminal_review_sha256")
+                        != self.plan.plan.source_terminal_review_sha256
+                        or research.get("reader_revision_policy") != GENERIC_REVISION_POLICY
+                        or research.get("source_text_witnesses")
+                        != self.plan.plan.source_witness_catalog):
+                    raise ValueError("generic revision writer lacks the bound source candidate")
+            if stage == verifier:
+                research = engine_payload.get("research")
+                source_review = _read_object(self.plan.plan.source_dir /
+                    "reader_verification.json")["English"]["review"]
+                findings = {digest(item): item for item in source_review["findings"]}
+                expected = {"stage": self.plan.plan.candidate_review_stage,
+                    "reader_sha256": self.plan.plan.candidate["reader_sha256"],
+                    "findings": [{"source_finding_sha256": key, **value}
+                                 for key, value in findings.items()]}
+                if (not isinstance(research, dict)
+                        or research.get("source_terminal_review") != expected
+                        or research.get("source_terminal_review_sha256")
+                        != self.plan.plan.source_terminal_review_sha256
+                        or research.get("source_text_witnesses")
+                        != self.plan.plan.source_witness_catalog):
+                    raise ValueError("numbered revision factual review omitted bound source findings")
         return "current_live"
 
     def complete(self, role: str, payload: dict[str, Any], request: ResearchRequest) -> ModelReply:

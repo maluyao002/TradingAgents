@@ -15,7 +15,8 @@ from typing import Literal
 
 from pydantic import Field, field_validator
 
-from .contracts import Contract, ReviewFinding
+from .context import pack_evidence
+from .contracts import Contract, EvidenceSnapshot, ReviewFinding
 from .stages import VerificationOutput
 from .storage import canonical_json, digest
 
@@ -656,6 +657,129 @@ class FindingDisposition(Contract):
 class LifecycleVerification(VerificationOutput):
     issue_resolutions: tuple[IssueResolution, ...] = ()
     finding_dispositions: tuple[FindingDisposition, ...] = ()
+
+
+class RevisionFindingFollowup(Contract):
+    source_finding_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    disposition: Literal["corrected", "still_open"]
+    rationale: str = Field(min_length=1)
+    reader_excerpts: tuple[str, ...] = ()
+    witnesses: tuple[EvidenceWitness, ...] = ()
+
+    @field_validator("rationale")
+    @classmethod
+    def nonblank_rationale(cls, value):
+        if not value.strip():
+            raise ValueError("source finding followup rationale must be nonblank")
+        return value
+
+
+class RevisionLifecycleVerification(LifecycleVerification):
+    """Only numbered revisions must reattest every terminal source defect."""
+
+    source_finding_followups: tuple[RevisionFindingFollowup, ...]
+
+
+_SOURCE_WITNESS_STOPWORDS = frozenset({
+    "reader", "report", "source", "review", "finding", "material", "complete",
+    "explicitly", "unresolved", "limitation", "disclosure", "before", "without",
+    "would", "could", "should", "needs", "remain", "remains", "current",
+})
+_SOURCE_WITNESS_ALIASES = {
+    "incentive": ("compensation", "threshold", "payout", "target"),
+}
+
+
+def source_passage_witnesses(snapshot: EvidenceSnapshot, findings) -> dict[str, str]:
+    """Bound exact eligible raw-source spans for numbered finding followups only."""
+    eligible = {source.id: source for source in snapshot.sources
+                if source.published_at is not None and source.published_at <= snapshot.cutoff
+                and source.availability == "full_text"}
+    catalog, remaining = {}, 6000
+    for finding in findings[:16]:
+        code = str(finding.get("code", ""))
+        if code == "limitation_disposition":
+            affected = set(finding.get("affected_ids") or ())
+            related = next((item for item in findings[:16]
+                            if item is not finding and item.get("code") != "limitation_disposition"
+                            and affected.intersection(item.get("affected_ids") or ())), None)
+            if related is None:
+                continue
+            query_finding = related
+        else:
+            query_finding = finding
+        finding_hash = finding.get("source_finding_sha256") or digest(finding)
+        code_terms = set(re.findall(r"[^\W_]{5,}", str(query_finding.get("code", ""))
+                                    .replace("_", " ").casefold()))
+        terms = code_terms - _SOURCE_WITNESS_STOPWORDS - {
+            "verify", "frozen", "coverage", "omitted", "boundary", "tables", "scale"}
+        numbers = re.findall(r"\b\d+(?:\.\d+)?\b", str(query_finding.get("message", "")))[:4]
+        base_query = " ".join(sorted(terms) + numbers)[:512]
+        aliases = sorted({word for term in terms
+                          for word in _SOURCE_WITNESS_ALIASES.get(term, ())})
+        queries = (base_query, " ".join(aliases)) if aliases else (base_query,)
+        for query in queries:
+            if not query or remaining < 500:
+                continue
+            packed = pack_evidence(snapshot, queries=(query,),
+                                   max_source_chars=6000, max_chars_per_source=3000)
+            candidates = []
+            query_terms = set(query.casefold().split())
+            for entry in packed["sources"]:
+                source = eligible.get(entry["id"])
+                if source is None:
+                    continue
+                source_label = f"{source.id} {source.title}".casefold()
+                for excerpt in entry["excerpts"]:
+                    start, end, value = excerpt["start"], excerpt["end"], excerpt["text"]
+                    if not (0 <= start < end <= len(source.content)
+                            and source.content[start:end] == value):
+                        continue
+                    passage = value.casefold()
+                    overlap = sum(term in passage for term in query_terms)
+                    if not overlap:
+                        continue
+                    source_overlap = sum(term in source_label for term in terms)
+                    numeric_overlap = sum(number in passage for number in numbers)
+                    if not source_overlap and numeric_overlap < 2:
+                        continue
+                    candidates.append((-(source_overlap * 4 + overlap), source.id,
+                                       start, source, end, value))
+            for _, _, start, source, end, value in sorted(candidates):
+                reference = (f"source_passage:{finding_hash}:{source.id}:"
+                             f"{source.content_sha256}:{start}:{end}")
+                if reference not in catalog and len(value) <= remaining:
+                    catalog[reference] = value
+                    remaining -= len(value)
+                    break
+    return catalog
+
+
+def source_passage_witness_valid(reference, excerpt, catalog, snapshot, finding_hash) -> bool:
+    if not isinstance(reference, str) or not reference.startswith("source_passage:"):
+        return False
+    try:
+        bound_finding, source_id, content_hash, left, right = (
+            reference.removeprefix("source_passage:").rsplit(":", 4))
+        start, end = int(left), int(right)
+    except (TypeError, ValueError):
+        return False
+    source = next((item for item in snapshot.sources if item.id == source_id), None)
+    return bool(
+        bound_finding == finding_hash
+        and re.fullmatch(r"[a-f0-9]{64}", bound_finding)
+        and source is not None and source.published_at is not None
+        and source.published_at <= snapshot.cutoff
+        and source.availability == "full_text"
+        and re.fullmatch(r"[a-f0-9]{64}", content_hash)
+        and left == str(start) and right == str(end)
+        and 0 <= start < end <= len(source.content)
+        and sha256(source.content.encode("utf-8")).hexdigest() == content_hash
+        and source.content_sha256 == content_hash
+        and catalog.get(reference) == source.content[start:end]
+        and isinstance(excerpt, str) and excerpt.strip()
+        and excerpt in catalog[reference]
+    )
 
 
 def enrich_issues(issues, outputs, prior_findings, protected_texts=(), limitation_origins=None):
