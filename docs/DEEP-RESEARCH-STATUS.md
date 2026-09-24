@@ -1,6 +1,6 @@
 # Deep Research V2 — current status and next deliverables
 
-Updated September 23, 2026. **This is the single active work queue.**
+Updated September 24, 2026. **This is the single active work queue.**
 Start at the [documentation index](README.md) for other purposes.
 The [original design](DEEP-RESEARCH-DESIGN.md) and
 [implementation / acceptance plan](DEEP-RESEARCH-PLAN.md) remain authoritative
@@ -64,6 +64,20 @@ diagnostic or merged code increment is not a completed or accepted report.
   (six authored plus six deterministic, not 12 distinct defects).
   This is `verification_failed`, not a provider/source-access or budget failure.
   Changing inputs/runtime still requires a new compatibility assessment.
+- PR #28 is open against `codex/deep-research-v2`, not main. It adds an explicitly
+  authorized single revision after complete exact-prefix replay, scoped procedural
+  lineage and full new factual/coverage checks. Independent review fixes and
+  114 targeted tests passed (one optional packet test skipped); all six hosted
+  checks passed on `2f0b8d2`. The user-approved `revision_run_1` launched around
+  06:30 UTC September 24 with a 4m additional-token/90-minute/600-second-call cap.
+  It completed in **33m49s / 872,657 additional tokens**, complete telemetry,
+  but export was withheld at `verification_failed`. Factual review is clean;
+  **195/200** coverage IDs validated. One mixed review-status/dependency obligation
+  remains uncovered and four audit-only decisions incorrectly contain reader spans.
+  The original substantive wording/disclosure defects are addressed at candidate
+  level; this is not an exported or accepted reader. A later reserve-planning
+  review fix, `740015e`, passed 42 focused tests and all six hosted checks; its
+  review thread is resolved. The run stayed frozen at `2f0b8d2`; PR #28 is not merged.
 
 See the [concise implementation record](DEEP-RESEARCH-PROGRESS.md) for completed
 checkpoints and the [latest validation evidence](archive/deep-research/DEEP-RESEARCH-FRESH-VALIDATION.md)
@@ -74,8 +88,8 @@ for exact attempts, bounds and usage.
 | Order | Deliverable | Completion evidence |
 | --- | --- | --- |
 | 1 — Done (engineering) | Integrate reviewed reader inputs and typed reconciliation | PRs #23 and #26 merged; reader assumption table, typed reconciliation and packet-validation fixes tested/reviewed. This is not final-reader delivery |
-| 2 — Run completed; export blocked | Complete bounded NVDA finalization | Readiness and all 20 new calls completed within bounds. Fix scoped applicability/excerpt handling and remaining reader omissions, support a separately bounded revision, then reverify the exact candidate; never waive findings |
-| 3 | Inspect the actual exported English reader | Still open: only a provisional exact-candidate comparison with Claude exists; no admitted export. Check repaired/exported bytes, citations, readability and material scope before user review |
+| 2 — Revision complete; export blocked | Complete bounded NVDA finalization | Resolve the mixed stale-review/dependency obligation and add bounded malformed-disposition repair against exact unchanged reader bytes. Latest factual review is clean; 195/200 coverage IDs validated. Preserve all original responses and gates; no blind writer restart |
+| 3 | Inspect the actual exported English reader | Still open: the revised candidate was independently inspected and its footnotes/calculation links checked, but no admitted export exists. Verify exported bytes and reader usefulness before user review |
 | 4 | Close targeted financial and independent-evidence gaps | Typed issuer-FCF/residual reconciliation and fresh source/arithmetic reviews delivered in PR #26; dependent fresh analysis completed, but the reader is blocked and economic/independent-demand gaps remain |
 | 5 | Prove HOOD generality | Distinct broker-equity/funding workflow, English reader and comparator review using the same core contracts |
 | 6 | Complete broader update/evaluation and release gates | Original M0–M6 requirements, human reference review, held-out/repeat pilots and explicit release decision |
@@ -127,13 +141,16 @@ useful fresh reader but remain part of the full release.
   from audit procedure and assumptions unused by the displayed conclusions.
   Preserve semantic negative controls: prior coverage checks falsely closed a
   missing-disclosure control. Do not switch coverage defaults on efficiency alone.
-  The latest repaired candidate still needs precise repurchase execution wording,
-  partial financial-case working-capital disclosure, investment timing/later
-  obligations, guarantee triggers/coverage and source-extraction limits. One
-  reviewer excerpt is not an exact substring. Independent review also identified
-  underuse of supplied incentive tables. A bounded second-revision path must
-  retain exact-input/reader binding and full rechecks; the current one-repair path
-  stops safely even with unused allowance. Do not blindly repeat the same run.
+  The latest revision addresses repurchase wording, partial working-capital scope,
+  commitment timing, guarantee terms, source-extraction limits and the false
+  incentive-evidence absence. Its remaining export blockers are a different mixed
+  inherited review-status/dependency obligation and four invalid audit-only
+  dispositions containing reader spans. Implement scoped applicability and
+  bounded attestation repair without changing historical responses or silently
+  normalizing invalid replies. Exact spans alone do not make an audit-only decision
+  well-formed. The explicit one-revision path has now been used; unused allowance
+  is not automatic authority for another writer pass. Editorial depth still needs
+  lighter tables, better use of supplied evidence and concrete observation plans.
 - **Broader release:** dependency-aware reuse/updates, forecast-vintage evaluation,
   wider source/history/company coverage, ADR/FX/mixed-business cases, matched
   comparisons and finite human-label review packets remain required.
@@ -145,7 +162,7 @@ especially the substantive-closure, packet, disclosure-control and validation re
 
 | Checkpoint | User action |
 | --- | --- |
-| Concrete live run / recovery | Approved continuation completed within bounds, but export was withheld. The user subsequently approved the scoped pipeline fix and bounded revalidation; engineering/review and a new bound plan must precede another run. Reader and production acceptance remain separate |
+| Concrete live run / recovery | The approved one-revision run completed within its cap but withheld export. Remaining work is engineering, not approval to waive findings; any later live path needs its own concrete bounds/plan. No automatic retry has been launched. Reader and production acceptance remain separate |
 | Completed NVDA / HOOD reader | Review usefulness and readability, not every intermediate assumption |
 | Human reference validation / blind comparison | Review a prepared finite packet, or designate a qualified reviewer |
 | Paid/private data, changed scope or acceptance thresholds | Decide only after engineering explains the actual need and alternatives |
@@ -175,6 +192,7 @@ Never ask the user to approve away unsupported conclusions.
 | `RESEARCH_SUBSTANTIVE_20260922/reviewed_inputs_2/` | New nine-fact typed reconciliation, fresh dependent reviews, 36 operating and 65 cash-flow values; financial case still draft |
 | `RESEARCH_SUBSTANTIVE_20260922/fresh_validation_plan_3/` and `fresh_validation_run_3/` | Preserved 28-call fresh attempt, complete 1,642,733-token telemetry; stopped before repair, no final reader; provisional candidate comparison retained |
 | `RESEARCH_SUBSTANTIVE_20260922/finalization_plan_3/` and `finalization_run_3/` | Approved continuation completed: 28 saved stages reused, 20 new calls, 876,454 additional tokens; `verification_failed`, 196/202 IDs validated, no admitted export |
+| `RESEARCH_SUBSTANTIVE_20260922/revision_plan_1/` and `revision_run_1/` | Explicit one-revision policy; 48 imported stages + 20 new calls, 872,657 additional tokens, complete telemetry; `verification_failed`, 195/200 items, no admitted export |
 | `RESEARCH_SUBSTANTIVE_20260922/fresh_validation_run_2/` | Nine completed stages; failed factual boundary; 1,159,911 known tokens with incomplete usage; not a final report |
 | `RESEARCH_SUBSTANTIVE_20260922/factual_diagnostic_sol6_lifecycle_1/run_1/` | Successful exact-reader diagnostic and reply; no export or recovery-attestation reuse |
 | `NVDA_V2_20260917/run_recovered_1/` | Older bilingual previews; historical baseline, not the intended new English deliverable |

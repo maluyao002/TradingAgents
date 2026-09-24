@@ -1,13 +1,14 @@
 # Deep Research V2 — implementation record
 
-Updated September 23, 2026. This is the concise record of completed engineering
+Updated September 24, 2026. This is the concise record of completed engineering
 and validation checkpoints, **not a second work queue**. For current priorities,
 open gates and user decisions, use the [current roadmap](DEEP-RESEARCH-STATUS.md).
 The [original implementation plan](DEEP-RESEARCH-PLAN.md) is preserved.
 
-## Authorized NVDA finalization — September 24 UTC / September 23 PDT
+## Single reader revision — September 24
 
-Follow-up engineering (not yet integrated): the user approved scoped pipeline
+Follow-up engineering ([PR #28](https://github.com/maluyao002/TradingAgents/pull/28),
+not yet integrated): the user approved scoped pipeline
 fixes and bounded revalidation after the failed continuation below. An explicit
 `--revise-reader` mode binds one further revision to the terminal failed repaired
 candidate, complete frozen prefix, destination and fresh incremental allowance.
@@ -32,6 +33,53 @@ remaining actionable findings and reported 49 focused tests (overlapping, not
 additive). Metadata-only preflight passed for GPT-6 Astra/high and Sol/xhigh in
 the unchanged isolated provider home. The sandboxed metadata process initially
 closed stdout; the permission-enabled metadata retry succeeded without inference.
+Implementation commit `2f0b8d2` passed all six hosted checks. The separately bound
+`revision_run_1` launched around 06:30 UTC September 24 from the exact failed
+repaired candidate; `revision_plan_1` retains request, plan, authorization and
+readiness. It completed all 20 new calls (writer, factual and 18 coverage calls)
+after **2,028.73 seconds / 33m49s**, using **774,905 input + 97,752 output =
+872,657 additional tokens**, complete telemetry. Cumulative lineage usage is
+**3,391,844 tokens**, including the 48 imported stages once. The terminal result
+is **`verification_failed`**, not a provider/source-access or budget failure.
+
+Factual review returned no findings. Independent candidate review found the
+repurchase, incentive-absence, working-capital, commitment-timing, guarantee-term
+and source-quality defects addressed, with no new material financial overclaim.
+But final deterministic validation accepted **195/200** required items: one
+authored warning concerns a distinct inherited review-status/dependency statement,
+and four otherwise literal responses incorrectly attach reader excerpts to
+`audit_only_operational` decisions. The combined review has six findings: one
+warning plus five critical disposition findings, not six independent report
+defects. The old reconciliation-lineage item is correctly retained as operational
+audit; this does not clear the separate dependency-review item.
+
+No final reader was exported; `reader_report.md` is diagnostic only. The inspected
+candidate hash is `7d9bfe93070a2dac0919fe6a66ad2bee4ea219a7b527acc17c3a88758d8f3f06`.
+Its ten footnotes have no unused/undefined references, all 16 calculation links
+resolve in the generated appendix, and result-artifact hashes match. These are
+candidate checks, not exported-reader acceptance. Dense tables, implementation
+labels, underused supplied evidence and weak observation plans remain editorial
+work; financial underwriting, HOOD and release remain separate.
+
+GitHub review then identified a P2 reserve defect: the pre-writer estimate used
+the prior pass's post-retirement coverage list, although revision reopens those
+obligations. Commit **`740015e`** rebuilds the estimate from complete pre-resolution
+issues and atomic components. A regression with 36 valid retirements and compound
+expansion proves a tight allowance stops before the writer, with no new usage or
+source mutation; a roomy positive control passes. **42 targeted tests**, lint and
+whitespace checks passed; independent re-review found no actionable findings.
+All six hosted checks passed on this fix and its GitHub thread is resolved.
+It was developed in a separate checkout: the live run stayed frozen at `2f0b8d2`
+until settlement and is not claimed as live validation of the later guard.
+
+Next engineering: scoped treatment of the mixed stale-review/dependency obligation
+and bounded repair of malformed audit-only dispositions against unchanged reader
+bytes. Preserve original responses, exact-excerpt checks and financial gates;
+do not restart the writer blindly or automatically renew this one-revision path.
+Full evidence is in the [dated validation record](archive/deep-research/DEEP-RESEARCH-FRESH-VALIDATION.md#single-reader-revision-outcome--september-24).
+PR #28 remains open against the integration branch; it has not been merged.
+
+## Authorized NVDA finalization — September 24 UTC / September 23 PDT
 
 After PR #27 integrated the documentation closeout rules, the user explicitly
 approved offline applicability/readiness, bounded NVDA finalization and actual

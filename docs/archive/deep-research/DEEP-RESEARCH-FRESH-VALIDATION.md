@@ -602,3 +602,116 @@ residual classifications. The final two coverage batches contribute three author
 findings. Source-extraction limits affect evidentiary confidence and must not be
 blanket-reclassified as administrative audit detail. No additional live call or
 offline test was needed for this terminal read-only check.
+
+## Single reader revision outcome — September 24
+
+The user subsequently approved the scoped pipeline fixes and one bounded
+revision. PR #28 (not merged) adds `frozen-candidate-revision-v1`, a new plan-bound
+writer and complete exact-reader factual/coverage pass after all 48 unchanged
+historical stages replay. It preserves preview-12's default payloads and renderer.
+The exact reconciliation-lineage text receives protected operational-audit
+treatment; similar or materially expanded statements do not inherit that exemption.
+The live runtime remained **`2f0b8d2`** for the entire run.
+
+`revision_plan_1` retains request, offline plan, authorization and readiness.
+Plan SHA-256:
+`261babf0617a1352c5c1fb72967cd8bb036ab5ea42da21bfc3900c938ddea383`.
+Destination identity:
+`17cdf9c4d329a5a894b46a9f26534e239c489ff0b8bbb22d22c31d64cb8a0d4b`.
+Bounds: **4m additional tokens best-effort / 5,400 seconds / 600 seconds per call**.
+The run launched approximately 06:30 UTC and settled after **2,028.73 seconds
+(33m49s)** with **`verification_failed`**. All 20 new calls completed; there is
+no unsettled or unknown-usage call in this attempt. No automatic retry followed.
+
+| Scope | Input | Output | Total |
+| --- | ---: | ---: | ---: |
+| Imported history | 2,228,221 | 290,966 | 2,519,187 |
+| New revision | 774,905 | 97,752 | 872,657 |
+| Cumulative lineage | 3,003,126 | 388,718 | 3,391,844 |
+
+Telemetry is complete for these scopes; cached input/reasoning are subsets.
+Coordinator/reviewer task usage is excluded. Prior unknown usage stays unknown.
+This is a verification-contract/content stop, not a source-access, provider or
+budget failure. All final result artifact hashes were recomputed and matched.
+
+### Exact result and remaining blockers
+
+The candidate remains bound to
+`7d9bfe93070a2dac0919fe6a66ad2bee4ea219a7b527acc17c3a88758d8f3f06`.
+Global factual review returned no findings. All 18 coverage batches completed;
+final deterministic checks validated **195/200** required IDs. Six combined
+findings remain: one authored warning plus five critical disposition findings.
+
+- `limitation-3cd60a8072ca288cdc65fe99a0d095e2b9e90f91b2f6234f6f420629360e7a50`
+  combines new evidence/case identity and fresh dependent-analysis requirements
+  with an obsolete statement that the cash-flow review is pending. The latter
+  status changed; the code still protects the remaining dependency obligation.
+  Coverage batch 2 returns `required_lifecycle_coverage_incomplete`, and the
+  deterministic checker retains its unresolved-disposition failure.
+- Four `audit_only_operational` decisions incorrectly include literal reader
+  excerpts: IDs beginning `13a97713`, `d39b23d9`, `1304fe44` (batch 9), and
+  `283bdff1` (batch 16). These concern ingestion counts or publication/retrieval
+  conventions, but the audit-only protocol requires empty reader spans. Exact
+  substring matching therefore passes while disposition validation correctly
+  fails. Do not strip the spans in historical replies or silently change decisions.
+
+The targeted reconciliation-lineage issue `96247469...` is successfully preserved
+as a protected operational-audit component; it is distinct from `3cd60a...`.
+`reader_verification.json` records `exported=false`. Report and assessment
+completion remain incomplete, acceptance is blocked and production activation is
+false. `reader_report.md` contains **Diagnostic only — no reader draft** and is
+not the inspected candidate or an actual final export.
+
+### Candidate inspection, not reader acceptance
+
+Main and reused independent review found the prior repurchase, incentive-absence,
+partial working-capital, commitment-timing, guarantee-term and source-quality
+defects addressed. No new material valuation, funding or financial-approval
+overclaim was found. The candidate contains roughly 2,450 prose words excluding
+tables, ten used footnotes without undefined/unused definitions, and 16 calculation
+links, all matching generated appendix anchors. Structural checks do not establish
+source authenticity, semantic completeness or financial approval.
+
+The reader still underuses supplied incentive/outcome and financing-scale
+evidence; tables, implementation labels and legacy valuation caveats are dense.
+Scenario calibration and observable follow-up plans remain weak. These are
+editorial/substantive-depth gaps, not permission to invent underwriting or accept
+unsupported targets. Actual exported-reader inspection remains impossible.
+
+### Engineering review and subsequent budget fix
+
+114 targeted tests passed with one optional local frozen-packet test skipped;
+all six hosted checks passed on `2f0b8d2`. Independent review fixed two P2
+recovery-eligibility/restoration gaps and controlled malformed terminal-review
+rejection before launch. A metadata-only sandbox startup closed stdout; the
+permission-enabled retry passed without inference. The real no-provider rehearsal
+replayed all 48 stages before the new writer boundary.
+
+GitHub review then found that pre-writer reserves used the old post-retirement
+coverage list. The current run had estimated 18 coverage calls, but its mandatory
+exact post-writer/no-future-retirement precheck separately admitted **19** calls
+(1,943,872-token reserve against 3,753,982 remaining). Fresh factual reconciliation
+then yielded 200 atomic obligations in 18 batches. That full post-writer admission
+passed; no mandatory review was skipped and the current result is not invalidated.
+
+Fix **`740015e`**, developed separately while the run remained frozen, rebuilds
+pre-writer coverage from all pre-resolution obligations and their atomic
+components. A valid-retirement/compound fixture demonstrates sufficient-budget
+success and a formerly admitted tight allowance stopping before writer dispatch,
+without new usage or history changes. 42 targeted tests, lint, whitespace and all
+six hosted checks passed; independent re-review found no actionable findings and
+the GitHub thread was resolved. This later guard has offline/CI evidence, not a
+new live-validation claim. PR #28 remains unmerged.
+
+Next: scoped treatment of the mixed dependency/status obligation, plus a bounded
+attestation-repair path for malformed audit-only decisions on unchanged candidate
+bytes. Revalidate exact identities and mandatory checks; never override findings,
+reuse changed-input attestations or blindly buy another writer. The explicit
+one-revision allowance is settled. Keep financial/evidence underwriting, HOOD,
+human reader acceptance and production release as separate deliverables.
+
+Independent terminal inspection confirmed all counts and classifications: six
+findings affect five obligations; every nonempty quoted span is literal. The
+audit-only protocol violations are not four new substantive reader omissions.
+Future protocol repair must still reassess the audit-only judgments themselves,
+not conflate ingestion metadata with consequential source-quality uncertainty.
