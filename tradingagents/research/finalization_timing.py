@@ -8,15 +8,23 @@ latency observations. Provider timeouts are bounds, never duration predictions.
 import re
 from math import isfinite
 
+from .reader_revision import generic_coverage_stage, generic_review_stage, generic_writer_stage
+
 
 def call_family(stage):
     if not isinstance(stage, str):
         return None
-    if re.fullmatch(r"verify_(?:repaired_)?report-coverage-\d+", stage):
+    if generic_coverage_stage(stage):
         return "coverage"
-    if stage in {"verify_report", "verify_repaired_report"}:
+    if generic_review_stage(stage):
         return "factual"
-    if stage in {"editor", "repair_report"}:
+    if generic_writer_stage(stage):
+        return "writer"
+    if re.fullmatch(r"verify_(?:(?:repaired|revised)_)?report-coverage-\d+", stage):
+        return "coverage"
+    if stage in {"verify_report", "verify_repaired_report", "verify_revised_report"}:
+        return "factual"
+    if stage in {"editor", "repair_report", "revise_report"}:
         return "writer"
     return None
 

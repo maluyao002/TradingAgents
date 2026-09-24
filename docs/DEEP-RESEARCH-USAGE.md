@@ -419,6 +419,192 @@ Selective closure and semantic rerun routing are still future work. Failed revie
 retains an unverified reader candidate and partial batches for diagnosis, not a
 publishable report. Unknown usage stops subsequent admissions and automatic retry.
 
+### Open-ended retry-loop rule
+
+Limit non-converging retry loops, **not the duration of a single task**. A finite
+task may continue for hours while making demonstrable progress within its scope
+and authorization. Existing per-call and per-run safety/resource bounds still
+apply; this rule adds no blanket task-duration or attempt-count cap.
+
+- Before another attempt, record the specific diagnosis, meaningful change (or
+  evidence of a transient condition), expected observable improvement and relevant
+  offline check. Repeating the same substantive request is not a repair strategy.
+- Keep one campaign history across plans, budgets, branches, policy versions and
+  agent handoffs: attempt/result, changes, comparable unresolved defects, elapsed
+  time and incremental known usage, with unknown usage explicit. Do not count
+  imported lineage tokens again or treat a changed coverage denominator as progress.
+- Reassess before dispatch when the same failure recurs after its targeted fix,
+  successive attempts show no demonstrable deliverable improvement, or repairs
+  repeatedly expand scope. Passing more engineering tests alone does not establish
+  convergence toward an admitted reader. In-flight calls are not failed attempts.
+- At that checkpoint, stop automatic retries, summarize what changed and why it
+  failed, and propose a materially different, testable approach. Continue finite,
+  authorized offline diagnosis where useful. Resume live work only after the
+  convergence assessment and applicable authorization gates are satisfied; ask
+  the user when a scope, budget or acceptance decision is needed. A fresh plan or
+  available allowance cannot bypass this checkpoint.
+- Do not lower acceptance criteria, normalize historical responses, discard
+  warnings or silently renew allowances to escape a loop. A transport retry and a
+  semantic repair are different actions, but both remain visible in the history.
+
+This is the coordinator's operating rule, not a newly implemented automatic
+cross-run detector. Each runtime run remains separately bounded and fail-closed.
+
+### One separately authorized reader revision
+
+`cli.research_finalize prepare` and `run` accept `--revise-reader` for one new
+revision of a **terminal `verification_failed` repaired candidate**. The source
+must have complete usage, matching terminal reader/checkpoint identities and
+settled coverage history. The legacy revision cannot renew itself. A completed
+verification-only failure or numbered revision failure can instead enter the
+versioned numbered transition described below, under a fresh bound allowance.
+Use a fresh destination and a new plan-bound incremental authorization; neither
+the flag nor a successful offline preparation is live-run permission.
+
+```sh
+.venv/bin/python -m cli.research_finalize prepare \
+  --source-dir /path/to/failed-repair --config /path/to/new-request.json \
+  --output /path/to/new-plan.json --revise-reader
+.venv/bin/python -m cli.research_finalize run \
+  --source-dir /path/to/failed-repair --config /path/to/new-request.json \
+  --authorization-file /path/to/new-authorization.json \
+  --codex-home /path/to/isolated-runtime --allow-live --revise-reader
+```
+
+The explicit `frozen-candidate-revision-v1` policy is bound into the plan,
+authorization and service/cache identity. It leaves the default preview-12
+rendering and historical payloads unchanged: the entire exact prefix must replay
+before `revise_report`. `verify_revised_report` and every coverage batch receive
+the new policy identity and must run against the new candidate, even if the writer
+returns identical text. No old retirement or coverage decision attests new bytes.
+Writer-path estimates and exact post-writer reserves include full factual/coverage
+work; per-call and total bounds remain mandatory. A lost paid output is not
+permission to redispatch or reset the allowance.
+
+Only the exact known reconciliation-lineage obligation receives an opt-in
+procedural applicability component. Its original text/ID stays open and protected
+in the audit. Source-quality, financial, security and critical numerical caveats
+are not blanket-reclassified. Exact reader excerpts remain mandatory; mismatches
+are failures, never silently normalized. Failure still withholds export. Reader,
+financial and production acceptance remain separate gates.
+
+### Numbered, evidence-backed reader repair
+
+The same `--revise-reader` flag selects a versioned contract when the source is
+a terminal failed `verify_frozen_report` or numbered revised reader. Older sources
+select v4; a v4 source selects `frozen-candidate-revision-v5`; v5 and v6 sources
+select `frozen-candidate-revision-v6`. Imported generations retain their original
+contracts; this selection governs only the new generation.
+Preparation binds the exact candidate, source writer, complete terminal review,
+policy contract, eligible exact source-passage witnesses and full saved prefix.
+Generation 2 uses `revise_report-2` / `verify_revised_report-2`; each later
+generation requires a separate plan, fresh destination and explicit allowance.
+There is no automatic retry loop or analyst redispatch. Incomplete usage,
+missing coverage, inconsistent generation history and lost paid outputs fail
+closed. Original policies and historical payloads retain their identities.
+
+The plan binds per-generation policy/contract ownership to source provenance and
+exact saved stage hashes. Historical v3/v4 generations execute their frozen contracts;
+new generations use their separately bound instructions, retrieval and packing.
+The immediate source can establish its own generation; subsequent provenance
+retains a cumulative ownership map. Missing or ambiguous older ownership is
+rejected, never inferred from the latest contract.
+
+One writer is followed by new factual review and full atomic coverage. Every
+substantive terminal source finding needs an explicit follow-up; a corrected disposition
+requires exact new-reader spans and exact evidence witnesses. Source passages
+bind their source content hash and character bounds. Availability of a table,
+arithmetic review and economic underwriting are distinct claims. A scoped
+`review:cashflow_bridge` witness does not grant valuation or funding approval.
+Old warnings remain immutable audit history, not automatic claims of current
+evidence absence. Unsupported or still-open findings continue to block export.
+
+V4 separately records only mechanically proven historical audit-only span errors
+in a hash-bound pending-coverage ledger. They are not factual correction claims.
+Only complete fresh coverage of the exact obligation and reader can issue a
+supersession receipt; missing, malformed, interrupted or wrong-generation coverage
+cannot close it. The original failure remains in the audit. Material caveats and
+all other findings retain their normal repair requirements. Indexed references
+shorten repeated context while retaining full original-value hashes; strict
+roundtrip, cycle, reference and unused-entry checks remain enforced.
+
+V5 carries unresolved pending obligations independently of writer-authored
+limitations. It binds the complete original issue context and validates the prior
+receipt partition before preparing a new run. When transitioning from v4 with an
+inherited pending ledger, supply `--pending-origin-dir /path/to/bound-origin-run`
+on both `prepare` and `run`. This path is only an explicit locator: the origin
+artifacts must match the parent hashes already recorded in source provenance.
+No directory search or guessed context can substitute for that proof. Later v5
+generations retain the bound context envelope for replay. Missing context,
+conflicting identity or attempted factual retirement of a pending obligation
+fails closed; fresh same-issue coverage remains mandatory.
+
+Witness fields have different scopes. `issue_resolutions[].witnesses` may use only
+the supplied `resolution_evidence` catalog. Finding-bound `source_passage:` keys
+are for `source_finding_followups[].witnesses`, not issue retirement. Every quote
+must be an exact substring of its own referenced catalog value, including source
+whitespace and line breaks; text elsewhere in the source is not interchangeable.
+Historical responses are never silently corrected or normalized.
+
+For a still-open single-issue obligation, v5 may supply current factual-correction
+context to coverage. This is drawn only from accepted follow-ups, bound to the exact
+factual input/output checkpoint, reader, source finding and evidence catalogs. Raw
+responses labelled `corrected` are insufficient. The original issue and every
+remaining material proposition stay required; coverage must judge them independently.
+Context is not inherited by aliases or compound children and does not retire the
+parent, grant financial approval, or turn a deployment into commercial-cost evidence.
+The complete bounded context participates in payload hashes and admission estimates.
+
+Pre-writer admission reserves the complete reopened verification path with
+growth allowances. The writer's exact prompt is checked before dispatch; once
+the new candidate exists, exact factual and coverage prompt sizes and remaining
+resources are checked again. Lossless sharing is opt-in to this policy; evidence
+is not truncated. Estimates are not token/wall-time guarantees, and a passing
+offline rehearsal is not an admitted reader or authorization by itself.
+
+V6 can carry one proven missing/foreign coverage-ID pair as an immutable inventory
+envelope. It never maps the foreign ID to the missing one. The complete original,
+undecorated batch is pinned, its historical payload is reconstructed during exact
+replay, and only fresh valid coverage of every obligation earns one atomic receipt
+for both response errors. Partial coverage, changed contexts or additional unmatched
+inventory errors fail closed. Unrelated factual findings and financial gates remain
+independent; broader decorated-origin recovery is unsupported.
+
+The v6 finding-bound source catalog additionally considers exact validated operating
+source locators and current finding prose for explicitly affected eligible sources.
+Every passage retains its source hash and exact offsets. This is delivery, not
+semantic approval or broader issue-resolution authority. The bounded catalog may
+omit candidates when full; exact prompt admission remains mandatory. Historical
+v3–v5 selectors and payloads are unchanged.
+
+### Frozen-reader verification repair
+
+Use `--repair-verification` (instead of `--revise-reader`) on both preparation
+and execution to recheck a **terminal failed `verify_revised_report` candidate**
+whose factual review is clean and complete coverage history/usage are settled.
+This mode binds `frozen-candidate-verification-v2` into the plan and authorization,
+replays the complete exact prefix, then permits only `verify_frozen_report` and
+its coverage batches. It cannot write a new reader, change the candidate hash,
+renew itself or redispatch a paid call whose output was lost. The exact factual
+and complete coverage path is reserved before the first new call; unknown usage
+stops further dispatch. Use a fresh destination and a separately authorized
+incremental allowance, under the existing process supervisor and call deadlines.
+The v2 policy enables lossless nested sharing of repeated context, using the
+existing hash-checked decoder. Legacy prompt bytes remain unchanged. Exact packed
+prompt sizes for the known factual/coverage path are checked against the provider's
+local prompt cap before the first new call, and again before each dispatch; no
+evidence is truncated to fit. A local size stop here preserves complete usage.
+
+The new attestation explicitly distinguishes audit-only decisions (empty excerpt
+fields) from material reader coverage (literal supporting spans). Saved malformed
+responses are retained unchanged, not stripped or silently accepted. An exact
+known mixed dependency-review obligation can be split only when current evaluated
+operating and cash-flow reviews and calculation identities bind together; its
+procedural history remains protected, and conditional-review economic/financial
+limits remain reader-required. Historical payloads do not acquire this policy.
+Any new warning or invalid disposition still withholds export. This is verification
+of unchanged reader bytes, not fresh analysis, financial approval or user acceptance.
+
 ### Separate one-call valuation diagnostic
 
 After explicit live authorization, `scripts.research_model_probe` accepts a normal

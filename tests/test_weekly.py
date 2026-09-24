@@ -458,7 +458,9 @@ def test_hung_company_is_terminated_and_next_company_runs(tmp_path):
 
 @pytest.mark.unit
 def test_worker_crash_records_only_safe_numeric_exit_diagnostic(tmp_path):
-    config = _config(tmp_path, tickers=["AMD"])
+    # This tests exit classification, not startup speed. A loaded spawn worker
+    # must reach its explicit exit before the separate company-timeout path.
+    config = _config(tmp_path, tickers=["AMD"], company_timeout=10)
     manifest_path = run_batch(
         config,
         batch_id="worker-crash",

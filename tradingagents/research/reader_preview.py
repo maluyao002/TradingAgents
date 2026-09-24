@@ -16,6 +16,7 @@ from .storage import atomic_write, canonical_json, digest, parse_json, read_byte
 _EXPORTED_DRAFT_STAGES = {
     "verify_report": "editor",
     "verify_repaired_report": "repair_report",
+    "verify_revised_report": "revise_report",
 }
 
 
