@@ -5,7 +5,21 @@ and validation checkpoints, **not a second work queue**. For current priorities,
 open gates and user decisions, use the [current roadmap](DEEP-RESEARCH-STATUS.md).
 The [original implementation plan](DEEP-RESEARCH-PLAN.md) is preserved.
 
-## PR #26 pre-merge re-review — September 23
+## Latest integrated increment — PR #26, September 23
+
+[PR #26](https://github.com/maluyao002/TradingAgents/pull/26) merged into
+`codex/deep-research-v2` as `b957806` on September 23, 2026 at 22:06 PDT
+(September 24 at 05:06 UTC). The reviewed head was `0eb9387`; all six hosted
+checks passed, including Python 3.10–3.13, clean locked install, and container
+privacy/import. No unresolved inline review threads remained at merge.
+
+Delivered: reviewed cash-flow assumption tables bound to the exact reader,
+preview-12 cache isolation with historical preview compatibility, typed
+CFO/residual/issuer-FCF reconciliation, immutable packet preparation, and the
+two source-validation fixes below. The local/remote
+`codex/nvda-reader-financial-closure` branch and clean temporary review worktree
+were removed after checking merge ancestry. Commits remain recoverable through
+`b957806`; main and the unrelated active configuration branch were unchanged.
 
 The coordinator and the reused independent Sol reviewer re-examined the exact
 PR #26 diff. Two packet-builder defects were found and fixed: partial numeric
@@ -30,13 +44,15 @@ This is source-validation hardening, not acceptance of the reader or economic
 model. Any continuation still needs its own allowance and runtime-compatibility
 assessment; no historical run or preflight attestation is rewritten by this fix.
 
-## Feature integration and next increment — September 23
+## PR #26 development and validation history — September 23
+
+The following checkpoints predate the final PR #26 merge recorded above.
 
 PR #23 merged into `codex/deep-research-v2` as `bb580cb` after six successful
 checks and resolution of all seven review threads. It includes PR #24 and the
 PR #25 documentation consolidation. Main was not advanced.
 
-Follow-up branch: `codex/nvda-reader-financial-closure`. Commit `f3a7967` adds
+The follow-up used `codex/nvda-reader-financial-closure`. Commit `f3a7967` adds
 a deterministic reviewed cash-flow assumptions table, exact-reader provenance,
 preview-12 cache isolation and historical preview compatibility. Independent
 review identified Markdown label injection; it was fixed with a focused negative
@@ -57,7 +73,8 @@ whitespace checks passed; no actionable code-review findings remain in the
 reviewed scope. Fresh source/operating and separate cash-flow reviews passed and
 were attached to `reviewed_inputs_2`, admitting 36 operating and 65 cash-flow
 calculation references while leaving the financial case draft and valuation/
-equity/funding conclusions blocked. PR #26 is open against the integration branch.
+equity/funding conclusions blocked. At this checkpoint PR #26 was still open
+against the integration branch; its subsequent merge is recorded above.
 
 The full-path budget includes factual, all coverage batches, possible repair and
 rechecks. The unchanged 3m-token / 5,400-second / 600-second-per-call bounds may
@@ -87,7 +104,8 @@ calls for reuse, with a proposed incremental 4m-token / 5,400-second /
 authorization file or live continuation was created. See the
 [dated validation record](archive/deep-research/DEEP-RESEARCH-FRESH-VALIDATION.md)
 for exact identities and next gates. All six hosted checks passed on `d65b3ba`;
-PR #26 remains open and no new merge is claimed.
+PR #26 was still open at that validation checkpoint. Its later code merge did
+not authorize continuation or change the preserved validation outcome.
 
 An independent Astra/high editorial comparison is bound to attempt 3's exact
 first reader candidate in `fresh_validation_plan_3/reader_comparison_draft.md`.
@@ -152,8 +170,9 @@ original milestone is accepted.
 | Stage 3 / PR #13 | Financial-case/reader integration and deterministic admission | No accepted improved English reader |
 | PRs #14–18 | Wire repair, issue lifecycle/scope, bounded finalization, reader presentation and exact-artifact interfaces | Preserved live failures; no silent warning downgrades or final-report approval |
 | PRs #19–22 | Opt-in packed coverage, semantic controls, disclosure/review fixes and writer diagnostic | Negative-control failures remain material; efficiency is not semantic acceptance |
-| PR #23, merged | Nine-question work register, conditional cash-flow integration, new source packet and source/arithmetic review attachment | Typed financial reconciliation, full fresh reader path and HOOD remain open |
+| PR #23, merged | Nine-question work register, conditional cash-flow integration, new source packet and source/arithmetic review attachment | Typed reconciliation was subsequently delivered in PR #26; final reader and HOOD remain open |
 | PR #24, merged into #23 branch | Runtime/model alignment and successful factual boundary diagnostic | One successful call, not full pipeline or release acceptance |
+| PR #26, merged | Reviewed reader inputs, typed CFO/residual/issuer-FCF reconciliation and hardened immutable packet preparation | No admitted final NVDA export, economic approval, HOOD proof or release acceptance |
 
 ## Historical evidence
 
