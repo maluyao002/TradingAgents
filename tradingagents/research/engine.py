@@ -1519,18 +1519,35 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                  + reader_bytes + len(REVISION_REQUIREMENTS.encode())),
                         16_000, request.budget.call_timeout_seconds, role="verifier",
                         valuation_method=request.valuation_method)]
-                    for index, item in enumerate(finalization_plans[
-                            "verify_repaired_report"]["current_pass"]["calls"]):
+                    # The old current_pass excludes retired issues. Revision
+                    # reopens them, so estimate from the complete pre-resolution
+                    # issue packet under the new applicability policy instead.
+                    previous_factual = factual_payloads["verify_repaired_report"]["research"]
+                    reopened = split_compound_obligations(
+                        previous_factual["inherited_issues"], previous_factual["resolution_evidence"],
+                        reader_revision=True)
+                    atomic_reopened = compound_coverage_issues(reopened)
+                    for index, items in enumerate(coverage_batches(atomic_reopened)):
+                        stage = f"{REVISED_REVIEW_STAGE}-coverage-{index}"
+                        payload = model_payload(stage, "verifier", coverage_review_data(
+                            items, rendered.reader_text), ReaderVerification, request.report_language,
+                            True, role_call_index=role_indices["verifier"] + 1 + index)
                         estimated_calls.append(FinalizationCallPlan(
-                            f"{REVISED_REVIEW_STAGE}-coverage-{index}", "revision_coverage",
-                            b" " * (item["serialized_input_bytes"] + reader_bytes + 4096),
-                            item["output_token_envelope"], request.budget.call_timeout_seconds,
+                            stage, "revision_coverage",
+                            b" " * (model_input_bytes(payload, role="verifier",
+                                                      output_token_envelope=coverage_envelope,
+                                                      valuation_method=request.valuation_method)
+                                     + reader_bytes + 4096),
+                            coverage_envelope, request.budget.call_timeout_seconds,
                             role="verifier", valuation_method=request.valuation_method))
                     workload = finalization_workload(estimated_calls)
                     remaining = request.budget.total_tokens - tracker.usage.total_tokens
                     revision_plan = {"policy": READER_REVISION_POLICY, "remaining_tokens": remaining,
                                      "remaining_path": workload, "wall_time": time_plan(workload),
                                      "fits_reserve": workload["conservative_reserve_tokens"] < remaining,
+                                     "estimate_basis": "pre_reconciliation_obligations",
+                                     "reopened_issue_count": len(reopened),
+                                     "atomic_reopened_issue_count": len(atomic_reopened),
                                      "future_candidate_sizes_are_estimates": True}
                     finalization_plans["revision_admission"] = revision_plan
                     store.save_stage("revision-admission", {}, revision_plan)

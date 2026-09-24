@@ -21,6 +21,7 @@ from tradingagents.research.report_review import (
     validated_disposition_ids,
 )
 from tradingagents.research.review_lifecycle import (
+    _OPERATING_REVIEW_BOUNDARY,
     _RECONCILIATION_LINEAGE,
     compound_coverage_issues,
     split_compound_obligations,
@@ -38,8 +39,8 @@ class FailedRepair(CaseFixture):
         return reply
 
 
-def _revision(tmp_path, provider=None, *, tokens=4_000_000):
-    request, services = case_setup(tmp_path / "source", FailedRepair())
+def _revision(tmp_path, provider=None, *, tokens=4_000_000, source_provider=None):
+    request, services = case_setup(tmp_path / "source", source_provider or FailedRepair())
     result = run_research(request, services)
     assert result.stop_reason == "verification_failed"
     destination = request.model_copy(update={
@@ -228,3 +229,60 @@ def test_lineage_policy_is_exact_opt_in_and_never_resolves_history():
         protected = deepcopy(original)
         protected[0]["prior_findings"] = [{"category": category, "severity": "critical"}]
         assert split_compound_obligations(protected, {}, reader_revision=True) == protected
+
+
+def test_revision_budgets_reopened_atomic_obligations_before_paying_writer(tmp_path):
+    class RetiringRepair(FailedRepair):
+        def complete(self, role, payload, request):
+            reply = super().complete(role, payload, request)
+            if role == "business":
+                reply.data["unresolved_gaps"] = [_OPERATING_REVIEW_BOUNDARY, *[
+                    f"Synthetic retirement question {i}: does the supplied filing exist?"
+                    for i in range(36)]]
+            if payload["stage"] in {"verify_report", "verify_repaired_report"}:
+                evidence = payload["research"]["resolution_evidence"]
+                reference = next(key for key in evidence if key.startswith("fact:"))
+                reply.data["issue_resolutions"] = [{
+                    "issue_id": item["issue_id"], "status": "resolved",
+                    "rationale": "Synthetic supplied-filing witness, not financial acceptance.",
+                    "witnesses": [{"reference": reference, "excerpt": evidence[reference]}],
+                    "reader_excerpts": ["Synthetic executive_thesis mechanics fixture; no investment conclusion."],
+                } for item in payload["research"]["inherited_issues"]
+                    if item["text"].startswith("Synthetic retirement question")]
+            return reply
+
+    source, roomy, services, _, recovery, _ = _revision(
+        tmp_path, source_provider=RetiringRepair())
+    source_review = read_json(source.output_dir / "reader_verification.json")["English"]
+    assert sum(i["status"] == "resolved" for i in source_review["issue_lifecycle"]["issues"]) == 36
+    before = (source.output_dir / "finalization_checkpoint.json").read_bytes()
+    result = run_research(roomy, ResearchServices(services.evidence, recovery))
+    assert result.stop_reason == "completed_needs_review"
+    estimate = read_json(roomy.output_dir / "stages/revision-admission.json")["output"]
+    filtered = read_json(source.output_dir / "stages/verify_repaired_report-cost-plan.json")["output"]
+    calls = estimate["remaining_path"]["calls"]
+    coverage = [c for c in calls if c["phase"] == "revision_coverage"]
+    assert len(coverage) > len(filtered["current_pass"]["calls"])
+    assert estimate["reopened_issue_count"] == len(source_review["issue_lifecycle"]["issues"])
+    assert estimate["atomic_reopened_issue_count"] == estimate["reopened_issue_count"] + 2
+    assert estimate["estimate_basis"] == "pre_reconciliation_obligations"
+    reader_bytes = len(recovery.plan.plan.candidate["reader_text"].encode())
+    old_reserve = sum(c["conservative_reserve_tokens"] for c in calls
+                      if c["phase"] != "revision_coverage") + sum(
+        c["serialized_input_bytes"] + reader_bytes + 4096 + c["output_token_envelope"]
+        for c in filtered["current_pass"]["calls"])
+    corrected = estimate["remaining_path"]["conservative_reserve_tokens"]
+    assert corrected > old_reserve
+    tight = roomy.model_copy(update={"output_dir": tmp_path / "tight",
+        "budget": roomy.budget.model_copy(update={"total_tokens": (old_reserve + corrected) // 2})})
+    plan = prepare_finalization_continuation(source.output_dir, tight, revise_reader=True)
+    auth = recovery.plan.authorization.model_copy(update={
+        "plan_sha256": plan.plan_sha256, "new_request_identity": plan.new_request_identity,
+        "incremental_budget": tight.budget})
+    provider = CaseFixture()
+    stopped = run_research(tight, ResearchServices(services.evidence,
+        FinalizationRecoveryModelService(authorize_finalization_continuation(plan, auth), provider)))
+    assert stopped.stop_reason == "revision_path_budget_insufficient"
+    assert not provider.calls and stopped.usage == plan.source_usage
+    assert not (tight.output_dir / "stages/revise_report.json").exists()
+    assert (source.output_dir / "finalization_checkpoint.json").read_bytes() == before
