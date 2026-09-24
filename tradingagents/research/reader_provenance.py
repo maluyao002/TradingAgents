@@ -44,7 +44,8 @@ def _reject_authored_calculation_links(value):
 
 
 def reader_provenance(authored, prepared, facts, calculations, language, reader, *, cite=False,
-                      request=None, snapshot=None, issues=(), case_context=None, bind_case_state=False):
+                      request=None, snapshot=None, issues=(), case_context=None, bind_case_state=False,
+                      bind_cashflow_inputs=False):
     """Recompute every expansion; reject edited prose/metadata or fake calc links."""
     issues = tuple(issues)
     delivery = case_reader_delivery(case_context) if case_context is not None else None
@@ -85,7 +86,8 @@ def reader_provenance(authored, prepared, facts, calculations, language, reader,
     if request is None or snapshot is None:
         raise ValueError("reader binding requires exact rendering context")
     rerendered = render_reader(request, prepared, snapshot, issues, language, compact=cite,
-                              case_context=case_context, bind_case_state=bind_case_state)
+                              case_context=case_context, bind_case_state=bind_case_state,
+                              bind_cashflow_inputs=bind_cashflow_inputs)
     if rerendered.reader_text != reader:
         raise ValueError("prepared-to-reader binding mismatch")
     encoded_issues = []
@@ -106,6 +108,8 @@ def reader_provenance(authored, prepared, facts, calculations, language, reader,
         from .review_disclosures import DISCLOSURE_POLICY
         rendering_inputs.update(review_disclosure_policy=DISCLOSURE_POLICY,
             case_review_disclosure=rerendered.limitations_audit["case_review_disclosure"])
+    if bind_cashflow_inputs:
+        rendering_inputs["cashflow_assumptions_policy"] = "reviewed-inputs-table-v1"
     return {"schema_version": 1, "calculation_citations": cite, "authored_draft_sha256": digest(authored),
             "prepared_draft_sha256": digest(prepared),
             "reader_sha256": sha256(reader.encode()).hexdigest(),

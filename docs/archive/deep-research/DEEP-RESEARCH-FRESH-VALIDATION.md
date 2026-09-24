@@ -383,3 +383,131 @@ PR #23 remains open against `codex/deep-research-v2`; main and the frozen branch
 remain unchanged. The status overview and implementation log now link this
 outcome. No additional research/model call or acceptance change accompanied
 the merge and documentation synchronization.
+
+## September 23: reviewed reconciliation and fresh attempt 3
+
+The user's next instruction was to complete the first four recommended steps:
+feature integration, reader assumptions, bounded fresh English NVDA validation /
+reader inspection, and targeted financial / independent-evidence closure.
+HOOD, trading, scheduling, user acceptance and production activation remain
+outside this increment. No original design or implementation-plan file changed.
+
+### Integration, implementation and independent checks
+
+PR #23 merged into `codex/deep-research-v2` as `bb580cb`, after six successful
+checks and resolution of all seven review threads. The fully merged
+`codex/research-substantive-closure` branch was removed locally/remotely after
+verifying its exact `00de1dd` tip and ancestry; its commits remain in the merge.
+Main was unchanged. New work is on `codex/nvda-reader-financial-closure`, PR #26.
+
+- `f3a7967`: code-owned reviewed cash-flow assumption table; exact-reader
+  provenance, preview-12 cache separation, historical preview compatibility.
+- `ecd2fc3`: typed statement-row CFO reconciliation, issuer-FCF distinction,
+  three-component nonzero proxy residual and immutable packet preparation.
+- Independent code review fixed Markdown-label injection, absent optional-field
+  serialization changing historical hashes, and missing source-row cross-checks.
+  Ninety-six targeted implementation tests, relevant lint and whitespace checks
+  passed. All six hosted checks passed on frozen runtime head `d65b3ba`.
+- Fresh source/operating and separately authored cash-flow reviews were attached
+  to `reviewed_inputs_2`. Nine facts were added without changing the original
+  182 facts or 16 source contents. The packet admits 36 operating and 65 cash-flow
+  calculated values; the financial case remains draft. Arithmetic/source review
+  does not approve economic assumptions, funding, valuation or per-share values.
+- An additional 34 focused finalization recovery/engine tests passed when
+  evaluating the continuation option. No full local-suite rerun was required.
+
+### Exact live scope and terminal outcome
+
+`fresh_validation_plan_3/{PLAN.md,request.json,preflight.json}` records authority,
+the exact request and 24-artifact input-manifest check, code/source fingerprint
+and supported runtime selections. The frozen runtime was
+`d65b3ba6bd511c212f63bb3ecebc84e851ff8b3d`, engine `research-v2-preview-12`.
+The input evidence SHA-256 is
+`329cd20c70fea0753a4630e2c0f3a0d80808a6dc463095d0617957c52aef68e4`.
+No analysis response from an older attempt was used as substantive validation.
+
+The supervised run started around **16:53:20 UTC** with the unchanged
+**3,000,000-token best-effort / 5,400-second total / 600-second-per-call** limits,
+zero acquisition follow-ups and English only. Actual roles used GPT-6 Sol/high,
+GPT-6 Sol/xhigh and GPT-6 Astra/high as selected; there was no silent fallback.
+
+Attempt directory: `reports/RESEARCH_SUBSTANTIVE_20260922/fresh_validation_run_3`.
+It completed **28 model calls**: fresh challenge/planner/analysts/reconciliation,
+claim verification, writer, exact-reader factual review and **18 coverage batches**.
+The terminal `stop_reason` is **`repair_path_budget_insufficient`**;
+`failed_stage` is **`repair_report`**. No repair call was dispatched. This is a
+pre-dispatch budget-admission stop, not an external-source, timeout or transport
+failure. The generic `failure_reason` field says `unknown`; the specific result
+and `stages/repair-admission.json` establish the bounded-admission classification.
+
+Usage is **1,463,703 input + 179,030 output = 1,642,733 tokens**, complete for all
+settled calls in this attempt. Cached input **36,096** and reasoning output
+**91,932** are included in those totals. Run metadata elapsed time is
+**3,593.84 seconds (59m54s)**. These counters exclude independent agent work;
+they are not a complete campaign total. Earlier failed-call unknowns remain
+unknown and historical attempts were not modified.
+
+The remaining allowance was **1,357,267 tokens / 1,806.30 seconds**. The full
+20-call repair path reserved **3,157,123 tokens** conservatively (writer 938,706;
+factual 1,031,308; coverage 1,187,109). Its less-conservative planning estimate
+was 894,288 tokens, not an admission guarantee. Observed-latency planning also
+estimated **4,504.80 seconds**, exceeding the remaining window. Neither guard
+was loosened; the allowance was not renewed.
+
+### Reader inspection status and deficiencies
+
+The exact first candidate hash is
+`64d04b0e9333f6a69b47309ba03f4346566ec1b8727e8a95ebe61f7dd9d5c2a5`.
+Factual review returned `reviewed_report=true` with a missing local issuer-FCF
+citation. Complete coverage processing validated **167 of 200** required IDs.
+The combined review retained 58 findings: 24 authored findings plus 34
+deterministic limitation-disposition findings (38 critical / 20 warning total).
+These are not 58 independent substantive defects. A malformed returned issue ID
+also generated missing/unknown disposition findings; no fuzzy match or silent
+repair of reviewer IDs was applied.
+
+`reader_verification.json` has `exported=false`; report completion and assessment
+are incomplete, acceptance is blocked and production activation is false.
+`reader_report.md` explicitly says **Diagnostic only — no reader draft**. It is
+not a completed reader despite its filename. No exported-reader navigation or
+layout acceptance can be claimed.
+
+Independent Astra/high review of the exact candidate and supplied Claude HTML
+is in `fresh_validation_plan_3/reader_comparison_draft.md`. The candidate is
+stronger on cash definitions, typed residual attribution and two-sided reasoning,
+but underuses available evidence and needs clearer scenario interpretation,
+observable follow-up tests, shorter tables and precise local citations. The
+comparison is provisional; it is not a substitute for reviewing a repaired export.
+
+Material reader omissions include guarantee exclusions/probability/timing,
+conditional commitment-overlap scale, unquantified linked-intermediary exposure
+and fiscal-date derivation. A distinct scope defect routes audit provenance and
+unused valuation conventions into required reader prose. The advisory scope
+review identifies exact origins and already-covered excerpts; it changes no
+provider finding, severity or admission result. A later fix must use explicit
+applicability and negative controls, not blanket warning downgrades.
+
+Typed arithmetic closure is delivered. Customer economics/independent demand,
+investment outcomes, operating cash-tax normalization, account classification,
+commitment/guarantee cash timing, opening-date roll-forward, capitalization and
+long-range valuation remain separate gaps. More polished disclosure cannot
+resolve them or approve the financial case.
+
+### Offline continuation proposal — not authorization
+
+`finalization_plan_3/request.json` changes only budget/output destination versus
+the original request. The offline `cli.research_finalize prepare` check passed,
+binding all 28 completed calls, exact candidate and unchanged evidence/case/model
+settings. Plan SHA-256:
+`7c71e79968fea43b5efbc999a5918c9d51cd90c5e304288cb53f783263cd8235`.
+Destination request identity:
+`d6b72fd731ee2327cf0e748ac8d8545c6fbf2ec0435acf160344ed16fbb03ae6`.
+
+Proposed single continuation: at most **4,000,000 additional tokens best-effort,
+5,400 seconds total, 600 seconds per call**, reusing this fresh analysis rather
+than restarting it. Preparation is offline only: approval was requested but has
+not been received, no authorization file exists and no continuation was launched.
+Its budget is a cap, not a completion promise. Changed runtime/input identities
+require rechecking compatibility; this plan does not authorize applying new
+code/evidence to old attestations. Any repaired candidate must pass its own exact
+factual/coverage checks before export and user review. PR #26 remains open.

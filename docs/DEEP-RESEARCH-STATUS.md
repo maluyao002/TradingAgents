@@ -15,8 +15,11 @@ has been delivered**. A successful diagnostic is not a completed or accepted rep
 - PR #24 merged as `d9bb516` into `codex/research-substantive-closure`.
   Its local/remote sub-branch was removed. All six checks passed on final PR head
   `7aca54c`; its review finding is resolved and re-review found no new inline findings.
-- PR #23 remains open against `codex/deep-research-v2`. Main and that frozen
-  integration branch were not advanced by PR #24.
+- PR #23 merged into `codex/deep-research-v2` as `bb580cb` on September 23,
+  after all six checks passed and all seven review threads were resolved.
+  The fully merged local/remote `codex/research-substantive-closure` sub-branch
+  was removed; its history remains in the merge. Main remains unchanged.
+  PR #26 delivers the next reviewed increment against that integration branch.
 - Active Sol/Luna selections now use GPT-6. Runtime capability checks, API effort
   forwarding, conservative input-size admission and lossless packing are implemented.
 - The latest exact-reader factual diagnostic succeeded in **237.17 seconds /
@@ -25,6 +28,28 @@ has been delivered**. A successful diagnostic is not a completed or accepted rep
 - No final report was exported by that diagnostic; its proposed issue resolutions
   were not applied by the engine. Earlier failed-call usage remains unknown.
   A previous transient lifecycle failure did not recur, but its cause is unproven.
+- The approved next increment covers integration, reader assumptions, bounded
+  fresh NVDA validation/inspection, and targeted financial/evidence closure.
+  HOOD and release acceptance are not part of this increment. Reader inputs are
+  now code-owned and tested (`f3a7967`); typed reconciliation and immutable packet
+  preparation are implemented (`ecd2fc3`). Fresh source/operating and cash-flow
+  reviews passed and are attached in `reviewed_inputs_2`. PR #26 targets
+  `codex/deep-research-v2`. Its pre-merge re-review also fixed truncated source
+  cells and Decimal-rounded anchor comparisons; see the implementation record
+  and [PR #26](https://github.com/maluyao002/TradingAgents/pull/26) for final checks
+  and integration state. Historical reports and live allowances are unchanged.
+- Fresh English attempt 3 completed 28 model calls, including all fresh analyses,
+  the writer, factual review and 18 coverage batches. It stopped before repair at
+  `repair_path_budget_insufficient`: **1,642,733 tokens / 3,593.84 seconds**, with
+  complete telemetry for this attempt. Repair/rechecks required a conservative
+  3,157,123-token reserve against 1,357,267 remaining; the time estimate also did
+  not fit. This was not an external-source or transport failure. No final reader
+  was exported; `reader_report.md` is explicitly a diagnostic placeholder.
+- An exact-input candidate continuation is prepared offline in
+  `finalization_plan_3`, proposing at most 4m additional tokens / 5,400 seconds /
+  600 seconds per call. It reuses attempt 3's 28 completed calls, not old attempt
+  2 analyses. No authorization file or live continuation exists. User approval
+  is pending; changing inputs/runtime would require a new compatibility assessment.
 
 See the [concise implementation record](DEEP-RESEARCH-PROGRESS.md) for completed
 checkpoints and the [latest validation evidence](archive/deep-research/DEEP-RESEARCH-FRESH-VALIDATION.md)
@@ -34,10 +59,10 @@ for exact attempts, bounds and usage.
 
 | Order | Deliverable | Completion evidence |
 | --- | --- | --- |
-| 1 | Complete feature-branch integration and prepare the next English reader | Reviewed PR #23 path; explicit material cash-flow scenario assumptions; no unsupported valuation or funding claim |
-| 2 | Budget and run the complete fresh NVDA path | Exact input/model identities; analyst, writer, factual, coverage and repair reserves; token/wall bounds; all failed-call unknowns preserved |
-| 3 | Inspect the actual exported English reader | Readability, paragraph citations, material caveats and exact-artifact admission checked; comparison with the supplied Claude reference, not a claim it is factual gold |
-| 4 | Close targeted financial and independent-evidence gaps | Typed issuer-FCF/residual reconciliation; dated financial relationships; dependent analyses/reviews refreshed when input or case identities change |
+| 1 | Complete feature-branch integration and prepare the next English reader | PR #23 merged; reader assumption table implemented/reviewed in PR #26; no unsupported valuation or funding claim |
+| 2 | Complete bounded NVDA finalization | Fresh analysis and first full review pass finished; attempt 3 stopped before repair. Offline continuation awaits its own allowance; no silent retry or skipped check |
+| 3 | Inspect the actual exported English reader | Still open: only a provisional exact-candidate comparison with Claude exists; no admitted export. Check repaired/exported bytes, citations, readability and material scope before user review |
+| 4 | Close targeted financial and independent-evidence gaps | Typed issuer-FCF/residual reconciliation and fresh source/arithmetic reviews delivered in PR #26; dependent fresh analysis completed, but the reader is blocked and economic/independent-demand gaps remain |
 | 5 | Prove HOOD generality | Distinct broker-equity/funding workflow, English reader and comparator review using the same core contracts |
 | 6 | Complete broader update/evaluation and release gates | Original M0–M6 requirements, human reference review, held-out/repeat pilots and explicit release decision |
 
@@ -54,7 +79,7 @@ These Stage 0–5 labels are the delivery roadmap, **not** the original M0–M6 
 | --- | --- | --- |
 | 0 — Organize and reconcile | Baseline, scope decisions and current work index; documentation cleanup | Keep this queue and implementation record current |
 | 1 — Evidence delivery and result scope | Reviewed-input contracts, actual-payload coverage audit, typed derivations and scoped conclusions; PR #11 merged | Broader evidence/model completeness is not implied |
-| 2 — NVDA financial case | PR #12 schedules, conditional operating/cash-flow calculations, exact new passages and source/arithmetic reviews | Economic underwriting, typed reconciliation, equity/share/funding and opening-date closure |
+| 2 — NVDA financial case | PR #12 schedules, conditional operating/cash-flow calculations, exact passages and source/arithmetic reviews; PR #26 typed CFO/issuer-FCF reconciliation | Economic underwriting, equity/share/funding and opening-date closure |
 | 3 — Integrated English NVDA reader | PR #13 and later review/rendering/recovery increments; fresh analyses and a successful exact-reader factual diagnostic | Complete admitted export, coverage/repair, reader inspection and user acceptance |
 | 4 — Robinhood contrast | Comparator and broker-model groundwork | Complete distinct HOOD workflow and English report; independent economic review and user review of the pair |
 | 5 — Updates, benchmark and release | Dossier/evaluation utilities and benchmark contracts | Full original release scope, matched trials, human labels, held-out/repeat pilots and activation decision |
@@ -66,19 +91,26 @@ useful fresh reader but remain part of the full release.
 
 ## Open engineering work — not requests for user sign-off
 
-- **Financial case:** distinguish package OCF-minus-asset-purchases from issuer FCF;
-  encode source-grounded residual attribution as typed, tested reconciliation.
-  Finish fiscal/calendar alignment, economic forecasts, opening-date roll-forward,
+- **Financial case:** typed, tested CFO/residual/issuer-FCF reconciliation and
+  the new packet's dependent source/arithmetic reviews are complete; fresh
+  analysis and first-pass review completed, but finalization stopped before repair.
+  Finish fiscal/calendar alignment where required by the model, economic forecasts, opening-date roll-forward,
   usable cash/securities, debt/leases, capitalization and commitment/guarantee
   coverage. Unknown public-source relationships stay explicit; positive FCFF does
   not establish company-wide funding sufficiency.
 - **Evidence:** extend guidance/actual chronology and targeted independent
   demand/competition evidence. The SEC contact blocker is already resolved.
-  The new packet has 12 exact passages from six selected sources; delivery checks
-  cover 36 operating and 57 cash-flow values. Source/arithmetic review is not
+  The packet retains 12 follow-up passages from six selected sources; the newly
+  reviewed reconciliation admits 36 operating and 65 cash-flow values. Source/arithmetic review is not
   economic approval or a complete current-data refresh.
 - **Reader and review:** make business-to-financial reasoning and material
   assumptions readable; keep citations precise and exhaustive audit detail separate.
+  Attempt 3's provisional independent review identifies audit lineage and unused
+  valuation conventions routed into reader-required caveats. Correct applicability
+  with explicit evidence and negative controls; do not blanket-downgrade warnings
+  or rewrite the preserved run's findings. Separate genuine reader omissions
+  (including guarantee exclusions and unquantified linked-intermediary exposure)
+  from audit procedure and assumptions unused by the displayed conclusions.
   Preserve semantic negative controls: prior coverage checks falsely closed a
   missing-disclosure control. Do not switch coverage defaults on efficiency alone.
 - **Broader release:** dependency-aware reuse/updates, forecast-vintage evaluation,
@@ -92,7 +124,7 @@ especially the substantive-closure, packet, disclosure-control and validation re
 
 | Checkpoint | User action |
 | --- | --- |
-| Concrete live run / recovery | Authorize the bounded purpose and retry policy where not already covered; old run allowances are not renewed by these docs |
+| Concrete live run / recovery | Attempt 3 ended. Proposed exact-candidate repair continuation: up to 4m additional tokens, 90 minutes total, 600 seconds per call, one attempt; approval pending. Old allowances are not renewed by these docs |
 | Completed NVDA / HOOD reader | Review usefulness and readability, not every intermediate assumption |
 | Human reference validation / blind comparison | Review a prepared finite packet, or designate a qualified reviewer |
 | Paid/private data, changed scope or acceptance thresholds | Decide only after engineering explains the actual need and alternatives |
@@ -118,7 +150,10 @@ Never ask the user to approve away unsupported conclusions.
 
 | Local artifact under `reports/` | Use / limitation |
 | --- | --- |
-| `RESEARCH_SUBSTANTIVE_20260922/reviewed_inputs_1/` | Current targeted reviewed source/arithmetic inputs; financial case remains draft |
+| `RESEARCH_SUBSTANTIVE_20260922/reviewed_inputs_1/` | Preserved prior targeted source/arithmetic inputs; financial case remains draft |
+| `RESEARCH_SUBSTANTIVE_20260922/reviewed_inputs_2/` | New nine-fact typed reconciliation, fresh dependent reviews, 36 operating and 65 cash-flow values; financial case still draft |
+| `RESEARCH_SUBSTANTIVE_20260922/fresh_validation_plan_3/` and `fresh_validation_run_3/` | Preserved 28-call fresh attempt, complete 1,642,733-token telemetry; stopped before repair, no final reader; provisional candidate comparison retained |
+| `RESEARCH_SUBSTANTIVE_20260922/finalization_plan_3/` | Offline exact-candidate continuation proposal; 28 completed calls bound for reuse; not authorized or launched |
 | `RESEARCH_SUBSTANTIVE_20260922/fresh_validation_run_2/` | Nine completed stages; failed factual boundary; 1,159,911 known tokens with incomplete usage; not a final report |
 | `RESEARCH_SUBSTANTIVE_20260922/factual_diagnostic_sol6_lifecycle_1/run_1/` | Successful exact-reader diagnostic and reply; no export or recovery-attestation reuse |
 | `NVDA_V2_20260917/run_recovered_1/` | Older bilingual previews; historical baseline, not the intended new English deliverable |
