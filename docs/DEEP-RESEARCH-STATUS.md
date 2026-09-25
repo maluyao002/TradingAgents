@@ -22,6 +22,17 @@ diagnostic or merged code increment is not a completed or accepted report.
   [implementation record](DEEP-RESEARCH-PROGRESS.md#latest-integrated-increment--pr-28-september-24).
   Its post-merge documentation update is local on `codex/nvda-finalization-closeout`,
   pending the next reviewed PR; no additional bookkeeping PR was opened.
+- **New offline NVDA issue closure is reviewed on `codex/nvda-issue-closure`.**
+  The [finding map](archive/deep-research/DEEP-RESEARCH-NVDA-ISSUE-MAP.md)
+  ties every remaining substantive warning to exact passages and needed reader
+  qualifications. Seven repeated coverage gaps have a reviewed, opt-in
+  [disclosure packet](archive/deep-research/DEEP-RESEARCH-NVDA-DISCLOSURE-PACKET.json);
+  the overbroad proxy paragraph and Q1 truncation receipt remain separate
+  obligations. A v7 continuation is prepared **offline only** from the frozen
+  candidate; its controlled section still faces full factual and atomic
+  coverage review. No admitted reader, run 4 or HOOD report exists. The
+  [implementation record](DEEP-RESEARCH-PROGRESS.md#nvda-issue-closure-checkpoint--offline-september-24)
+  has the plan and test status.
 
 The following bullets retain the dated development/validation sequence. Earlier
 open-PR statements are historical; the merge receipt above is current.
@@ -190,7 +201,7 @@ for exact attempts, bounds and usage.
 | Order | Deliverable | Completion evidence |
 | --- | --- | --- |
 | 1 — Done (engineering) | Integrate reviewed reader inputs and typed reconciliation | PRs #23 and #26 merged; reader assumption table, typed reconciliation and packet-validation fixes tested/reviewed. This is not final-reader delivery |
-| 2 — Offline readiness done; live held | Complete bounded NVDA finalization | Run 3 remains `verification_failed`, 198/206. V6 recovery, strict witness delivery and final 150-stage offline readiness pass. Apply the campaign convergence checkpoint before any separately authorized live repair; no run 4 launched |
+| 2 — Offline issue closure reviewed; live held | Complete bounded NVDA finalization | Run 3 remains `verification_failed`, 198/206. The source map, opt-in v7 disclosure packet, independent code review and 150-stage no-provider prompt/reserve rehearsal pass. Coverage prompts and live time remain unmeasured; any live repair needs a separate bounded authorization and full verification. No run 4 launched |
 | 3 | Inspect the actual exported English reader | Still open: the revised candidate was independently inspected and its footnotes/calculation links checked, but no admitted export exists. Verify exported bytes and reader usefulness before user review |
 | 4 | Close targeted financial and independent-evidence gaps | Typed issuer-FCF/residual reconciliation and fresh source/arithmetic reviews delivered in PR #26; dependent fresh analysis completed, but the reader is blocked and economic/independent-demand gaps remain |
 | 5 | Prove HOOD generality | Distinct broker-equity/funding workflow, English reader and comparator review using the same core contracts |
@@ -213,6 +224,14 @@ only; live continuation remains held. Narrow unsupported inventory
 assertions to delivered passages instead of expanding source-context machinery;
 preserve all material economic disclosures. Broader decorated-origin recovery is
 explicitly excluded from this narrow increment, not silently accepted.
+
+The subsequent offline issue map identifies seven repeated coverage caveats
+suited to a fixed, cited section and a separate overbroad proxy paragraph that
+must be narrowed throughout. V7 is opt-in; its source-bound paragraph is
+construction input, not an acceptance or issue resolution. The original Q1
+truncation ID and the corrected concentration witness still need fresh exact
+receipts. The full factual and coverage gates remain unchanged, and Stage 3
+stays open until an actual exported reader passes them.
 
 The engineering items below are implemented and reviewed in v5. The real-data
 rehearsal passes; the latest live result confirms both pending receipts and delivery

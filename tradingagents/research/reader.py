@@ -533,6 +533,7 @@ def render_reader(
     bind_case_state: bool = False,
     bind_cashflow_inputs: bool = False,
     case_context=None,
+    controlled_disclosure: dict[str, Any] | None = None,
 ) -> ReaderRender:
     """Render a reader report and a complete limitations/source audit.
 
@@ -559,6 +560,8 @@ def render_reader(
         compact=compact,
         draft=draft,
     )
+    if controlled_disclosure is not None and (not compact_state["active"] or draft is None):
+        raise ValueError("controlled disclosure requires a compact authored reader")
     if compact_state["active"]:
         for item in draft_audit["consolidated_exact_text"]:
             item["displayed_in_reader"] = False
@@ -582,6 +585,13 @@ def render_reader(
                 if set(source_ids) - eligible_source_ids:
                     raise ValueError("draft used ineligible evidence identifiers")
                 section_evidence_source_ids.update(source_ids)
+        if controlled_disclosure is not None:
+            for entry in controlled_disclosure["entries"]:
+                for passage in entry["source_passages"]:
+                    source_id = passage["source_id"]
+                    if source_id not in eligible_source_ids:
+                        raise ValueError("controlled disclosure cited ineligible source")
+                    explicit_source_ids.add(source_id)
     if compact_state["active"]:
         cited_sources = [
             source
@@ -738,6 +748,20 @@ def render_reader(
             if fallback_line is not None:
                 text.extend(["", fallback_line])
 
+    if controlled_disclosure is not None:
+        section_index = len(draft.sections) + 1
+        disclosure_paragraphs = []
+        for entry in controlled_disclosure["entries"]:
+            ids = list(dict.fromkeys(passage["source_id"] for passage in entry["source_passages"]))
+            footnotes = "".join(f"[^{source_numbers[source_id]}]" for source_id in ids)
+            disclosure_paragraphs.append(entry["text"].strip() + " " + footnotes)
+            for source_id in ids:
+                body_citations.setdefault(source_id, set()).add(section_index)
+        disclosure_body = "\n\n".join(disclosure_paragraphs)
+        paragraph_citations.extend(_paragraph_citations(
+            disclosure_body, source_numbers, section_index, include_missing_explicit=True))
+        text.extend(["", "## Source-bound material disclosures", "", disclosure_body])
+
     authored_limitations = draft_audit["consolidated_exact_text"]
     if not compact_state["active"]:
         limitations_heading = "重要限制 / Material limitations" if chinese else "Material limitations"
@@ -860,6 +884,19 @@ def render_reader(
         "section_citations": section_citations,
         "source_footnotes": source_footnotes,
     }
+    if controlled_disclosure is not None:
+        from .controlled_disclosure import DISCLOSURE_POLICY
+        from .storage import digest
+        audit["controlled_disclosure"] = {
+            "policy": DISCLOSURE_POLICY,
+            "packet_sha256": digest(controlled_disclosure),
+            "section_index": len(draft.sections) + 1,
+            "entries": [{"issue_ids": entry["issue_ids"],
+                         "terminal_finding_sha256s": entry["terminal_finding_sha256s"],
+                         "source_ids": list(dict.fromkeys(
+                             passage["source_id"] for passage in entry["source_passages"]))}
+                        for entry in controlled_disclosure["entries"]],
+        }
     if bind_case_state:
         audit["case_review_disclosure"] = disclosure
     return ReaderRender(reader_text="\n".join(text) + "\n", limitations_audit=audit)

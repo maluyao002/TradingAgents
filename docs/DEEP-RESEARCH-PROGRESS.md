@@ -5,6 +5,50 @@ and validation checkpoints, **not a second work queue**. For current priorities,
 open gates and user decisions, use the [current roadmap](DEEP-RESEARCH-STATUS.md).
 The [original implementation plan](DEEP-RESEARCH-PLAN.md) is preserved.
 
+## NVDA issue closure checkpoint — offline, September 24
+
+The failed `reader_repair_run_3` candidate was reassessed finding by finding in
+the [source map](archive/deep-research/DEEP-RESEARCH-NVDA-ISSUE-MAP.md). It has
+198/206 required limitation IDs validated. The 18 terminal findings reduce to
+eight substantive corrections, one invalid concentration source witness, and
+nine disposition consequences, including the original Q1 truncation ID that a
+coverage response replaced with a foreign ID. An independent source review
+confirmed the map's offsets, issue identities and negative controls. The proxy
+inventory repair applies to the *whole* affected Management paragraph: its
+three delivered extracts support pay dependence, metric composition and the
+pre-specified H20 adjustment, but not the adjacent assertions about thresholds,
+earned outcomes, vesting, compensation table or March certification.
+
+The [reviewed disclosure packet](archive/deep-research/DEEP-RESEARCH-NVDA-DISCLOSURE-PACKET.json)
+contains four concise paragraphs for seven recurring substantive coverage IDs.
+It excludes the proxy factual finding and the procedural Q1 truncation issue;
+those remain writer and fresh-review obligations. New opt-in v7 construction
+binds this packet to the candidate, source passages, open issue/finding pairs,
+frozen case and continuation authorization. It renders cited paragraphs in a
+separate section while preserving full factual and atomic coverage checks.
+Older v3–v6 contexts and the current v6 plan remain byte-compatible; the
+existing `reader_repair_plan_4_ready` re-prepares to the same plan hash
+`c3b27e164c339064f75d01310e6605c48fe31eff38b8f8f716e93b5bd088a41a`.
+
+No-provider preparation of the actual NVDA v7 continuation succeeded with 150
+imported stages, 7m incremental-token allowance and plan hash
+`5cc0a6b8becc5bf8aafd66e6b4ba395ae09b1ddf54b3946d5fd6b9c245a72fc4`.
+The packet is not a factual attestation or a verified new reader. Fifty-one
+targeted offline tests, changed-Python Ruff and whitespace checks pass.
+Independent code review found and fixed lineage, source-eligibility,
+historical-resume and citation-scoping defects, then passed the final diff.
+The actual 150-stage v7 no-provider rehearsal measured an 873,646-byte writer
+prompt and 999,048-byte synthetic-reader factual prompt, both below the
+1,048,576-byte cap. Baseline factual input plus the required 16,384-byte growth
+allowance was 1,014,693 bytes, leaving 33,883 bytes. Conservative complete-path
+reserve was 5,785,755 tokens / 22 planned calls (including 20 coverage calls),
+within the prepared 7m allowance; `stop_before_dispatch=false`. The synthetic
+run intentionally stopped at an invalid factual fixture, so coverage prompt
+sizes and live wall-time completion were not measured. Its
+`reader_repair_plan_v7_ready/offline_rehearsal.json` is an ignored local audit
+receipt. No provider call, run 4, export or live authorization occurred.
+Stage 3 remains open and HOOD remains the subsequent generality test.
+
 ## Latest integrated increment — PR #28, September 24
 
 [PR #28](https://github.com/maluyao002/TradingAgents/pull/28) merged into

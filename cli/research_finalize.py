@@ -34,12 +34,15 @@ class _FinalizationWorker:
     revise_reader: bool = False
     repair_verification: bool = False
     pending_origin_dir: Path | None = None
+    disclosure_packet_path: Path | None = None
 
     def __call__(self, request: ResearchRequest) -> ResearchResult:
         plan = prepare_finalization_continuation(self.source_dir, request,
                                                  revise_reader=self.revise_reader,
                                                  repair_verification=self.repair_verification,
-                                                 pending_origin_dir=self.pending_origin_dir)
+                                                 pending_origin_dir=self.pending_origin_dir,
+                                                 **({"disclosure_packet_path": self.disclosure_packet_path}
+                                                    if self.disclosure_packet_path is not None else {}))
         authorization = load_finalization_authorization(self.authorization_file)
         authorized = authorize_finalization_continuation(plan, authorization, request)
         snapshot = EvidenceSnapshot.model_validate(parse_json(plan.frozen_inputs["evidence_path"]))
@@ -60,6 +63,8 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--output", required=True, type=Path, help="reviewable plan JSON")
     prepare.add_argument("--pending-origin-dir", type=Path,
                          help="explicit hash-verified origin for inherited pending coverage")
+    prepare.add_argument("--disclosure-packet", type=Path,
+                         help="reviewed exact-source paragraph packet for opt-in v7")
     prepare_mode = prepare.add_mutually_exclusive_group()
     prepare_mode.add_argument("--revise-reader", action="store_true",
                          help="authorize one new revision of a failed repaired candidate")
@@ -74,6 +79,8 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--allow-live", action="store_true")
     run.add_argument("--pending-origin-dir", type=Path,
                      help="same hash-verified pending origin used when preparing the plan")
+    run.add_argument("--disclosure-packet", type=Path,
+                     help="same exact-source packet used when preparing the plan")
     run_mode = run.add_mutually_exclusive_group()
     run_mode.add_argument("--revise-reader", action="store_true")
     run_mode.add_argument("--repair-verification", action="store_true")
@@ -87,7 +94,9 @@ def main(argv=None) -> int:
         plan = prepare_finalization_continuation(args.source_dir, request,
                                                  revise_reader=args.revise_reader,
                                                  repair_verification=args.repair_verification,
-                                                 pending_origin_dir=args.pending_origin_dir)
+                                                 pending_origin_dir=args.pending_origin_dir,
+                                                 **({"disclosure_packet_path": args.disclosure_packet}
+                                                    if args.disclosure_packet is not None else {}))
         if args.command == "prepare":
             write_finalization_continuation_plan(plan, args.output)
             payload = {
@@ -124,6 +133,7 @@ def main(argv=None) -> int:
             args.revise_reader,
             args.repair_verification,
             args.pending_origin_dir.resolve() if args.pending_origin_dir is not None else None,
+            args.disclosure_packet.resolve() if args.disclosure_packet is not None else None,
         )
         outcome = run_supervised(worker, request)
         if outcome.result is None:
