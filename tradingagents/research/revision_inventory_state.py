@@ -1,7 +1,7 @@
 """Immutable lineage and receipt partition for v6 batch-inventory obligations."""
 
 from .review_lifecycle import compound_coverage_issues
-from .revision_contracts import V6_CONTRACT, revision_contract
+from .revision_contracts import INVENTORY_CONTRACTS, INVENTORY_POLICIES, revision_contract
 from .revision_inventory import inventory_eligibility, inventory_finding_hashes, resolve_inventory
 from .storage import digest
 
@@ -24,7 +24,7 @@ def inventory_contexts_from_source(verification, checkpoint, provenance, reader_
                                  provenance["revision_contract_sha256"])
     lifecycle = verification["issue_lifecycle"]
     terminal = {digest(item) for item in verification["review"]["findings"]}
-    if contract == V6_CONTRACT:
+    if contract in INVENTORY_CONTRACTS:
         pending = provenance.get("pending_inventory")
         if (not isinstance(pending, list)
                 or digest(pending) != provenance.get("pending_inventory_sha256")
@@ -63,10 +63,11 @@ def inventory_contexts_from_source(verification, checkpoint, provenance, reader_
 
 def prior_inventory_lineage(provenance, prior_contracts):
     """Carry exactly one hash-bound envelope set for every imported v6 generation."""
-    records = [item for item in prior_contracts if item["contract_sha256"] == V6_CONTRACT.sha256]
+    inventory_hashes = {contract.sha256 for contract in INVENTORY_CONTRACTS}
+    records = [item for item in prior_contracts if item["contract_sha256"] in inventory_hashes]
     if not records:
         return ()
-    if provenance.get("reader_revision_policy") != V6_CONTRACT.policy:
+    if provenance.get("reader_revision_policy") not in INVENTORY_POLICIES:
         raise ValueError("inventory lineage ends in a different contract")
     earlier = provenance.get("prior_pending_inventory")
     own = provenance.get("pending_inventory")
@@ -76,7 +77,8 @@ def prior_inventory_lineage(provenance, prior_contracts):
         raise ValueError("inventory lineage is incomplete")
     inventory_finding_hashes(own)
     current = {
-        "generation": records[-1]["generation"], "contract_sha256": V6_CONTRACT.sha256,
+        "generation": records[-1]["generation"],
+        "contract_sha256": records[-1]["contract_sha256"],
         "provenance_sha256": records[-1]["provenance_sha256"],
         "envelopes": own, "envelopes_sha256": digest(own),
     }

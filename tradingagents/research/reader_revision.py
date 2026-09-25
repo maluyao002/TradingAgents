@@ -14,6 +14,7 @@ GENERIC_REVISION_POLICY_V4 = "frozen-candidate-revision-v4"
 GENERIC_V4_SOURCE_WITNESS_POLICY = "finding_bound_issue_context_exact_source_passage_v1"
 GENERIC_REVISION_POLICY_V5 = "frozen-candidate-revision-v5"
 GENERIC_REVISION_POLICY_V6 = "frozen-candidate-revision-v6"
+GENERIC_REVISION_POLICY_V7 = "frozen-candidate-revision-v7"
 
 
 def generation_stages(generation: int) -> tuple[str, str]:
@@ -183,6 +184,28 @@ GENERIC_V6_COVERAGE_REQUIREMENTS = GENERIC_V5_COVERAGE_REQUIREMENTS + (
     "assigned ID. Do not shorten, combine, substitute or infer issue identities. "
     "A complete ID inventory is necessary but does not establish material coverage; "
     "apply all ordinary semantic and exact-reader-span requirements independently."
+)
+
+# v7 adds an opt-in, fixed disclosure packet to reader construction. It does
+# not retire an issue or transfer any historical factual/coverage attestation.
+GENERIC_V7_WRITER_REQUIREMENTS = GENERIC_V6_WRITER_REQUIREMENTS + (
+    " A separately source-bound controlled_disclosure packet will be rendered "
+    "as fixed paragraphs after your authored sections. Do not paraphrase those "
+    "paragraphs or treat their presence as an issue receipt. Keep the rest of "
+    "the reader coherent with them and retain every remaining qualification. "
+    "When narrowing a source inventory claim, revise any adjacent outcome or "
+    "rules assurance that relies on the same undelivered passages; repair the "
+    "whole affected paragraph rather than leaving an implied overclaim."
+)
+GENERIC_V7_FOLLOWUP_REQUIREMENTS = GENERIC_V6_FOLLOWUP_REQUIREMENTS + (
+    " Independently check the fixed controlled disclosure paragraphs against "
+    "their source passages, all other frozen evidence, and the full reader. "
+    "A source-bound packet is not a factual attestation."
+)
+GENERIC_V7_COVERAGE_REQUIREMENTS = GENERIC_V6_COVERAGE_REQUIREMENTS + (
+    " The fixed controlled disclosure paragraphs are part of the exact reader "
+    "under review. Judge all original obligations against the complete rendered "
+    "reader; packet inclusion alone is not coverage."
 )
 
 VERIFICATION_REPAIR_REQUIREMENTS = (

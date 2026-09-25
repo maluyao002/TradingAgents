@@ -105,6 +105,8 @@ def test_v6_replays_v5_and_closes_inventory_pair_only_after_full_coverage(tmp_pa
     request, evidence, service, provider = _v6(tmp_path)
     plan = service.plan.plan
     assert plan.reader_revision_policy == V6_CONTRACT.policy
+    assert "prior_controlled_disclosures" not in service.candidate_recovery_context
+    assert "prior_controlled_disclosures_sha256" not in service.candidate_recovery_context
     assert plan.prior_revision_contracts[-1]["contract_sha256"] == V5_CONTRACT.sha256
     assert len(plan.pending_inventory) == 1
     expected = plan.pending_inventory[0]["expected_issue_ids"]

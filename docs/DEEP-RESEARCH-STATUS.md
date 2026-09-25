@@ -13,6 +13,30 @@ but **Stage 3 is still open: no admitted final improved English NVDA reader
 has been delivered**. The HOOD contrast remains Stage 4 work. A successful
 diagnostic or merged code increment is not a completed or accepted report.
 
+- **PR #28 merged** into `codex/deep-research-v2` as `9cc0ace` on September 24
+  at 09:59 PDT / 16:59 UTC. All six hosted checks passed on final head `4c1a2df`;
+  the review thread is resolved, final independent code review is clear, and 63
+  focused offline tests pass. This integrates the bounded recovery, v6 inventory/
+  witness fixes and retry-convergence rule. Offline readiness is complete; no
+  run 4 or admitted export exists. The verified receipt is in the
+  [implementation record](DEEP-RESEARCH-PROGRESS.md#latest-integrated-increment--pr-28-september-24).
+  Its post-merge documentation update is local on `codex/nvda-finalization-closeout`,
+  pending the next reviewed PR; no additional bookkeeping PR was opened.
+- **New offline NVDA issue closure is reviewed on `codex/nvda-issue-closure`.**
+  The [finding map](archive/deep-research/DEEP-RESEARCH-NVDA-ISSUE-MAP.md)
+  ties every remaining substantive warning to exact passages and needed reader
+  qualifications. Seven repeated coverage gaps have a reviewed, opt-in
+  [disclosure packet](archive/deep-research/DEEP-RESEARCH-NVDA-DISCLOSURE-PACKET.json);
+  the overbroad proxy paragraph and Q1 truncation receipt remain separate
+  obligations. A v7 continuation is prepared **offline only** from the frozen
+  candidate; its controlled section still faces full factual and atomic
+  coverage review. No admitted reader, run 4 or HOOD report exists. The
+  [implementation record](DEEP-RESEARCH-PROGRESS.md#nvda-issue-closure-checkpoint--offline-september-24)
+  has the plan and test status.
+
+The following bullets retain the dated development/validation sequence. Earlier
+open-PR statements are historical; the merge receipt above is current.
+
 - PR #24 merged as `d9bb516` into `codex/research-substantive-closure`.
   Its local/remote sub-branch was removed. All six checks passed on final PR head
   `7aca54c`; its review finding is resolved and re-review found no new inline findings.
@@ -64,7 +88,7 @@ diagnostic or merged code increment is not a completed or accepted report.
   (six authored plus six deterministic, not 12 distinct defects).
   This is `verification_failed`, not a provider/source-access or budget failure.
   Changing inputs/runtime still requires a new compatibility assessment.
-- PR #28 is open against `codex/deep-research-v2`, not main. It adds an explicitly
+- At the first revision checkpoint, PR #28 was open against `codex/deep-research-v2`, not main. It adds an explicitly
   authorized single revision after complete exact-prefix replay, scoped procedural
   lineage and full new factual/coverage checks. Independent review fixes and
   114 targeted tests passed (one optional packet test skipped); all six hosted
@@ -77,7 +101,7 @@ diagnostic or merged code increment is not a completed or accepted report.
   The original substantive wording/disclosure defects are addressed at candidate
   level; this is not an exported or accepted reader. A later reserve-planning
   review fix, `740015e`, passed 42 focused tests and all six hosted checks; its
-  review thread is resolved. The run stayed frozen at `2f0b8d2`; PR #28 is not merged.
+  review thread is resolved. The run stayed frozen at `2f0b8d2`; PR #28 was not yet merged.
 - Follow-up verification-only repair is implemented and reviewed in PR #28;
   155 targeted tests passed (one optional packet test skipped). The unchanged candidate can receive fresh factual/complete coverage
   checks after replaying all 68 saved calls, without another analyst or writer run.
@@ -151,7 +175,7 @@ diagnostic or merged code increment is not a completed or accepted report.
   coverage ID, proxy-passage delivery and compressed financial/exposure caveats.
   There is no admitted export. Continue offline applicability/delivery diagnosis;
   no historical response normalization, acceptance override or blind retry.
-- The narrow v6 follow-up is implemented on unmerged PR #28 (`8fbdf42`, with
+- The narrow v6 follow-up was implemented before PR #28 merged (`8fbdf42`, with
   helper commits `1b2ef04` / `75ab791`). It pins the complete original inventory
   for the missing/foreign-ID pair and requires a fresh atomic coverage receipt;
   it never aliases a malformed ID or clears unrelated findings. Exact historical
@@ -177,7 +201,7 @@ for exact attempts, bounds and usage.
 | Order | Deliverable | Completion evidence |
 | --- | --- | --- |
 | 1 — Done (engineering) | Integrate reviewed reader inputs and typed reconciliation | PRs #23 and #26 merged; reader assumption table, typed reconciliation and packet-validation fixes tested/reviewed. This is not final-reader delivery |
-| 2 — Offline readiness done; live held | Complete bounded NVDA finalization | Run 3 remains `verification_failed`, 198/206. V6 recovery, strict witness delivery and final 150-stage offline readiness pass. Apply the campaign convergence checkpoint before any separately authorized live repair; no run 4 launched |
+| 2 — Offline issue closure reviewed; live held | Complete bounded NVDA finalization | Run 3 remains `verification_failed`, 198/206. The source map, opt-in v7 disclosure packet, independent code review and 150-stage no-provider prompt/reserve rehearsal pass. Coverage prompts and live time remain unmeasured; any live repair needs a separate bounded authorization and full verification. No run 4 launched |
 | 3 | Inspect the actual exported English reader | Still open: the revised candidate was independently inspected and its footnotes/calculation links checked, but no admitted export exists. Verify exported bytes and reader usefulness before user review |
 | 4 | Close targeted financial and independent-evidence gaps | Typed issuer-FCF/residual reconciliation and fresh source/arithmetic reviews delivered in PR #26; dependent fresh analysis completed, but the reader is blocked and economic/independent-demand gaps remain |
 | 5 | Prove HOOD generality | Distinct broker-equity/funding workflow, English reader and comparator review using the same core contracts |
@@ -200,6 +224,14 @@ only; live continuation remains held. Narrow unsupported inventory
 assertions to delivered passages instead of expanding source-context machinery;
 preserve all material economic disclosures. Broader decorated-origin recovery is
 explicitly excluded from this narrow increment, not silently accepted.
+
+The subsequent offline issue map identifies seven repeated coverage caveats
+suited to a fixed, cited section and a separate overbroad proxy paragraph that
+must be narrowed throughout. V7 is opt-in; its source-bound paragraph is
+construction input, not an acceptance or issue resolution. The original Q1
+truncation ID and the corrected concentration witness still need fresh exact
+receipts. The full factual and coverage gates remain unchanged, and Stage 3
+stays open until an actual exported reader passes them.
 
 The engineering items below are implemented and reviewed in v5. The real-data
 rehearsal passes; the latest live result confirms both pending receipts and delivery

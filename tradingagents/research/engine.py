@@ -106,10 +106,10 @@ from .review_lifecycle import (
     split_compound_obligations,
 )
 from .revision_contracts import (
+    INVENTORY_CONTRACTS,
     PINNED_CONTRACTS,
     V4_CONTRACT,
-    V5_CONTRACT,
-    V6_CONTRACT,
+    V7_CONTRACT,
     revision_contract,
 )
 from .revision_correction_context import (
@@ -499,6 +499,22 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 raise ValueError("numbered revision lacks unambiguous historical contract")
             return revision_contract(records[0]["policy"], records[0]["contract_sha256"])
 
+        def controlled_disclosure_for_generation(generation):
+            if candidate_recovery is None:
+                raise ValueError("controlled disclosure requires a numbered continuation")
+            if generation == candidate_recovery.get("revision_generation"):
+                packet = candidate_recovery.get("controlled_disclosure")
+                packet_sha256 = candidate_recovery.get("controlled_disclosure_sha256")
+            else:
+                records = [item for item in candidate_recovery.get(
+                    "prior_controlled_disclosures", ()) if item["generation"] == generation]
+                if len(records) != 1:
+                    raise ValueError("historical controlled disclosure packet is missing")
+                packet, packet_sha256 = records[0]["packet"], records[0]["packet_sha256"]
+            if not isinstance(packet, dict) or digest(packet) != packet_sha256:
+                raise ValueError("controlled disclosure packet hash differs")
+            return packet, packet_sha256
+
         verified_readers = {}
         reader_verifications = {}
         model_checkpoints = {}
@@ -772,7 +788,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             if origin == "current_live":
                 if (payload.get("verification_repair_policy") == VERIFICATION_REPAIR_POLICY
                         or payload.get("reader_revision_policy") in {
-                            GENERIC_REVISION_POLICY, V4_CONTRACT.policy, V5_CONTRACT.policy, V6_CONTRACT.policy}):
+                            GENERIC_REVISION_POLICY, V4_CONTRACT.policy,
+                            *(contract.policy for contract in PINNED_CONTRACTS)}):
                     prompt_limit = getattr(services.models, "max_prompt_utf8_bytes", None)
                     prompt_bytes = len(model_prompt(payload))
                     if prompt_limit is not None and prompt_bytes > prompt_limit:
@@ -782,7 +799,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                         })
                         raise BudgetExhausted("revision_prompt_size_limit" if
                             payload.get("reader_revision_policy") in {
-                                GENERIC_REVISION_POLICY, V4_CONTRACT.policy, V5_CONTRACT.policy, V6_CONTRACT.policy}
+                                GENERIC_REVISION_POLICY, V4_CONTRACT.policy,
+                                *(contract.policy for contract in PINNED_CONTRACTS)}
                             else "verification_prompt_size_limit")
                 permit = tracker.reserve(envelope, finalization=finalization)
                 dispatch_unsettled = True
@@ -939,10 +957,20 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
         def verify_reader(candidate, language, stage, extra=None, *, authored=None):
             nonlocal finalization_candidate, candidate_review_stage, active_stage
             active_stage = stage
+            stage_contract = numbered_contract(stage)
+            disclosure = None
+            if stage_contract == V7_CONTRACT:
+                generation = int(stage.removeprefix(REVISED_REVIEW_STAGE + "-").split("-", 1)[0])
+                disclosure, disclosure_sha256 = controlled_disclosure_for_generation(generation)
+                if ((extra or {}).get("controlled_disclosure") != disclosure
+                        or (extra or {}).get("controlled_disclosure_sha256")
+                        != disclosure_sha256):
+                    raise ValueError("v7 reader disclosure differs from its numbered packet")
             rendered = render_reader(request, candidate, snapshot, reader_inputs(), language,
                                      compact=bounded_review and case_context is not None,
                                      bind_case_state=bool(request.financial_case_path), case_context=case_context,
-                                     bind_cashflow_inputs=ENGINE_VERSION == "research-v2-preview-12")
+                                     bind_cashflow_inputs=ENGINE_VERSION == "research-v2-preview-12",
+                                     controlled_disclosure=disclosure)
             rendered_hash = hashlib.sha256(rendered.reader_text.encode("utf-8")).hexdigest()
             if stage == FROZEN_REVIEW_STAGE and (
                     not candidate_recovery
@@ -1002,7 +1030,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                 if pending_entries(pending_contexts) != tuple((extra or {}).get("pending_coverage", ())):
                     raise ValueError("v5 factual pending context differs from its eligibility")
                 limitations = project_pending_issues(limitations, pending_contexts)
-            if stage_contract == V6_CONTRACT:
+            if stage_contract in INVENTORY_CONTRACTS:
                 limitations = project_inventory_issues(limitations, pending_inventory)
             review_data = {
                 "draft": candidate.model_dump(mode="json"), "analyses": outputs,
@@ -1061,6 +1089,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     cite=case_context is not None, request=request, snapshot=snapshot, issues=reader_inputs(),
                     case_context=case_context, bind_case_state=bool(request.financial_case_path),
                     bind_cashflow_inputs=ENGINE_VERSION == "research-v2-preview-12",
+                    controlled_disclosure=disclosure,
                 )
                 bound_calculations = {
                     section["section_index"]: {
@@ -1069,7 +1098,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     } for section in provenance["sections"]
                 }
                 for citation in rendered.limitations_audit.get("paragraph_citations", []):
-                    if set(citation.get("calculation_ids", ())) - bound_calculations[citation["section_index"]]:
+                    if set(citation.get("calculation_ids", ())) - bound_calculations.get(
+                            citation["section_index"], set()):
                         raise ValueError("reader calculation citation lacks authored provenance")
                 factual_data["rendering_provenance"] = {
                     key: value for key, value in provenance.items() if key != "rendering_inputs"
@@ -1195,7 +1225,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 if key != "source_finding_sha256"}
                                 for item in pending_coverage)):
                         raise ValueError("numbered revision pending coverage ledger differs from source")
-                    if stage_contract == V6_CONTRACT:
+                    if stage_contract in INVENTORY_CONTRACTS:
                         inventory_hashes = inventory_finding_hashes(pending_inventory)
                         pinned_ids = {identifier for entry in pending_inventory
                                       for identifier in entry["expected_issue_ids"]}
@@ -1264,7 +1294,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     if stage_contract in PINNED_CONTRACTS:
                         lifecycle["pending_coverage_contexts"] = list(pending_contexts)
                         lifecycle["pending_coverage_contexts_sha256"] = digest(pending_contexts)
-                    if stage_contract == V6_CONTRACT:
+                    if stage_contract in INVENTORY_CONTRACTS:
                         lifecycle["pending_inventory"] = list(pending_inventory)
                         lifecycle["pending_inventory_sha256"] = digest(pending_inventory)
                 if unresolved_source_findings:
@@ -1476,7 +1506,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     if pending_failures:
                         verification = verification.model_copy(update={"findings": (
                             *verification.findings, *pending_failures)})
-                if stage_contract == V6_CONTRACT:
+                if stage_contract in INVENTORY_CONTRACTS:
                     inventory_receipts, inventory_failures = resolve_inventory(
                         pending_inventory, generation=int(stage.rsplit("-", 1)[1]),
                         contract_sha256=stage_contract.sha256,
@@ -1938,6 +1968,8 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                         for generation in range(2, target_generation + 1):
                             writer_stage, review_stage = generation_stages(generation)
                             contract = numbered_contract(writer_stage)
+                            generation_disclosure = (controlled_disclosure_for_generation(
+                                generation) if contract == V7_CONTRACT else None)
                             source_stage = reader_verifications[request.report_language]["stage"]
                             source_hash = reader_verifications[request.report_language]["reader_sha256"]
                             source_writer = (REVISE_STAGE if generation == 2 else
@@ -1977,7 +2009,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                         "contexts_sha256"]:
                                         raise ValueError("historical v5 pending context is missing")
                                     pending_contexts = tuple(records[0]["contexts"])
-                            if contract == V6_CONTRACT:
+                            if contract in INVENTORY_CONTRACTS:
                                 if generation == target_generation:
                                     pending_inventory = tuple(candidate_recovery["pending_inventory"])
                                 else:
@@ -1997,14 +2029,14 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 reader_revision=True, verification_repair=True)
                             if contract in PINNED_CONTRACTS:
                                 reopened = project_pending_issues(reopened, pending_contexts)
-                            if contract == V6_CONTRACT:
+                            if contract in INVENTORY_CONTRACTS:
                                 reopened = project_inventory_issues(reopened, pending_inventory)
                             atomic_reopened = compound_coverage_issues(reopened)
                             source_findings = {
                                 digest(finding.model_dump(mode="json")): finding.model_dump(mode="json")
                                 for finding in final_review.findings
                             }
-                            if contract == V6_CONTRACT and (
+                            if contract in INVENTORY_CONTRACTS and (
                                     not inventory_finding_hashes(pending_inventory) <= set(source_findings)):
                                 raise ValueError("inventory findings differ from current source review")
                             source_terminal_review = {"stage": source_stage,
@@ -2015,7 +2047,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 "issue_lifecycle"]["issues"]
                             source_text_witnesses = revision_witness_catalog(
                                 contract, snapshot, source_terminal_review["findings"], source_issues,
-                                case_context=case_context if contract == V6_CONTRACT else None)
+                                case_context=case_context if contract in INVENTORY_CONTRACTS else None)
                             pending_coverage = (pending_entries(pending_contexts)
                                 if contract in PINNED_CONTRACTS else deferred_coverage_eligibility(
                                     reader_verifications[request.report_language], model_checkpoints,
@@ -2053,7 +2085,10 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 **({"pending_coverage_contexts": list(pending_contexts)}
                                    if contract in PINNED_CONTRACTS else {}),
                                 **({"pending_inventory": list(pending_inventory)}
-                                   if contract == V6_CONTRACT else {}),
+                                   if contract in INVENTORY_CONTRACTS else {}),
+                                **({"controlled_disclosure": generation_disclosure[0],
+                                    "controlled_disclosure_sha256": generation_disclosure[1]}
+                                   if contract == V7_CONTRACT else {}),
                             }
                             active_stage = writer_stage
                             revision_payload = model_payload(writer_stage, "editor", revision_data,
@@ -2115,7 +2150,10 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                 **({"pending_coverage_contexts": list(pending_contexts)}
                                    if contract in PINNED_CONTRACTS else {}),
                                 **({"pending_inventory": list(pending_inventory)}
-                                   if contract == V6_CONTRACT else {}),
+                                   if contract in INVENTORY_CONTRACTS else {}),
+                                **({"controlled_disclosure": generation_disclosure[0],
+                                    "controlled_disclosure_sha256": generation_disclosure[1]}
+                                   if contract == V7_CONTRACT else {}),
                             }
                             baseline_payload = model_payload(
                                 review_stage, "verifier", baseline_factual,
@@ -2174,7 +2212,10 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                        **({"pending_coverage_contexts": list(pending_contexts)}
                                           if contract in PINNED_CONTRACTS else {}),
                                        **({"pending_inventory": list(pending_inventory)}
-                                          if contract == V6_CONTRACT else {})},
+                                          if contract in INVENTORY_CONTRACTS else {}),
+                                       **({"controlled_disclosure": generation_disclosure[0],
+                                           "controlled_disclosure_sha256": generation_disclosure[1]}
+                                          if contract == V7_CONTRACT else {})},
                                 authored=source_draft)
             else:
                 final_review = call("verify_report", "verifier",
@@ -2338,7 +2379,12 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                         compact=bounded_review and case_context is not None,
                                         bind_case_state=bool(request.financial_case_path),
                                         bind_cashflow_inputs=ENGINE_VERSION == "research-v2-preview-12",
-                                        case_context=case_context).limitations_audit
+                                        case_context=case_context,
+                                        controlled_disclosure=(candidate_recovery.get(
+                                            "controlled_disclosure") if candidate_recovery
+                                            and candidate_recovery.get("reader_revision_policy")
+                                            == V7_CONTRACT.policy and primary_draft is not None
+                                            else None)).limitations_audit
             verification = reader_verifications.get(request.report_language, {})
             dispositions = {item["issue_id"]: item for item in verification.get("review", {}).get(
                 "limitation_dispositions", [])} if verification.get("exported") else {}

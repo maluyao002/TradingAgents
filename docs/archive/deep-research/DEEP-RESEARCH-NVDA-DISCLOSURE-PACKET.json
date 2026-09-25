@@ -1,0 +1,130 @@
+{
+  "case_context_sha256": "8c7f7b4d369e538a4f6f2acf5b8dee61cf8a3260fce3059f1226d288a853c6b7",
+  "entries": [
+    {
+      "issue_ids": [
+        "limitation-ade7efbbd067fb030d3c40c2ff5bf991fa2639c8b6b5df4e364ad8ac8478d5ff",
+        "limitation-48a03eb52957e19ea82ed60497d295a4a5498f33f5b5b5c7e89ccc71cb613277"
+      ],
+      "source_passages": [
+        {
+          "document_sha256": "6070326c7ef0c229b9d6714b7a7b0f652f65d90fa4136b70b47326653148dfe9",
+          "end": 29700,
+          "exact_text": "Jul 26, 2026 Jan 25, 2026\nAccrued and Other Current Liabilities: (In millions)\nCustomer program accruals $ 7,391 $ 5,318 \nTaxes payable  5,206  2,669 \nDeferred revenue (1)  4,616  1,379 \nProduct warranty  2,938  2,807 \nExcess inventory purchase obligations (2)  2,138  2,739 \nAccrued payroll and related expenses  1,206  1,146 \nAccrued purchase consideration (3)  986  3,921 \nOther  2,479  1,373 \nTotal accrued and other current liabilities $ 26,960 $ 21,352 \n",
+          "source_id": "nvda-q2-filing",
+          "start": 29240
+        },
+        {
+          "document_sha256": "6070326c7ef0c229b9d6714b7a7b0f652f65d90fa4136b70b47326653148dfe9",
+          "end": 8230,
+          "exact_text": "etable equity securities  42,783  12,886 \nAccounts receivable, net  63,059  38,466 \nInventories  31,575  21,403 \nPrepaid expenses and other current assets  3,409  3,180 \nTotal current assets  197,412  125,605 \nProperty and equipment, net  14,285  10,383 \nOperating lease assets  5,390  2,867 \nGoodwill  21,125  20,832 \nIntangible assets, net  2,998  3,306 \nDeferred income tax assets  12,159  13,258 \nNon-marketable securities  51,157  22,251 \nOther assets  15,746  8,301 \nTotal assets $ 320,272 $ 206,803 \nLiabilities and Shareholders’ Equity    \nCurrent liabilities:    \nAccounts payable $ 15,059 $ 9,812 \nAccrued and other current liabilities  26,960  21,352 \nShort-term debt  1,000  999 \nTotal current liabilities  43,019  32,",
+          "source_id": "nvda-q2-filing",
+          "start": 7500
+        }
+      ],
+      "terminal_finding_sha256s": [
+        "2a13b01dc92bd1222717e100ca7f249bb807210a521d47b08ef5f157aa598aaa",
+        "09e4322987d4b595bce7bf62286767a6259d0bedf11754b3424e62701c0b700f"
+      ],
+      "text": "The aggregate valuation working-capital input may contain tax, lease or other non-operating items and is illustrative only. It differs from the narrow cash-bridge proxy. The separate financial-case working-capital schedule remains partial, with mixed prepaid and other-accrual rows unresolved; none is a complete operating-capital reconciliation."
+    },
+    {
+      "issue_ids": [
+        "limitation-8dac6f10f0095ee5defb57051dabbef4d286ab4f3d6a259680688ec10bccaf2b",
+        "limitation-d7572fb464d27c0e39cc6d356b1d043ed4174c654ac66545a66a80655126ffff",
+        "limitation-a810491682dd7495d42eb3b36053f2637477d59819cf49457e3d1b7ba50b52e9"
+      ],
+      "source_passages": [
+        {
+          "document_sha256": "6070326c7ef0c229b9d6714b7a7b0f652f65d90fa4136b70b47326653148dfe9",
+          "end": 62418,
+          "exact_text": "ctly from NVIDIA as direct customers, such as AIBs, distributors, \nODMs, OEMs, CSPs, AI model makers, and system integrators. Certain direct customers may use either internal resources \nor third-party system integrators to complete their build. We refer to indirect customers as those who purchase products \nthrough our direct customers; indirect customers include CSPs, AI clouds, AI model makers, enterprises, and public sector \nentities. Our revenue is concentrated among a limited number of direct and indirect customers and this trend may \ncontinue.\nFor the second quarter of fiscal year 2027, one direct customer represented 16% of total revenue, which was primarily \nattributable to the Compute & Networking segment.  For the first half  of fiscal year 2027, three direct customers \nrepresented 16%, 15%, and 13% of total revenue, all of which was primarily attributable to the Compute & Networking \nsegment.\nFor the second quarter of fiscal year 2026, two direct customers represented 23% and 16% of total revenue, all of which \nwas primarily attributable to the Compute & Networking segment.  For the first half  of fiscal year 2026, two direct \ncustomers represented 20% and 15% of total revenue, all of which ",
+          "source_id": "nvda-q2-filing",
+          "start": 61198
+        },
+        {
+          "document_sha256": "6070326c7ef0c229b9d6714b7a7b0f652f65d90fa4136b70b47326653148dfe9",
+          "end": 88536,
+          "exact_text": " our direct customers; indirect customers include CSPs, AI clouds, AI model makers, enterprises, and public sector \nentities. Our revenue is concentrated among a limited number of direct and indirect customers and this trend may \ncontinue.\nDirect Customers – For the second quarter of fiscal year 2027, one direct customer represented  16% of total revenue, \nwhich was primarily attributable to the Compute & Networking segment. For the first half of fiscal year 2027, three direct \ncustomers represented 16%, 15%, and 13% of total revenue, all of which was primarily attributable to the Compute & \nNetworking segment.\nFor the second quarter of fiscal year 2026, two direct customers represented 23% and 16% of total revenue, all of which \nwas primarily attributable to the Compute & Networking segment.  For the first half  of fiscal year 2026, two direct \ncustomers represented 20% and 15% of total revenue, all of which was primarily attributable to the Compute & \nNetworking segment.\nIndirect Customers – Indirect customer revenue is an estimation based upon multiple factors including customer purchase \norder information, product specifications, internal sales data, and other sources. Indirect customers primarily purchase \nour products through system integrators and distributors.\nWe generate a significant amount of our revenue from a limited number of indirect customers, some individually \nrepresenting 10% or more of our revenue . Certain companies purchase cloud a",
+          "source_id": "nvda-q2-filing",
+          "start": 87059
+        },
+        {
+          "document_sha256": "121323a4e5e4c171e52b060de7e01e2836754d56bb15b3dd9c3b4ca1b5126c73",
+          "end": 200968,
+          "exact_text": "For example, as a result of our obligations in our current customer contracts, all of the GPUs used in our infrastructure today are NVIDIA GPUs.",
+          "source_id": "coreweave_q2_2026_nvidia_dependency_and_funding",
+          "start": 200824
+        },
+        {
+          "document_sha256": "121323a4e5e4c171e52b060de7e01e2836754d56bb15b3dd9c3b4ca1b5126c73",
+          "end": 177610,
+          "exact_text": "In January 2026, we entered into a securities purchase agreement with NVIDIA Corporation for a private placement of approximately 23 million shares of our Class A common stock at a purchase price of $87.20 per share, for aggregate gross proceeds of $2.0 billion. The par value of the shares issued was recorded to Class A common stock, with the remainder recorded to additional paid-in capital.",
+          "source_id": "coreweave_q2_2026_nvidia_dependency_and_funding",
+          "start": 177216
+        },
+        {
+          "document_sha256": "121323a4e5e4c171e52b060de7e01e2836754d56bb15b3dd9c3b4ca1b5126c73",
+          "end": 174826,
+          "exact_text": "We fund these capital investments through a mix of debt and equity securities issuances, delayed draw term loan facilities, OEM financing arrangements, and cash from our balance sheet.",
+          "source_id": "coreweave_q2_2026_nvidia_dependency_and_funding",
+          "start": 174642
+        }
+      ],
+      "terminal_finding_sha256s": [
+        "1e301f9f1f6d50f71f113acf00d7ce167ae18420748f330be74de078f0258f89",
+        "95503c8743cb56add982754c727bd469936542c5616e95d6c9d7f967dc190906",
+        "f4ee2cd30c546e2d2d1a53c35d8af297e5c2bc46b3e7af4e7f51a4bab27e2be8"
+      ],
+      "text": "The supplied disclosures do not quantify NVIDIA sales or receivables to CoreWeave, NVIDIA-wide revenue or receivables exposure to financially linked intermediaries and investment recipients, or the portion of purchases dependent on NVIDIA financing. NVIDIA-wide ultimate-payer exposure remains unquantified. NVIDIA direct-customer concentration is distinct from estimated indirect and ultimate-payer exposure and cannot be added to them. Ultimate-customer collections, independently funded utilization, cash returns and repeat orders remain unverified."
+    },
+    {
+      "issue_ids": [
+        "limitation-2ecd3dd81c31672fae2dc5bed9709f04059554a478434afc43743fdd12a7ed3b"
+      ],
+      "source_passages": [
+        {
+          "document_sha256": "6070326c7ef0c229b9d6714b7a7b0f652f65d90fa4136b70b47326653148dfe9",
+          "end": 13100,
+          "exact_text": "96) \nChanges in operating assets and liabilities, net of acquisitions:\nAccounts receivable  (24,590)  (4,743) \nInventories  (10,204)  (4,880) \nPrepaid expenses and other assets  (6,480)  946 \nAccounts payable  4,125  2,255 \nAccrued and other current liabilities  8,015  3,075 \nOther long-term liabilities  1,970  979 \nNet cash provided by operating activities  74,421  42,779 \nCash flows from investi",
+          "source_id": "nvda-q2-filing",
+          "start": 12700
+        },
+        {
+          "document_sha256": "6070326c7ef0c229b9d6714b7a7b0f652f65d90fa4136b70b47326653148dfe9",
+          "end": 8230,
+          "exact_text": "etable equity securities  42,783  12,886 \nAccounts receivable, net  63,059  38,466 \nInventories  31,575  21,403 \nPrepaid expenses and other current assets  3,409  3,180 \nTotal current assets  197,412  125,605 \nProperty and equipment, net  14,285  10,383 \nOperating lease assets  5,390  2,867 \nGoodwill  21,125  20,832 \nIntangible assets, net  2,998  3,306 \nDeferred income tax assets  12,159  13,258 \nNon-marketable securities  51,157  22,251 \nOther assets  15,746  8,301 \nTotal assets $ 320,272 $ 206,803 \nLiabilities and Shareholders’ Equity    \nCurrent liabilities:    \nAccounts payable $ 15,059 $ 9,812 \nAccrued and other current liabilities  26,960  21,352 \nShort-term debt  1,000  999 \nTotal current liabilities  43,019  32,",
+          "source_id": "nvda-q2-filing",
+          "start": 7500
+        }
+      ],
+      "terminal_finding_sha256s": [
+        "34ef6b9c7134279270de2bc50078c1769a9e3e800ec6d234be24ac49b6844095"
+      ],
+      "text": "The approximately $3.9504 billion negative cash-bridge residual is a mechanical difference. An account-level reconciliation separating cash movements, noncash balance-sheet changes and acquisition or other scope differences is missing; the residual does not establish normalized or recoverable cash."
+    },
+    {
+      "issue_ids": [
+        "limitation-592ed11355bea5bd4f5faeeff06b5f3dea1e4560b809b9e592de70ac336427c4"
+      ],
+      "source_passages": [
+        {
+          "document_sha256": "0ce6048ccba4432fa7dc4bc9a7c6d8ada6b25adfcd78a4e8eb02b2d403b303c1",
+          "end": 11150,
+          "exact_text": "pdated to include stock-based compensation expense. Free cash flow is calculated as GAAP net cash provided by operating activities less both purchases related to property and equipment and intangible assets and principal payments on property and equipment and intangible assets. NVIDIA believes the presentation of its non-GAAP financial measures enhances the users’ overall understanding of the company’s historical financial performance. The presentation of the company’s non-GAAP financial measures is not meant to be considered in isolation or as a substitute for the company’s financial results prepared in accordance with GAAP, and the company’s non-GAAP measures may be different from non-GAAP measures used by other companies.\nNVIDIA CORPORAT",
+          "source_id": "nvda-q2-release",
+          "start": 10400
+        }
+      ],
+      "terminal_finding_sha256s": [
+        "3cafeee1b0c04bf15a86802a64d2c9ac5bde3ff8454cd775efd16839aff81c63"
+      ],
+      "text": "CFO less asset purchases exceeds issuer-defined free cash flow by $92 million because the issuer also deducts asset-principal payments. Those payments must be counted once; neither historical measure alone establishes normalized, distributable or unlevered cash."
+    }
+  ],
+  "evidence_sha256": "329cd20c70fea0753a4630e2c0f3a0d80808a6dc463095d0617957c52aef68e4",
+  "schema_version": 1,
+  "source_candidate_sha256": "8bcebb1f3c5cdb2c2c0ccf5ee7a125f6bdf9caf167e70ed7981589d283600f3c",
+  "source_candidate_stage": "verify_revised_report-4",
+  "source_terminal_review_sha256": "a483e6bc08b57340f7d75ad9eb7713e1fddd1579016caacc67f19c721547c334"
+}

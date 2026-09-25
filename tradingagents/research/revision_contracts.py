@@ -9,6 +9,7 @@ from .reader_revision import (
     GENERIC_REVISION_POLICY_V4,
     GENERIC_REVISION_POLICY_V5,
     GENERIC_REVISION_POLICY_V6,
+    GENERIC_REVISION_POLICY_V7,
     GENERIC_REVISION_REQUIREMENTS,
     GENERIC_SHARED_CONTEXT_MIN_BYTES,
     GENERIC_V4_COVERAGE_REQUIREMENTS,
@@ -28,6 +29,9 @@ from .reader_revision import (
     GENERIC_V6_INVENTORY_POLICY,
     GENERIC_V6_SOURCE_WITNESS_POLICY,
     GENERIC_V6_WRITER_REQUIREMENTS,
+    GENERIC_V7_COVERAGE_REQUIREMENTS,
+    GENERIC_V7_FOLLOWUP_REQUIREMENTS,
+    GENERIC_V7_WRITER_REQUIREMENTS,
 )
 from .storage import digest
 
@@ -106,13 +110,28 @@ V6_CONTRACT = RevisionContract(
     GENERIC_V6_FOLLOWUP_REQUIREMENTS, GENERIC_V6_COVERAGE_REQUIREMENTS,
     GENERIC_V6_SOURCE_WITNESS_POLICY, True,
 )
-PINNED_CONTRACTS = (V5_CONTRACT, V6_CONTRACT)
+_V7_HASH_CONTENT = {
+    **_V6_HASH_CONTENT,
+    "policy": GENERIC_REVISION_POLICY_V7,
+    "writer_requirements": GENERIC_V7_WRITER_REQUIREMENTS,
+    "factual_requirements": GENERIC_V7_FOLLOWUP_REQUIREMENTS,
+    "coverage_requirements": GENERIC_V7_COVERAGE_REQUIREMENTS,
+    "controlled_disclosure_policy": "frozen-source-controlled-disclosure-v1",
+}
+V7_CONTRACT = RevisionContract(
+    GENERIC_REVISION_POLICY_V7, digest(_V7_HASH_CONTENT), GENERIC_V7_WRITER_REQUIREMENTS,
+    GENERIC_V7_FOLLOWUP_REQUIREMENTS, GENERIC_V7_COVERAGE_REQUIREMENTS,
+    GENERIC_V6_SOURCE_WITNESS_POLICY, True,
+)
+PINNED_CONTRACTS = (V5_CONTRACT, V6_CONTRACT, V7_CONTRACT)
 PINNED_POLICIES = frozenset(contract.policy for contract in PINNED_CONTRACTS)
+INVENTORY_CONTRACTS = (V6_CONTRACT, V7_CONTRACT)
+INVENTORY_POLICIES = frozenset(contract.policy for contract in INVENTORY_CONTRACTS)
 
 
 def revision_contract(policy: str, sha256: str) -> RevisionContract:
     """Reject unknown or mixed policy/hash pairs before any dispatch."""
-    for contract in (V3_CONTRACT, V4_CONTRACT, V5_CONTRACT, V6_CONTRACT):
+    for contract in (V3_CONTRACT, V4_CONTRACT, V5_CONTRACT, V6_CONTRACT, V7_CONTRACT):
         if (policy, sha256) == (contract.policy, contract.sha256):
             return contract
     raise ValueError("unknown numbered revision contract")

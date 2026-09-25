@@ -10,6 +10,7 @@ from .reader_revision import (
     GENERIC_REVISION_POLICY_V4,
     GENERIC_REVISION_POLICY_V5,
     GENERIC_REVISION_POLICY_V6,
+    GENERIC_REVISION_POLICY_V7,
     GENERIC_SHARED_CONTEXT_MIN_BYTES,
     VERIFICATION_REPAIR_POLICY,
 )
@@ -430,12 +431,15 @@ def model_prompt(payload):
     }, recursive_shared=(payload.get("verification_repair_policy") == VERIFICATION_REPAIR_POLICY
                          or payload.get("reader_revision_policy") in {
                              GENERIC_REVISION_POLICY, GENERIC_REVISION_POLICY_V4,
-                             GENERIC_REVISION_POLICY_V5, GENERIC_REVISION_POLICY_V6}),
+                             GENERIC_REVISION_POLICY_V5, GENERIC_REVISION_POLICY_V6,
+                             GENERIC_REVISION_POLICY_V7}),
        aggressive_shared=payload.get("reader_revision_policy") in {
            GENERIC_REVISION_POLICY, GENERIC_REVISION_POLICY_V4,
-           GENERIC_REVISION_POLICY_V5, GENERIC_REVISION_POLICY_V6},
+           GENERIC_REVISION_POLICY_V5, GENERIC_REVISION_POLICY_V6,
+           GENERIC_REVISION_POLICY_V7},
        indexed_shared=payload.get("reader_revision_policy") in {
-           GENERIC_REVISION_POLICY_V4, GENERIC_REVISION_POLICY_V5, GENERIC_REVISION_POLICY_V6}))
+           GENERIC_REVISION_POLICY_V4, GENERIC_REVISION_POLICY_V5,
+           GENERIC_REVISION_POLICY_V6, GENERIC_REVISION_POLICY_V7}))
 
 
 def model_boundary(role, payload, *, output_token_envelope, valuation_method):
