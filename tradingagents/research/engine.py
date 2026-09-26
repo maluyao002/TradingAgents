@@ -106,10 +106,12 @@ from .review_lifecycle import (
     split_compound_obligations,
 )
 from .revision_contracts import (
+    DISCLOSURE_CONTRACTS,
+    DISCLOSURE_POLICIES,
     INVENTORY_CONTRACTS,
     PINNED_CONTRACTS,
+    TEMPORAL_SCOPE_CONTRACTS,
     V4_CONTRACT,
-    V7_CONTRACT,
     revision_contract,
 )
 from .revision_correction_context import (
@@ -130,7 +132,9 @@ from .revision_inventory import (
     assert_inventory_prefix_proof,
     inventory_finding_hashes,
     project_inventory_issues,
+    receipted_source_temporal_findings,
     resolve_inventory,
+    scope_receipted_temporal_finding,
 )
 from .revision_pending import pending_entries, project_pending_issues
 from .revision_witness_selection import revision_witness_catalog
@@ -959,13 +963,13 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
             active_stage = stage
             stage_contract = numbered_contract(stage)
             disclosure = None
-            if stage_contract == V7_CONTRACT:
+            if stage_contract in DISCLOSURE_CONTRACTS:
                 generation = int(stage.removeprefix(REVISED_REVIEW_STAGE + "-").split("-", 1)[0])
                 disclosure, disclosure_sha256 = controlled_disclosure_for_generation(generation)
                 if ((extra or {}).get("controlled_disclosure") != disclosure
                         or (extra or {}).get("controlled_disclosure_sha256")
                         != disclosure_sha256):
-                    raise ValueError("v7 reader disclosure differs from its numbered packet")
+                    raise ValueError("reader disclosure differs from its numbered packet")
             rendered = render_reader(request, candidate, snapshot, reader_inputs(), language,
                                      compact=bounded_review and case_context is not None,
                                      bind_case_state=bool(request.financial_case_path), case_context=case_context,
@@ -1235,6 +1239,17 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                        for item in factual_review.issue_resolutions)):
                             raise ValueError("inventory obligations cannot be factually retired")
                         pending_hashes.update(inventory_hashes)
+                    source_temporal = (tuple(factual_data.get(
+                        "source_receipted_temporal_findings", ()))
+                        if stage_contract in TEMPORAL_SCOPE_CONTRACTS else ())
+                    if source_temporal:
+                        temporal_hashes = {item["source_finding_sha256"]
+                                           for item in source_temporal}
+                        if (len(temporal_hashes) != len(source_temporal)
+                                or not temporal_hashes <= set(findings)
+                                or temporal_hashes.intersection(pending_hashes)):
+                            raise ValueError("source inventory receipt scope differs")
+                        pending_hashes.update(temporal_hashes)
                     followups = {item.source_finding_sha256: item
                                  for item in factual_review.source_finding_followups}
                     if (len(followups) != len(factual_review.source_finding_followups)
@@ -1297,6 +1312,10 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     if stage_contract in INVENTORY_CONTRACTS:
                         lifecycle["pending_inventory"] = list(pending_inventory)
                         lifecycle["pending_inventory_sha256"] = digest(pending_inventory)
+                    if stage_contract in TEMPORAL_SCOPE_CONTRACTS:
+                        lifecycle["source_receipted_temporal_findings"] = list(source_temporal)
+                        lifecycle["source_receipted_temporal_findings_sha256"] = digest(
+                            source_temporal)
                 if unresolved_source_findings:
                     main_review = main_review.model_copy(update={"findings": (
                         *main_review.findings, *unresolved_source_findings)})
@@ -1521,6 +1540,13 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                     if inventory_failures:
                         verification = verification.model_copy(update={"findings": (
                             *verification.findings, *inventory_failures)})
+                    if stage_contract in TEMPORAL_SCOPE_CONTRACTS:
+                        verification, temporal_scopes = scope_receipted_temporal_finding(
+                            verification, raw_factual_review=raw_factual_review,
+                            pending_inventory=pending_inventory, receipts=inventory_receipts,
+                            failures=inventory_failures, stage=stage)
+                        lifecycle["inventory_temporal_scopes"] = list(temporal_scopes)
+                        lifecycle["inventory_temporal_scopes_sha256"] = digest(temporal_scopes)
             else:
                 verification = call(stage, "verifier", review_data, ReaderVerification,
                                     True, language=language)
@@ -1969,8 +1995,14 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                             writer_stage, review_stage = generation_stages(generation)
                             contract = numbered_contract(writer_stage)
                             generation_disclosure = (controlled_disclosure_for_generation(
-                                generation) if contract == V7_CONTRACT else None)
+                                generation) if contract in DISCLOSURE_CONTRACTS else None)
                             source_stage = reader_verifications[request.report_language]["stage"]
+                            source_contract = numbered_contract(source_stage)
+                            source_temporal = (receipted_source_temporal_findings(
+                                reader_verifications[request.report_language],
+                                source_contract_sha256=source_contract.sha256)
+                                if contract in TEMPORAL_SCOPE_CONTRACTS
+                                and source_contract is not None else ())
                             source_hash = reader_verifications[request.report_language]["reader_sha256"]
                             source_writer = (REVISE_STAGE if generation == 2 else
                                              generation_stages(generation - 1)[0])
@@ -2086,9 +2118,11 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                    if contract in PINNED_CONTRACTS else {}),
                                 **({"pending_inventory": list(pending_inventory)}
                                    if contract in INVENTORY_CONTRACTS else {}),
+                                **({"source_receipted_temporal_findings": list(source_temporal)}
+                                   if contract in TEMPORAL_SCOPE_CONTRACTS else {}),
                                 **({"controlled_disclosure": generation_disclosure[0],
                                     "controlled_disclosure_sha256": generation_disclosure[1]}
-                                   if contract == V7_CONTRACT else {}),
+                                   if contract in DISCLOSURE_CONTRACTS else {}),
                             }
                             active_stage = writer_stage
                             revision_payload = model_payload(writer_stage, "editor", revision_data,
@@ -2151,9 +2185,11 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                    if contract in PINNED_CONTRACTS else {}),
                                 **({"pending_inventory": list(pending_inventory)}
                                    if contract in INVENTORY_CONTRACTS else {}),
+                                **({"source_receipted_temporal_findings": list(source_temporal)}
+                                   if contract in TEMPORAL_SCOPE_CONTRACTS else {}),
                                 **({"controlled_disclosure": generation_disclosure[0],
                                     "controlled_disclosure_sha256": generation_disclosure[1]}
-                                   if contract == V7_CONTRACT else {}),
+                                   if contract in DISCLOSURE_CONTRACTS else {}),
                             }
                             baseline_payload = model_payload(
                                 review_stage, "verifier", baseline_factual,
@@ -2213,9 +2249,11 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                           if contract in PINNED_CONTRACTS else {}),
                                        **({"pending_inventory": list(pending_inventory)}
                                           if contract in INVENTORY_CONTRACTS else {}),
+                                       **({"source_receipted_temporal_findings": list(source_temporal)}
+                                          if contract in TEMPORAL_SCOPE_CONTRACTS else {}),
                                        **({"controlled_disclosure": generation_disclosure[0],
                                            "controlled_disclosure_sha256": generation_disclosure[1]}
-                                          if contract == V7_CONTRACT else {})},
+                                          if contract in DISCLOSURE_CONTRACTS else {})},
                                 authored=source_draft)
             else:
                 final_review = call("verify_report", "verifier",
@@ -2383,7 +2421,7 @@ def run_research(request: ResearchRequest, services: ResearchServices) -> Resear
                                         controlled_disclosure=(candidate_recovery.get(
                                             "controlled_disclosure") if candidate_recovery
                                             and candidate_recovery.get("reader_revision_policy")
-                                            == V7_CONTRACT.policy and primary_draft is not None
+                                            in DISCLOSURE_POLICIES and primary_draft is not None
                                             else None)).limitations_audit
             verification = reader_verifications.get(request.report_language, {})
             dispositions = {item["issue_id"]: item for item in verification.get("review", {}).get(

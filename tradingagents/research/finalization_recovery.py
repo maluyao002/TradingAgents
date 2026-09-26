@@ -41,6 +41,9 @@ from .reader_revision import (
 )
 from .review_lifecycle import compound_coverage_issues
 from .revision_contracts import (
+    DISCLOSURE_CONTRACT_HASHES,
+    DISCLOSURE_CONTRACTS,
+    DISCLOSURE_POLICIES,
     INVENTORY_CONTRACTS,
     INVENTORY_POLICIES,
     PINNED_CONTRACTS,
@@ -50,6 +53,8 @@ from .revision_contracts import (
     V5_CONTRACT,
     V6_CONTRACT,
     V7_CONTRACT,
+    V8_CONTRACT,
+    V8_PLAIN_CONTRACT,
     revision_contract,
 )
 from .revision_deferred import deferred_coverage_eligibility
@@ -250,7 +255,7 @@ class FinalizationContinuationPlan:
                if self.reader_revision_policy in INVENTORY_POLICIES else {}),
             **({"controlled_disclosure_sha256": self.controlled_disclosure_sha256,
                 "source_case_context_sha256": self.source_case_context_sha256}
-               if self.reader_revision_policy == V7_CONTRACT.policy else {}),
+               if self.reader_revision_policy in DISCLOSURE_POLICIES else {}),
             **({"prior_controlled_disclosures_sha256": self.prior_controlled_disclosures_sha256}
                if self.prior_controlled_disclosures else {}),
         }
@@ -733,15 +738,18 @@ def prepare_finalization_continuation(
             lineage_hashes["recovery_provenance.json"], imported, generation - 1)
             if generic_revision and generation > 2 else ())
         prior_disclosures = (prior_disclosure_lineage(
-            source_provenance, prior_contracts, V7_CONTRACT.sha256)
+            source_provenance, prior_contracts, DISCLOSURE_CONTRACT_HASHES)
             if generic_revision and generation > 2 else ())
         parent_contract = prior_contracts[-1]["contract_sha256"] if prior_contracts else None
         target_contract = (
-            (V7_CONTRACT if disclosure_packet_path is not None else V6_CONTRACT)
+            (V8_CONTRACT if disclosure_packet_path is not None
+             else V8_PLAIN_CONTRACT if parent_contract in {
+                 V7_CONTRACT.sha256, V8_CONTRACT.sha256, V8_PLAIN_CONTRACT.sha256}
+             else V6_CONTRACT)
             if parent_contract in {item.sha256 for item in PINNED_CONTRACTS}
             else V5_CONTRACT if parent_contract == V4_CONTRACT.sha256 else V4_CONTRACT
         ) if generic_revision else None
-        if disclosure_packet_path is not None and target_contract != V7_CONTRACT:
+        if disclosure_packet_path is not None and target_contract not in DISCLOSURE_CONTRACTS:
             raise ValueError("controlled disclosure requires a pinned numbered revision")
         artifact_hashes = {
             FINALIZATION_CHECKPOINT_NAME: hashlib.sha256(checkpoint_bytes).hexdigest(),
@@ -789,8 +797,8 @@ def prepare_finalization_continuation(
         controlled_disclosure_path = None
         source_case_context_sha256 = (hashlib.sha256(_read_regular(
             source_dir / "case_context.json")).hexdigest()
-            if target_contract == V7_CONTRACT else None)
-        if target_contract == V7_CONTRACT:
+            if target_contract in DISCLOSURE_CONTRACTS else None)
+        if target_contract in DISCLOSURE_CONTRACTS:
             controlled_disclosure_path = Path(disclosure_packet_path)
             if controlled_disclosure_path.resolve().is_relative_to(
                     destination_request.output_dir.resolve()):
@@ -966,12 +974,12 @@ def _validate_plan_content(plan: FinalizationContinuationPlan) -> None:
             plan.pending_inventory, plan.pending_inventory_sha256,
             plan.prior_pending_inventory, plan.prior_pending_inventory_sha256)):
         raise ValueError("historical contract gained inventory envelope fields")
-    if plan.reader_revision_policy == V7_CONTRACT.policy:
+    if plan.reader_revision_policy in DISCLOSURE_POLICIES:
         if (not isinstance(plan.controlled_disclosure, dict)
                 or digest(plan.controlled_disclosure) != plan.controlled_disclosure_sha256
                 or plan.controlled_disclosure_path is None
                 or not _is_hash(plan.source_case_context_sha256)):
-            raise ValueError("invalid v7 controlled disclosure envelope")
+            raise ValueError("invalid controlled disclosure envelope")
         source_verification = _read_object(plan.source_dir / "reader_verification.json")["English"]
         snapshot = validate_snapshot(EvidenceSnapshot.model_validate(
             parse_json(plan.frozen_inputs["evidence_path"])), plan.source_request)
@@ -1063,7 +1071,7 @@ def assert_finalization_source_unchanged(
                     prepared.imported_stages, prepared.revision_generation - 1)
                     if prepared.revision_generation > 2 else ())
                 expected_prior_disclosures = prior_disclosure_lineage(
-                    source_provenance, prior, V7_CONTRACT.sha256)
+                    source_provenance, prior, DISCLOSURE_CONTRACT_HASHES)
                 if prepared.reader_revision_policy in PINNED_POLICIES:
                     origin_proof = (_pending_origin_proof(
                         prepared.pending_origin_dir, prepared.pending_origin_artifact_hashes,
@@ -1318,10 +1326,10 @@ class FinalizationRecoveryModelService:
             **({"controlled_disclosure": deepcopy(plan.controlled_disclosure),
                 "controlled_disclosure_sha256": plan.controlled_disclosure_sha256,
                 "source_case_context_sha256": plan.source_case_context_sha256}
-               if plan.reader_revision_policy == V7_CONTRACT.policy else {}),
+               if plan.reader_revision_policy in DISCLOSURE_POLICIES else {}),
             **({"prior_controlled_disclosures": list(plan.prior_controlled_disclosures or ()),
                 "prior_controlled_disclosures_sha256": plan.prior_controlled_disclosures_sha256}
-               if plan.reader_revision_policy == V7_CONTRACT.policy
+               if plan.reader_revision_policy in DISCLOSURE_POLICIES
                or plan.prior_controlled_disclosures else {}),
             "authorization": {
                 **self.plan.authorization.model_dump(mode="json"),
@@ -1634,7 +1642,7 @@ class FinalizationRecoveryModelService:
                 if (self.plan.plan.reader_revision_policy in INVENTORY_POLICIES
                         and research.get("pending_inventory") != list(self.plan.plan.pending_inventory)):
                     raise ValueError("generic revision writer lacks the bound inventory obligations")
-                if (self.plan.plan.reader_revision_policy == V7_CONTRACT.policy
+                if (self.plan.plan.reader_revision_policy in DISCLOSURE_POLICIES
                         and (research.get("controlled_disclosure")
                              != self.plan.plan.controlled_disclosure
                              or research.get("controlled_disclosure_sha256")
@@ -1666,7 +1674,7 @@ class FinalizationRecoveryModelService:
                 if (self.plan.plan.reader_revision_policy in INVENTORY_POLICIES
                         and research.get("pending_inventory") != list(self.plan.plan.pending_inventory)):
                     raise ValueError("numbered revision factual review omitted inventory obligations")
-                if (self.plan.plan.reader_revision_policy == V7_CONTRACT.policy
+                if (self.plan.plan.reader_revision_policy in DISCLOSURE_POLICIES
                         and (research.get("controlled_disclosure_sha256")
                              != self.plan.plan.controlled_disclosure_sha256
                              or research.get("controlled_disclosure")

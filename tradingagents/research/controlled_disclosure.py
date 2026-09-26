@@ -95,28 +95,32 @@ def validate_disclosure_packet(
 
 def prior_disclosure_lineage(provenance: dict[str, Any] | None,
                              prior_contracts: tuple[dict[str, Any], ...],
-                             v7_contract_sha256: str) -> tuple[dict[str, Any], ...]:
-    """Carry exact prior v7 packets through a hash-bound numbered lineage."""
+                             disclosure_contract_sha256s: str | frozenset[str]
+                             ) -> tuple[dict[str, Any], ...]:
+    """Carry exact prior disclosure packets through a hash-bound lineage."""
+    contract_hashes = ({disclosure_contract_sha256s}
+                       if isinstance(disclosure_contract_sha256s, str)
+                       else disclosure_contract_sha256s)
     records = [item for item in prior_contracts
-               if item["contract_sha256"] == v7_contract_sha256]
+               if item["contract_sha256"] in contract_hashes]
     if not records:
         return ()
     if not isinstance(provenance, dict):
         raise ValueError("controlled disclosure lineage has no source provenance")
     earlier = provenance.get("prior_controlled_disclosures")
-    direct_v7 = provenance.get("revision_contract_sha256") == v7_contract_sha256
-    if not isinstance(earlier, list) or len(earlier) != len(records) - int(direct_v7):
+    direct_disclosure = provenance.get("revision_contract_sha256") in contract_hashes
+    if not isinstance(earlier, list) or len(earlier) != len(records) - int(direct_disclosure):
         raise ValueError("controlled disclosure lineage is incomplete")
     if digest(earlier) != provenance.get("prior_controlled_disclosures_sha256"):
         raise ValueError("controlled disclosure lineage hash differs")
     fields = {"generation", "contract_sha256", "provenance_sha256", "packet", "packet_sha256"}
-    if direct_v7:
+    if direct_disclosure:
         own = provenance.get("controlled_disclosure")
         if not isinstance(own, dict) or digest(own) != provenance.get("controlled_disclosure_sha256"):
             raise ValueError("controlled disclosure source packet differs")
         current = {
             "generation": records[-1]["generation"],
-            "contract_sha256": v7_contract_sha256,
+            "contract_sha256": provenance["revision_contract_sha256"],
             "provenance_sha256": records[-1]["provenance_sha256"],
             "packet": own,
             "packet_sha256": digest(own),

@@ -11,6 +11,13 @@ from tradingagents.research.report_review import (
     LimitationDisposition,
     ReaderVerification,
     check_dispositions,
+    validated_disposition_ids,
+)
+from tradingagents.research.revision_contracts import (
+    V7_CONTRACT,
+    V8_CONTRACT,
+    V8_PLAIN_CONTRACT,
+    revision_contract,
 )
 from tradingagents.research.revision_correction_context import CORRECTION_CONTEXT_FIELD
 from tradingagents.research.revision_inventory import (
@@ -18,7 +25,9 @@ from tradingagents.research.revision_inventory import (
     inventory_eligibility,
     inventory_finding_hashes,
     project_inventory_issues,
+    receipted_source_temporal_findings,
     resolve_inventory,
+    scope_receipted_temporal_finding,
 )
 from tradingagents.research.storage import digest
 
@@ -151,6 +160,166 @@ def test_full_fresh_exact_inventory_receipts_both_or_neither():
     assert [item["issue_id"] for item in receipt[0]["coverage"]] == list(IDS)
     assert receipt[0]["receipt_sha256"] == digest({
         key: value for key, value in receipt[0].items() if key != "receipt_sha256"})
+
+
+def _temporal_review():
+    procedural = ReviewFinding(
+        code="verify_revised_report-5-pending_inventory_requires_atomic_coverage",
+        severity="critical", category="editorial",
+        message="The prior coverage inventory substituted an unknown issue ID for the "
+                "Q1-release truncation issue. This factual review does not supply the "
+                "complete fresh atomic coverage receipt required to repair that batch; "
+                "neither original obligation is retired.",
+        affected_ids=(IDS[2], FOREIGN),
+    )
+    independent = ReviewFinding(
+        code="current_reader_gap", severity="critical", category="research",
+        message="A separate material caveat is missing.", affected_ids=(IDS[0],),
+    )
+    raw = {"reviewed_report": True,
+           "findings": [procedural.model_dump(mode="json"),
+                        independent.model_dump(mode="json")],
+           "finding_dispositions": [{
+               "finding_code": procedural.code, "disposition": "report_defect",
+               "rationale": "The fresh inventory is still pending at factual review.",
+               "reader_excerpts": [], "conclusion_scopes": [],
+           }]}
+    review = ReaderVerification(
+        reviewed_report=True, findings=(procedural, independent),
+        limitation_dispositions=(_disposition(IDS[0]),
+                                 _disposition(IDS[1], "audit_only_operational"),
+                                 _disposition(IDS[2], "audit_only_operational")),
+    )
+    return raw, review, procedural, independent
+
+
+def test_v8_receipt_scopes_only_exact_temporal_finding_and_keeps_factual_audit():
+    assert revision_contract(V7_CONTRACT.policy, V7_CONTRACT.sha256) is V7_CONTRACT
+    assert revision_contract(V8_CONTRACT.policy, V8_CONTRACT.sha256) is V8_CONTRACT
+    assert revision_contract(V8_PLAIN_CONTRACT.policy, V8_PLAIN_CONTRACT.sha256) is V8_PLAIN_CONTRACT
+    entries = _eligible()
+    receipts, failures = resolve_inventory(entries, **_fresh(entries))
+    raw, review, procedural, independent = _temporal_review()
+    scoped, audit = scope_receipted_temporal_finding(
+        review, raw_factual_review=raw, pending_inventory=entries,
+        receipts=receipts, failures=failures, stage="verify_revised_report-5")
+    assert scoped.findings == (independent,)
+    assert audit[0]["finding"] == procedural.model_dump(mode="json")
+    assert audit[0]["disposition"] == raw["finding_dispositions"][0]
+    assert audit[0]["receipt_sha256"] == receipts[0]["receipt_sha256"]
+    assert IDS[2] in validated_disposition_ids(scoped, _issues(), READER)
+    assert IDS[0] not in validated_disposition_ids(scoped, _issues(), READER)
+
+
+def _receipted_source():
+    entries = _eligible()
+    fresh = _fresh(entries)
+    fresh["contract_sha256"] = V7_CONTRACT.sha256
+    receipts, failures = resolve_inventory(entries, **fresh)
+    assert len(receipts) == 1 and not failures
+    raw, _, procedural, independent = _temporal_review()
+    lifecycle = {
+        "pending_inventory": list(entries), "pending_inventory_sha256": digest(entries),
+        "inventory_receipts": list(receipts), "inventory_receipts_sha256": digest(receipts),
+        "pending_inventory_unresolved": [], "original_review": raw,
+        "issues": [{**item, "status": "open"} for item in fresh["issues"]],
+    }
+    source = {"stage": "verify_revised_report-5", "reader_sha256": fresh["reader_sha256"],
+              "review": {"findings": [procedural.model_dump(mode="json"),
+                                      independent.model_dump(mode="json")]},
+              "issue_lifecycle": lifecycle}
+    return source, procedural
+
+
+def test_saved_v7_receipt_scopes_inherited_procedural_finding_only():
+    source, procedural = _receipted_source()
+    scopes = receipted_source_temporal_findings(
+        source, source_contract_sha256=V7_CONTRACT.sha256)
+    assert scopes == ({"source_finding_sha256": digest(procedural.model_dump(mode="json")),
+                       "receipt_sha256": source["issue_lifecycle"]["inventory_receipts"][0][
+                           "receipt_sha256"],
+                       "source_envelope_sha256": source["issue_lifecycle"]["pending_inventory"][0][
+                           "envelope_sha256"],
+                       "issue_id": IDS[2]},)
+    assert receipted_source_temporal_findings(
+        source, source_contract_sha256=V8_CONTRACT.sha256) == ()
+
+
+@pytest.mark.parametrize("change", [
+    "receipt_removed", "receipt_changed", "receipt_hash_changed", "coverage_changed",
+    "finding_changed",
+    "finding_message_clause", "disposition_changed", "issue_retired",
+])
+def test_inherited_temporal_scope_rejects_changed_v7_proof(change):
+    source, _ = _receipted_source()
+    lifecycle = source["issue_lifecycle"]
+    if change == "receipt_removed":
+        lifecycle["inventory_receipts"] = []
+    elif change == "receipt_changed":
+        lifecycle["inventory_receipts"][0]["expected_issue_ids"] = [IDS[0]]
+    elif change == "receipt_hash_changed":
+        lifecycle["inventory_receipts"][0]["receipt_sha256"] = "0" * 64
+    elif change == "coverage_changed":
+        receipt = lifecycle["inventory_receipts"][0]
+        receipt["coverage"][-1]["issue_id"] = IDS[0]
+        receipt["receipt_sha256"] = digest({
+            key: value for key, value in receipt.items() if key != "receipt_sha256"})
+        lifecycle["inventory_receipts_sha256"] = digest(lifecycle["inventory_receipts"])
+    elif change == "finding_changed":
+        source["review"]["findings"][0]["category"] = "research"
+    elif change == "finding_message_clause":
+        lifecycle["original_review"]["findings"][0]["message"] = (
+            lifecycle["original_review"]["findings"][0]["message"].replace(
+                "Q1-release truncation issue", "Q1-release truncation and missing caveat issue"))
+        source["review"]["findings"][0]["message"] = (
+            lifecycle["original_review"]["findings"][0]["message"])
+    elif change == "disposition_changed":
+        lifecycle["original_review"]["finding_dispositions"][0]["disposition"] = "disclosed_limitation"
+    else:
+        lifecycle["issues"][-1]["status"] = "resolved"
+    assert receipted_source_temporal_findings(
+        source, source_contract_sha256=V7_CONTRACT.sha256) == ()
+
+
+@pytest.mark.parametrize("change", [
+    "no_receipt", "failed_receipt", "other_code", "other_message", "extra_clause",
+    "other_ids", "other_severity", "other_category", "other_disposition",
+    "reader_span", "duplicate_raw", "duplicate_final",
+])
+def test_v8_temporal_scope_requires_exact_finding_and_complete_receipt(change):
+    entries = _eligible()
+    receipts, failures = resolve_inventory(entries, **_fresh(entries))
+    raw, review, procedural, _ = _temporal_review()
+    if change == "no_receipt":
+        receipts = ()
+    elif change == "failed_receipt":
+        receipts, failures = resolve_inventory(entries, **_fresh(
+            entries, decisions=(_disposition(IDS[0]),)))
+    elif change == "other_code":
+        raw["findings"][0]["code"] += "-other"
+    elif change == "other_message":
+        raw["findings"][0]["message"] = "The reader omits a material caveat."
+    elif change == "extra_clause":
+        raw["findings"][0]["message"] += " The reader is also wrong."
+    elif change == "other_ids":
+        raw["findings"][0]["affected_ids"] = [IDS[0], FOREIGN]
+    elif change == "other_severity":
+        raw["findings"][0]["severity"] = "warning"
+    elif change == "other_category":
+        raw["findings"][0]["category"] = "research"
+    elif change == "other_disposition":
+        raw["finding_dispositions"][0]["disposition"] = "disclosed_limitation"
+    elif change == "reader_span":
+        raw["finding_dispositions"][0]["reader_excerpts"] = [READER]
+    elif change == "duplicate_raw":
+        raw["findings"].append(deepcopy(raw["findings"][0]))
+    elif change == "duplicate_final":
+        review = review.model_copy(update={"findings": (*review.findings, procedural)})
+    scoped, audit = scope_receipted_temporal_finding(
+        review, raw_factual_review=raw, pending_inventory=entries,
+        receipts=receipts, failures=failures, stage="verify_revised_report-5")
+    assert scoped == review
+    assert audit == ()
 
 
 @pytest.mark.parametrize("change", [
