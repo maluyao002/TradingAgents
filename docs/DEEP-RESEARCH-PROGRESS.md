@@ -24,6 +24,20 @@ or coverage findings, including those on the same IDs, remain blocking. The
 repair is available with a new source-bound disclosure packet or through a
 plain continuation from v7; neither path starts a provider run by itself.
 
+[PR #30](https://github.com/maluyao002/TradingAgents/pull/30) merged into
+`codex/deep-research-v2` as `91ac1ac2b821fdfb1173326e3b07f78b1d7cbc45`
+on September 25 at 23:40 PDT (September 26 at 06:40 UTC). The reviewed head
+`0ce2a4a` passed all six hosted checks: Python 3.10–3.13, clean locked install,
+and container privacy/import. The affected offline set passed 170 tests; changed
+Python Ruff and whitespace checks passed. Self review of the created PR and
+independent code review found no remaining actionable issue after the inherited
+V7 receipt, exact-message and plain-route fixes. Read only preparation of a
+plain V8 plan from the saved V7 run succeeded at generation 6 with 171 imported
+stages and one pending inventory envelope; no provider call occurred. The
+merged feature branch was deleted locally and remotely. The managed worktree
+is retained for subsequent reviewed work. Eight unrelated required IDs remain
+unvalidated, and neither NVDA nor HOOD is accepted by this merge.
+
 ## NVDA issue closure checkpoint — offline, September 24
 
 The failed `reader_repair_run_3` candidate was reassessed finding by finding in

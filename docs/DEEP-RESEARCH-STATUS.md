@@ -13,15 +13,19 @@ but **Stage 3 is still open: no admitted final improved English NVDA reader
 has been delivered**. The HOOD contrast remains Stage 4 work. A successful
 diagnostic or merged code increment is not a completed or accepted report.
 
+- **[PR #30](https://github.com/maluyao002/TradingAgents/pull/30) merged**
+  into `codex/deep-research-v2` as `91ac1ac` on September 25 at 23:40 PDT.
+  Its versioned repair scopes only the exact Q1 inventory procedure finding
+  when the saved V7 receipt is proved. Q1 and every other open issue still
+  require fresh factual and atomic coverage review. All six hosted checks
+  passed; no improved NVDA reader is admitted, and no further live run is
+  authorized.
 - **PR #29 merged** into `codex/deep-research-v2` as `44382e9`. The bounded
   v7 NVDA continuation then stopped at `verification_failed`: 195 of 204
   required limitation IDs validated. Its complete fresh batch earned a receipt
   for the Q1 truncation inventory pair, but a factual review written before
   that batch still carried the same procedural defect into final review. Eight
-  other IDs also remain unvalidated. A versioned next-continuation repair now
-  scopes only that exact procedural finding when its saved receipt is proved;
-  Q1 and every other open issue still require fresh factual and atomic coverage
-  review. No improved NVDA reader is admitted, and no further live run is authorized.
+  other IDs also remain unvalidated.
 - **PR #28 merged** into `codex/deep-research-v2` as `9cc0ace` on September 24
   at 09:59 PDT / 16:59 UTC. All six hosted checks passed on final head `4c1a2df`;
   the review thread is resolved, final independent code review is clear, and 63
@@ -29,9 +33,8 @@ diagnostic or merged code increment is not a completed or accepted report.
   witness fixes and retry-convergence rule. At that checkpoint no run 4 or
   admitted export existed. The verified receipt is in the
   [implementation record](DEEP-RESEARCH-PROGRESS.md#latest-integrated-increment--pr-28-september-24).
-  Its post-merge documentation update is local on `codex/nvda-finalization-closeout`,
-  pending the next reviewed PR; no additional bookkeeping PR was opened.
-- **New offline NVDA issue closure is reviewed on `codex/nvda-issue-closure`.**
+  Its post-merge documentation was integrated by PR #29.
+- **Earlier offline NVDA issue closure was reviewed in PR #29.**
   The [finding map](archive/deep-research/DEEP-RESEARCH-NVDA-ISSUE-MAP.md)
   ties every remaining substantive warning to exact passages and needed reader
   qualifications. Seven repeated coverage gaps have a reviewed, opt-in
@@ -210,7 +213,7 @@ for exact attempts, bounds and usage.
 | Order | Deliverable | Completion evidence |
 | --- | --- | --- |
 | 1 — Done (engineering) | Integrate reviewed reader inputs and typed reconciliation | PRs #23 and #26 merged; reader assumption table, typed reconciliation and packet-validation fixes tested/reviewed. This is not final-reader delivery |
-| 2 — Offline issue closure reviewed; live held | Complete bounded NVDA finalization | Run 3 remains `verification_failed`, 198/206. The source map, opt-in v7 disclosure packet, independent code review and 150-stage no-provider prompt/reserve rehearsal pass. Coverage prompts and live time remain unmeasured; any live repair needs a separate bounded authorization and full verification. No run 4 launched |
+| 2 — V7 failed; V8 engineering merged; live held | Complete bounded NVDA finalization | V7 stopped at `verification_failed`, 195/204. The Q1 inventory receipt is complete and its inherited procedural finding has a versioned offline repair; eight other IDs remain unvalidated. Map those residuals, prepare a bound next continuation, and require fresh full verification and separate live authorization before any provider call |
 | 3 | Inspect the actual exported English reader | Still open: the revised candidate was independently inspected and its footnotes/calculation links checked, but no admitted export exists. Verify exported bytes and reader usefulness before user review |
 | 4 | Close targeted financial and independent-evidence gaps | Typed issuer-FCF/residual reconciliation and fresh source/arithmetic reviews delivered in PR #26; dependent fresh analysis completed, but the reader is blocked and economic/independent-demand gaps remain |
 | 5 | Prove HOOD generality | Distinct broker-equity/funding workflow, English reader and comparator review using the same core contracts |
@@ -223,28 +226,25 @@ Do not run another probe unless it addresses a named residual risk.
 
 ### Immediate offline acceptance criteria
 
-The v5 third reader repair is settled and preserved. Its engineering fixes are
-validated, but the report is not admitted. Offline diagnosis led to the reviewed
-v6 inventory-recovery increment above; real-prefix prompt-and-budget readiness now
-passes. The [open-ended retry-loop rule](DEEP-RESEARCH-USAGE.md#open-ended-retry-loop-rule)
-governs further continuation: no blanket task-duration limit, but no automatic
-renewal of non-converging attempts. The current request closes offline readiness
-only; live continuation remains held. Narrow unsupported inventory
-assertions to delivered passages instead of expanding source-context machinery;
-preserve all material economic disclosures. Broader decorated-origin recovery is
-explicitly excluded from this narrow increment, not silently accepted.
+The v5 and v7 failed readers are settled and preserved; neither report is
+admitted. The V8 engineering repair is merged, and a read only preparation
+from the saved V7 run selected the new plain contract with 171 imported stages.
+Before another live continuation, map the eight remaining unvalidated IDs to
+their current factual or coverage causes, preserve all material economic
+qualifications, and recheck exact-prefix replay plus prompt and budget admission
+for the bound candidate. The [open-ended retry-loop rule](DEEP-RESEARCH-USAGE.md#open-ended-retry-loop-rule)
+governs further continuation; no new provider budget is authorized here.
 
-The subsequent offline issue map identifies seven repeated coverage caveats
-suited to a fixed, cited section and a separate overbroad proxy paragraph that
-must be narrowed throughout. V7 is opt-in; its source-bound paragraph is
-construction input, not an acceptance or issue resolution. The original Q1
-truncation ID and the corrected concentration witness still need fresh exact
-receipts. The full factual and coverage gates remain unchanged, and Stage 3
-stays open until an actual exported reader passes them.
+The reviewed offline issue map identified seven repeated coverage caveats and
+an overbroad proxy paragraph. The V7 source-bound section was construction
+input, not acceptance. Its Q1 receipt resolved the old response-format pair;
+the original Q1 issue still needs fresh coverage in any new reader. The full
+factual and coverage gates remain unchanged, and Stage 3 stays open until an
+actual exported reader passes them.
 
-The engineering items below are implemented and reviewed in v5. The real-data
-rehearsal passes; the latest live result confirms both pending receipts and delivery
-of six accepted factual correction contexts. Remaining reader corrections stay open.
+The engineering items below are preserved v5 checkpoints. The V7 result and
+V8 repair above govern the current next step; remaining reader corrections
+stay open.
 
 - Preserve v3/v4 replay and all 129 completed calls. Restrict lifecycle-resolution
   witnesses to the existing resolution catalog; finding-followup source witnesses
@@ -341,7 +341,7 @@ especially the substantive-closure, packet, disclosure-control and validation re
 
 | Checkpoint | User action |
 | --- | --- |
-| Concrete live run / recovery | Standing approval covered reasonable bounded validation; the latest request closes offline readiness and reviews/merges code only. Run 3 settled without export and no run 4 has launched. Apply the campaign convergence checkpoint and applicable authorization before live continuation; each run still needs explicit bounds and a bound plan. Reader and production acceptance remain separate |
+| Concrete live run / recovery | The bounded V7 run settled without export. PR #30 merges an offline repair only; it does not renew the live budget. Apply the campaign convergence checkpoint and applicable authorization before another live continuation; each run needs explicit bounds and a bound plan. Reader and production acceptance remain separate |
 | Completed NVDA / HOOD reader | Review usefulness and readability, not every intermediate assumption |
 | Human reference validation / blind comparison | Review a prepared finite packet, or designate a qualified reviewer |
 | Paid/private data, changed scope or acceptance thresholds | Decide only after engineering explains the actual need and alternatives |
