@@ -15,6 +15,8 @@ GENERIC_V4_SOURCE_WITNESS_POLICY = "finding_bound_issue_context_exact_source_pas
 GENERIC_REVISION_POLICY_V5 = "frozen-candidate-revision-v5"
 GENERIC_REVISION_POLICY_V6 = "frozen-candidate-revision-v6"
 GENERIC_REVISION_POLICY_V7 = "frozen-candidate-revision-v7"
+GENERIC_REVISION_POLICY_V8 = "frozen-candidate-revision-v8"
+GENERIC_REVISION_POLICY_V8_PLAIN = "frozen-candidate-revision-v8-plain"
 
 
 def generation_stages(generation: int) -> tuple[str, str]:
@@ -207,6 +209,34 @@ GENERIC_V7_COVERAGE_REQUIREMENTS = GENERIC_V6_COVERAGE_REQUIREMENTS + (
     "under review. Judge all original obligations against the complete rendered "
     "reader; packet inclusion alone is not coverage."
 )
+
+# v8 keeps the v7 reader and coverage instructions. A factual review must not
+# turn a still-pending inventory receipt into an independent reader defect.
+_V8_TEMPORAL_WRITER_REQUIREMENTS = (
+    " source_receipted_temporal_findings identify an inherited procedural "
+    "finding whose prior fresh inventory receipt was independently proved. "
+    "Do not treat that finding as a reader defect or retire its underlying issue; "
+    "the new reader still needs fresh atomic coverage of every open issue."
+)
+_V8_TEMPORAL_FOLLOWUP_REQUIREMENTS = (
+    " A pending_inventory response-format defect is decided by the later complete "
+    "atomic coverage batch. Do not label the absence of that future receipt as a "
+    "current reader defect. Independently report any actual factual or reader defect, "
+    "including one involving the same issue IDs. For exact hashes in "
+    "source_receipted_temporal_findings, return no source_finding_followup: their "
+    "prior receipt decides only the inherited procedural statement. Reassess each "
+    "underlying open issue through fresh atomic coverage."
+)
+GENERIC_V8_WRITER_REQUIREMENTS = (
+    GENERIC_V7_WRITER_REQUIREMENTS + _V8_TEMPORAL_WRITER_REQUIREMENTS)
+GENERIC_V8_FOLLOWUP_REQUIREMENTS = (
+    GENERIC_V7_FOLLOWUP_REQUIREMENTS + _V8_TEMPORAL_FOLLOWUP_REQUIREMENTS)
+GENERIC_V8_COVERAGE_REQUIREMENTS = GENERIC_V7_COVERAGE_REQUIREMENTS
+GENERIC_V8_PLAIN_WRITER_REQUIREMENTS = (
+    GENERIC_V6_WRITER_REQUIREMENTS + _V8_TEMPORAL_WRITER_REQUIREMENTS)
+GENERIC_V8_PLAIN_FOLLOWUP_REQUIREMENTS = (
+    GENERIC_V6_FOLLOWUP_REQUIREMENTS + _V8_TEMPORAL_FOLLOWUP_REQUIREMENTS)
+GENERIC_V8_PLAIN_COVERAGE_REQUIREMENTS = GENERIC_V6_COVERAGE_REQUIREMENTS
 
 VERIFICATION_REPAIR_REQUIREMENTS = (
     "This is a new attestation of the unchanged candidate, not permission to edit "

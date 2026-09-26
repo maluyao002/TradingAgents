@@ -16,6 +16,7 @@ from .coverage_policy import packed_issue_context
 from .reader_revision import generation_stages
 from .report_review import ReaderVerification, check_dispositions, validated_disposition_ids
 from .review_lifecycle import compound_coverage_issues
+from .revision_contracts import V7_CONTRACT
 from .revision_correction_context import CORRECTION_CONTEXT_FIELD
 from .storage import canonical_json, digest
 
@@ -403,3 +404,116 @@ def resolve_inventory(entries, *, generation, contract_sha256, reader_sha256, re
                      for identifier in expected],
     }
     return ({**receipt, "receipt_sha256": digest(receipt)},), ()
+
+
+_TEMPORAL_FINDING_MESSAGE = (
+    "The prior coverage inventory substituted an unknown issue ID for the "
+    "Q1-release truncation issue. This factual review does not supply the complete "
+    "fresh atomic coverage receipt required to repair that batch; neither original "
+    "obligation is retired."
+)
+
+
+def _temporal_finding_matches(raw, decision, core, stage):
+    return (
+        raw.get("code") == f"{stage}-pending_inventory_requires_atomic_coverage"
+        and raw.get("category") == "editorial"
+        and raw.get("severity") == "critical"
+        and raw.get("affected_ids") == [core["missing_issue_id"], core["foreign_issue_id"]]
+        and raw.get("message") == _TEMPORAL_FINDING_MESSAGE
+        and decision.get("disposition") == "report_defect"
+        and decision.get("reader_excerpts") == []
+        and decision.get("conclusion_scopes") == []
+    )
+
+
+def receipted_source_temporal_findings(source_verification, *, source_contract_sha256):
+    """Prove the saved V7 procedural finding is paired with its own exact receipt."""
+    if source_contract_sha256 != V7_CONTRACT.sha256:
+        return ()
+    stage = source_verification["stage"]
+    lifecycle = source_verification["issue_lifecycle"]
+    pending = lifecycle.get("pending_inventory", ())
+    receipts = lifecycle.get("inventory_receipts", ())
+    if (len(pending) != 1 or len(receipts) != 1
+            or lifecycle.get("pending_inventory_sha256") != digest(pending)
+            or lifecycle.get("inventory_receipts_sha256") != digest(receipts)
+            or lifecycle.get("pending_inventory_unresolved") != []):
+        return ()
+    core = _entry(pending[0])
+    receipt = receipts[0]
+    generation = int(stage.rsplit("-", 1)[1])
+    if (receipt.get("source_envelope_sha256") != pending[0]["envelope_sha256"]
+            or receipt.get("source_finding_hashes") != [
+                item["source_finding_sha256"] for item in core["source_findings"]]
+            or receipt.get("source_coverage_stage") != core["source_coverage_stage"]
+            or receipt.get("source_coverage_inputs_hash") != core["source_coverage_inputs_hash"]
+            or receipt.get("source_coverage_output_hash") != core["source_coverage_output_hash"]
+            or receipt.get("new_generation") != generation
+            or receipt.get("new_contract_sha256") != source_contract_sha256
+            or receipt.get("new_reader_sha256") != source_verification["reader_sha256"]
+            or receipt.get("expected_issue_ids") != core["expected_issue_ids"]
+            or not isinstance(receipt.get("coverage"), list)
+            or [item.get("issue_id") for item in receipt["coverage"]]
+            != core["expected_issue_ids"]
+            or digest({key: value for key, value in receipt.items()
+                       if key != "receipt_sha256"}) != receipt.get("receipt_sha256")
+            or not any(item["issue_id"] == core["missing_issue_id"]
+                       and item["status"] == "open" for item in lifecycle["issues"])):
+        return ()
+    code = f"{stage}-pending_inventory_requires_atomic_coverage"
+    terminal = [item for item in source_verification["review"]["findings"]
+                if item.get("code") == code]
+    original = [item for item in lifecycle["original_review"]["findings"]
+                if item.get("code") == code]
+    decisions = [item for item in lifecycle["original_review"]["finding_dispositions"]
+                 if item.get("finding_code") == code]
+    if (len(terminal) != 1 or len(original) != 1 or len(decisions) != 1
+            or terminal[0] != original[0]
+            or not _temporal_finding_matches(terminal[0], decisions[0], core, stage)):
+        return ()
+    return ({"source_finding_sha256": digest(terminal[0]),
+             "receipt_sha256": receipt["receipt_sha256"],
+             "source_envelope_sha256": pending[0]["envelope_sha256"],
+             "issue_id": core["missing_issue_id"]},)
+
+
+def scope_receipted_temporal_finding(verification, *, raw_factual_review,
+                                    pending_inventory, receipts, failures, stage):
+    """Scope only a pre-coverage procedural finding after its exact fresh receipt.
+
+    The raw factual finding and its disposition remain in the lifecycle audit.
+    Every other factual or coverage finding remains active, including one on the
+    same issue IDs. This policy is called only under the v8 contract.
+    """
+    if (len(pending_inventory) != 1 or len(receipts) != 1 or failures
+            or not isinstance(raw_factual_review, dict)
+            or raw_factual_review.get("reviewed_report") is not True):
+        return verification, ()
+    core = _entry(pending_inventory[0])
+    receipt = receipts[0]
+    if (receipt.get("source_envelope_sha256") != pending_inventory[0]["envelope_sha256"]
+            or receipt.get("expected_issue_ids") != core["expected_issue_ids"]
+            or digest({key: value for key, value in receipt.items()
+                       if key != "receipt_sha256"}) != receipt.get("receipt_sha256")):
+        return verification, ()
+    code = f"{stage}-pending_inventory_requires_atomic_coverage"
+    raw_findings = [item for item in raw_factual_review.get("findings", ())
+                    if item.get("code") == code]
+    dispositions = [item for item in raw_factual_review.get("finding_dispositions", ())
+                    if item.get("finding_code") == code]
+    if len(raw_findings) != 1 or len(dispositions) != 1:
+        return verification, ()
+    raw = raw_findings[0]
+    decision = dispositions[0]
+    if not _temporal_finding_matches(raw, decision, core, stage):
+        return verification, ()
+    finding = ReviewFinding.model_validate(raw)
+    if sum(item == finding for item in verification.findings) != 1:
+        return verification, ()
+    remaining = tuple(item for item in verification.findings if item != finding)
+    audit = ({"finding": finding.model_dump(mode="json"),
+              "disposition": decision,
+              "source_envelope_sha256": pending_inventory[0]["envelope_sha256"],
+              "receipt_sha256": receipt["receipt_sha256"]},)
+    return verification.model_copy(update={"findings": remaining}), audit

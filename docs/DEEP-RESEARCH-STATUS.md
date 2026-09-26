@@ -1,6 +1,6 @@
 # Deep Research V2 — current status and next deliverables
 
-Updated September 24, 2026. **This is the single active work queue.**
+Updated September 25, 2026. **This is the single active work queue.**
 Start at the [documentation index](README.md) for other purposes.
 The [original design](DEEP-RESEARCH-DESIGN.md) and
 [implementation / acceptance plan](DEEP-RESEARCH-PLAN.md) remain authoritative
@@ -13,12 +13,21 @@ but **Stage 3 is still open: no admitted final improved English NVDA reader
 has been delivered**. The HOOD contrast remains Stage 4 work. A successful
 diagnostic or merged code increment is not a completed or accepted report.
 
+- **PR #29 merged** into `codex/deep-research-v2` as `44382e9`. The bounded
+  v7 NVDA continuation then stopped at `verification_failed`: 195 of 204
+  required limitation IDs validated. Its complete fresh batch earned a receipt
+  for the Q1 truncation inventory pair, but a factual review written before
+  that batch still carried the same procedural defect into final review. Eight
+  other IDs also remain unvalidated. A versioned next-continuation repair now
+  scopes only that exact procedural finding when its saved receipt is proved;
+  Q1 and every other open issue still require fresh factual and atomic coverage
+  review. No improved NVDA reader is admitted, and no further live run is authorized.
 - **PR #28 merged** into `codex/deep-research-v2` as `9cc0ace` on September 24
   at 09:59 PDT / 16:59 UTC. All six hosted checks passed on final head `4c1a2df`;
   the review thread is resolved, final independent code review is clear, and 63
   focused offline tests pass. This integrates the bounded recovery, v6 inventory/
-  witness fixes and retry-convergence rule. Offline readiness is complete; no
-  run 4 or admitted export exists. The verified receipt is in the
+  witness fixes and retry-convergence rule. At that checkpoint no run 4 or
+  admitted export existed. The verified receipt is in the
   [implementation record](DEEP-RESEARCH-PROGRESS.md#latest-integrated-increment--pr-28-september-24).
   Its post-merge documentation update is local on `codex/nvda-finalization-closeout`,
   pending the next reviewed PR; no additional bookkeeping PR was opened.
@@ -32,7 +41,7 @@ diagnostic or merged code increment is not a completed or accepted report.
   candidate; its controlled section still faces full factual and atomic
   coverage review. No admitted reader, run 4 or HOOD report exists. The
   [implementation record](DEEP-RESEARCH-PROGRESS.md#nvda-issue-closure-checkpoint--offline-september-24)
-  has the plan and test status.
+  has the plan and test status. This bullet records the pre-v7-run checkpoint.
 
 The following bullets retain the dated development/validation sequence. Earlier
 open-PR statements are historical; the merge receipt above is current.

@@ -1,9 +1,28 @@
 # Deep Research V2 — implementation record
 
-Updated September 24, 2026. This is the concise record of completed engineering
+Updated September 25, 2026. This is the concise record of completed engineering
 and validation checkpoints, **not a second work queue**. For current priorities,
 open gates and user decisions, use the [current roadmap](DEEP-RESEARCH-STATUS.md).
 The [original implementation plan](DEEP-RESEARCH-PLAN.md) is preserved.
+
+## V7 receipt interaction and versioned continuation repair — September 25
+
+The bounded v7 NVDA continuation completed with `verification_failed`, 195/204
+required limitation IDs validated and no admitted export. The exact fresh
+coverage batch produced a complete receipt for the Q1-release truncation
+missing/foreign inventory pair. The final review nevertheless retained a
+critical, pre-coverage factual finding saying that the receipt had not yet been
+supplied. Eight other required IDs remain unvalidated for separate reasons.
+The saved v7 reader, model replies, receipts and contract remain immutable.
+
+The next numbered contract distinguishes that exact procedural finding from
+current reader defects. It proves the saved v7 receipt, preserves the original
+finding and receipt in the lifecycle audit, and requires fresh atomic coverage
+of the still-open Q1 obligation. That same exact pre-coverage finding can
+also be scoped only after its own complete fresh receipt. Independent factual
+or coverage findings, including those on the same IDs, remain blocking. The
+repair is available with a new source-bound disclosure packet or through a
+plain continuation from v7; neither path starts a provider run by itself.
 
 ## NVDA issue closure checkpoint — offline, September 24
 
