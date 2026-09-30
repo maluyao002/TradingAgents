@@ -36,22 +36,35 @@ The first two backport PRs are verified as merged into `main`:
   PDT (September 30 at 04:33:31 UTC), commit
   `c87ada79cc7c1f1fbbe412f996bfac75f07810ca`. Its 51 focused offline tests,
   independent review, lint, whitespace, and all six hosted checks passed.
+  Final hosted Python 3.12 validation passed 1,433 tests and 65 subtests, with
+  two expected skips. The automated GitHub review completed without findings.
   The original review thread is resolved. Omitted configuration inherits a
   snapshot of the active process or run settings; explicit overrides retain
   their previous behavior and scope cleanup.
 
-The third integration branch, `codex/sync-main-research-v2`, merges this reviewed
-`main` history into V2 without conflicts, including PR #35. Initial combined
+[PR #34](https://github.com/maluyao002/TradingAgents/pull/34) merged this reviewed
+`main` history, including PR #35, into `codex/deep-research-v2` without conflicts
+on September 29 at 21:58:19 PDT (September 30 at 04:58:19 UTC), commit
+`06d4d6505e7bd07886df9b0c01625e0882d10fe2`. Final reviewed head `c0f8356`
+passed all six hosted checks: Python 3.10–3.13, clean locked install, and
+container privacy/import. Python 3.12 reported **3,355 passed, 15 skipped,
+1 deselected, and 69 subtests passed**, with clean lint. The slower Python
+3.11 job also completed successfully; no retry or waived gate was needed.
+
+Initial combined
 local validation passed 3,345 tests and 69 subtests with 16 skips; eight checks
 needed Git metadata absent from the source archive. Both affected modules then
 passed all 19 tests in a Git checkout of the same commit, resolving all eight
-environment-only failures (3,353 distinct passing tests). The final pilot fix
-was checked with the focused 51-test set. Skips cover optional dependencies,
+environment-only failures (3,353 distinct passing tests). The final integrated
+pilot fix passed 53 focused V2 tests. Skips cover optional dependencies,
 the live API gate, and local frozen packets absent from clean checkouts.
-Whole-repository Ruff and independent integration review pass. The V2 merge
-receipt and final hosted validation will be recorded after verification.
-The three main feature branches and both managed worktrees are retained while
-the integration is completed.
+Whole-repository Ruff, whitespace checks, and independent integration review
+pass, including the final pilot correction. V2 engine, benchmark, archive,
+CLI, script, and report content is unchanged by the synchronization.
+The three main feature branches, `codex/sync-main-research-v2`, and both managed
+worktrees are retained for audit and subsequent reviewed work. This verified
+receipt is submitted on the separate `codex/upstream-backport-closeout` branch
+as documentation-only closeout; it adds no implementation or live execution.
 Earlier entries saying main was unchanged describe their dated checkpoints.
 
 The [backport guide](UPSTREAM-BACKPORTS.md) documents configuration and limits.

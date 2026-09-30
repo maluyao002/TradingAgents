@@ -13,14 +13,16 @@ but **Stage 3 is still open: no admitted final improved English NVDA reader
 has been delivered**. The HOOD contrast remains Stage 4 work. A successful
 diagnostic or merged code increment is not a completed or accepted report.
 
-- **Selected upstream v0.5.1 backports are merged into main** through
+- **Selected upstream v0.5.1 backports are merged into main and V2** through
   [PR #32](https://github.com/maluyao002/TradingAgents/pull/32) (`9a9ab04`) and
   [PR #33](https://github.com/maluyao002/TradingAgents/pull/33) (`9f61fdc`), with
   [PR #35](https://github.com/maluyao002/TradingAgents/pull/35) (`c87ada7`)
   preserving vendor settings for existing fundamentals-pilot callers. All three
   passed independent review and all six hosted checks. The conflict-free V2
-  synchronization is prepared on `codex/sync-main-research-v2`, pending its own
-  validation and reviewed merge. It brings run-scoped configuration, protected
+  synchronization [PR #34](https://github.com/maluyao002/TradingAgents/pull/34)
+  merged as `06d4d65` on September 29 at 21:58 PDT, after independent review
+  and all six final hosted checks passed. Hosted Python 3.12 reported 3,355
+  passing tests and 69 subtests. It brings run-scoped configuration, protected
   dates, rating fixes, optional SEC statements, and checkpoint identity v4.
   V2's separate evidence collector and frozen research artifacts retain their
   existing contracts. See the [implementation record](DEEP-RESEARCH-PROGRESS.md#selected-upstream-v051-integration--september-29)
