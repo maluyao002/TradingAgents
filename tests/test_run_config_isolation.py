@@ -85,7 +85,7 @@ def test_cli_stream_body_receives_selected_config(monkeypatch):
     monkeypatch.setattr(cli, "_build_run_config", lambda selections, checkpoint: config)
     monkeypatch.setattr(cli, "_run_analysis_scoped", lambda *args: _vendor())
     outside = get_config()
-    assert cli.run_analysis(selections={}) == "alpha_vantage"
+    assert cli.run_analysis(selections={"analysis_date": "2026-09-01"}) == "alpha_vantage"
     assert get_config() == outside
 
 

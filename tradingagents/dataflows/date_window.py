@@ -11,9 +11,20 @@ in a backtest we can't prove it isn't future.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from .utils import get_current_date
+
+
+def require_iso_date(value: str) -> str:
+    """Reject ambiguous run dates before any point-in-time comparison or fetch."""
+    try:
+        canonical = date.fromisoformat(value).isoformat()
+    except (TypeError, ValueError):
+        raise ValueError("Analysis date must use canonical YYYY-MM-DD") from None
+    if canonical != value:
+        raise ValueError("Analysis date must use canonical YYYY-MM-DD")
+    return value
 
 
 def to_utc(dt: datetime) -> datetime:

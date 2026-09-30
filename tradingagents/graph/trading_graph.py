@@ -32,6 +32,7 @@ from tradingagents.agents.utils.agent_utils import (
 from tradingagents.agents.utils.memory import TradingMemoryLog
 from tradingagents.agents.utils.prompt_policy import PROMPT_POLICY_VERSION
 from tradingagents.dataflows.config import run_config, set_config
+from tradingagents.dataflows.date_window import require_iso_date
 from tradingagents.dataflows.request_cache import run_data_scope
 from tradingagents.dataflows.utils import get_current_date, safe_ticker_component
 from tradingagents.default_config import DEFAULT_CONFIG
@@ -488,6 +489,7 @@ class TradingAgentsGraph:
         ``tradingagents.agents.utils.rating.is_review`` before mapping it to the
         PortfolioRating enum.
         """
+        trade_date = require_iso_date(trade_date)
         self.ticker = company_name
 
         # Resolve any pending memory-log entries for this ticker before the pipeline runs.

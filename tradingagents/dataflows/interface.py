@@ -1,6 +1,7 @@
 import json
 import logging
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from .alpha_vantage import (
@@ -15,6 +16,7 @@ from .alpha_vantage import (
     get_stock as get_alpha_vantage_stock,
 )
 from .config import get_config
+from .date_window import require_iso_date
 from .errors import (
     NoMarketDataError,
     VendorNotConfiguredError,
@@ -23,6 +25,12 @@ from .errors import (
 from .fred import get_macro_data as get_fred_macro_data
 from .polymarket import get_prediction_markets as get_polymarket_prediction_markets
 from .request_cache import cache_request, canonical_request_key, get_cached_request
+from .sec_edgar import (
+    get_balance_sheet as get_sec_edgar_balance_sheet,
+    get_cashflow as get_sec_edgar_cashflow,
+    get_income_statement as get_sec_edgar_income_statement,
+)
+from .utils import get_current_date
 from .y_finance import (
     get_balance_sheet as get_yfinance_balance_sheet,
     get_cashflow as get_yfinance_cashflow,
@@ -86,7 +94,18 @@ VENDOR_LIST = [
     "fred",
     "polymarket",
     "alpha_vantage",
+    "sec_edgar",
 ]
+
+_SEC_STATEMENT_METHODS = frozenset({
+    "get_balance_sheet", "get_cashflow", "get_income_statement",
+})
+
+
+def _statement_date(value: object) -> date | None:
+    if value is None or value == "":
+        return None
+    return date.fromisoformat(require_iso_date(value))
 
 
 @dataclass(frozen=True)
@@ -124,14 +143,17 @@ VENDOR_METHODS = {
     "get_balance_sheet": {
         "alpha_vantage": get_alpha_vantage_balance_sheet,
         "yfinance": get_yfinance_balance_sheet,
+        "sec_edgar": get_sec_edgar_balance_sheet,
     },
     "get_cashflow": {
         "alpha_vantage": get_alpha_vantage_cashflow,
         "yfinance": get_yfinance_cashflow,
+        "sec_edgar": get_sec_edgar_cashflow,
     },
     "get_income_statement": {
         "alpha_vantage": get_alpha_vantage_income_statement,
         "yfinance": get_yfinance_income_statement,
+        "sec_edgar": get_sec_edgar_income_statement,
     },
     # news_data
     "get_news": {
@@ -178,6 +200,25 @@ def get_vendor(category: str, method: str = None) -> str:
     # Fall back to category-level configuration
     return config.get("data_vendors", {}).get(category, "default")
 
+
+def configured_vendor_chain(method: str) -> list[str]:
+    """Resolve the exact configured chain, including the legacy default sentinel."""
+    if method not in VENDOR_METHODS:
+        raise ValueError(f"Method '{method}' not supported")
+    vendor_config = get_vendor(get_category_for_method(method), method)
+    requested = [vendor.strip() for vendor in vendor_config.split(",")]
+    explicit = [vendor for vendor in requested if vendor and vendor != "default"]
+    available = list(VENDOR_METHODS[method])
+    if not explicit:
+        return available
+    selected = [vendor for vendor in explicit if vendor in VENDOR_METHODS[method]]
+    if not selected:
+        raise ValueError(
+            f"Configured vendor(s) {explicit} not available for '{method}'. "
+            f"Available: {available}."
+        )
+    return selected
+
 def _cacheable_vendor_result(value: Any) -> bool:
     """Avoid persisting provider error prose as if it were a successful response."""
     if not isinstance(value, str):
@@ -223,29 +264,30 @@ def _provider_failure(value: Any, vendor: str) -> str | None:
 def route_to_vendor_with_metadata(method: str, *args, **kwargs) -> RoutedVendorResult:
     """Route a call and return its value plus the provider that served it."""
     category = get_category_for_method(method)
-    vendor_config = get_vendor(category, method)
-    primary_vendors = [v.strip() for v in vendor_config.split(',')]
-
-    if method not in VENDOR_METHODS:
-        raise ValueError(f"Method '{method}' not supported")
-
-    all_available_vendors = list(VENDOR_METHODS[method].keys())
-
     # The configured vendor list IS the chain: we do NOT silently fall back to
     # vendors the user did not choose (#988/#289) — that returned data from an
     # unexpected source and caused cross-vendor inconsistencies. For multi-vendor
     # fallback, list them in order, e.g. data_vendors="yfinance,alpha_vantage".
     # The "default" sentinel (no explicit config) uses all available vendors.
-    explicit = [v for v in primary_vendors if v and v != "default"]
-    if explicit:
-        vendor_chain = [v for v in explicit if v in VENDOR_METHODS[method]]
-        if not vendor_chain:
-            raise ValueError(
-                f"Configured vendor(s) {explicit} not available for '{method}'. "
-                f"Available: {all_available_vendors}."
+    vendor_chain = configured_vendor_chain(method)
+
+    # A fiscal period end is not a publication date. On historical statement
+    # calls, no vendor without filing vintages may be reached, even as fallback
+    # after an SEC failure. This applies to ordinary agent tools and preparers.
+    supplied_date = (
+        args[2] if len(args) >= 3 else kwargs.get("curr_date")
+    ) if method in _SEC_STATEMENT_METHODS else None
+    statement_date = _statement_date(supplied_date) if method in _SEC_STATEMENT_METHODS else None
+    historical_sec = False
+    if statement_date is not None and statement_date < date.fromisoformat(get_current_date()):
+        if "sec_edgar" not in vendor_chain:
+            return RoutedVendorResult(
+                "DATA_UNAVAILABLE: Historical statements require a configured "
+                "sec_edgar vendor with filing dates. No statement was fetched.",
+                "unknown", method,
             )
-    else:
-        vendor_chain = all_available_vendors
+        vendor_chain = ["sec_edgar"]
+        historical_sec = True
 
     last_no_data: NoMarketDataError | None = None
     first_error: Exception | None = None
@@ -268,8 +310,10 @@ def route_to_vendor_with_metadata(method: str, *args, **kwargs) -> RoutedVendorR
             if _cacheable_vendor_result(value):
                 cache_request(cache_key, value)
             return RoutedVendorResult(value, vendor, method)
-        except VendorRateLimitError:
+        except VendorRateLimitError as e:
             logger.warning("Vendor %r rate-limited for %s; trying next vendor.", vendor, method)
+            if historical_sec and first_error is None:
+                first_error = e
             continue
         except VendorNotConfiguredError as e:
             logger.warning("Vendor %r not configured for %s; trying next vendor.", vendor, method)
@@ -344,4 +388,7 @@ def route_to_vendor_with_metadata(method: str, *args, **kwargs) -> RoutedVendorR
 
 def route_to_vendor(method: str, *args, **kwargs):
     """Route a method call while preserving the long-standing value-only API."""
-    return route_to_vendor_with_metadata(method, *args, **kwargs).value
+    routed = route_to_vendor_with_metadata(method, *args, **kwargs)
+    if routed.vendor == "sec_edgar" and isinstance(routed.value, dict):
+        return json.dumps(routed.value, sort_keys=True, ensure_ascii=False)
+    return routed.value
