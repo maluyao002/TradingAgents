@@ -23,6 +23,7 @@ from tradingagents.agents.utils.news_data_tools import (
 )
 from tradingagents.agents.utils.prediction_markets_tools import get_prediction_markets
 from tradingagents.agents.utils.technical_indicators_tools import get_indicators
+from tradingagents.dataflows.utils import get_current_date
 
 # Public surface: the data tools are imported here so agents and the graph
 # import them from one place, plus the instrument/language helpers defined below.
@@ -137,13 +138,13 @@ def build_instrument_context(
     ticker: str,
     asset_type: str = "stock",
     identity: Mapping[str, str] | None = None,
+    curr_date: str | None = None,
 ) -> str:
     """Describe the exact instrument so agents preserve identity and ticker.
 
-    When ``identity`` is provided (resolved deterministically via
-    :func:`resolve_instrument_identity`), the company name and business
-    classification are injected so agents anchor to the real company rather
-    than pattern-matching the price chart to a wrong one (#814).
+    For current runs, ``identity`` supplies the company name and business
+    classification so agents do not infer a different company from the chart.
+    Historical runs omit that live metadata because its past vintage is unknown.
     """
     is_crypto = asset_type == "crypto"
     instrument_label = "asset" if is_crypto else "instrument"
@@ -153,8 +154,16 @@ def build_instrument_context(
         "preserving any exchange suffix (e.g. `.TO`, `.L`, `.HK`, `.T`, `-USD`)."
     )
 
+    historical = bool(curr_date and curr_date < get_current_date())
+    if historical:
+        context += (
+            f" <unavailable: historical identity as of {curr_date}; company name, "
+            "sector, industry, and exchange have not been verified for this "
+            "analysis date. Use the ticker and verify identity with dated evidence.>"
+        )
+
     details = []
-    if identity:
+    if identity and not historical:
         name = identity.get("company_name") or identity.get("name")
         if name:
             details.append(f"{'Name' if is_crypto else 'Company'}: {name}")
@@ -198,6 +207,7 @@ def get_instrument_context_from_state(state: Mapping[str, Any]) -> str:
     return build_instrument_context(
         str(state["company_of_interest"]),
         state.get("asset_type", "stock"),
+        curr_date=state.get("trade_date"),
     )
 
 
@@ -226,6 +236,3 @@ def create_msg_delete():
         return {"messages": removal_operations + [placeholder]}
 
     return delete_messages
-
-
-

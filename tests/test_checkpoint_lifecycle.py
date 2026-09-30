@@ -334,7 +334,7 @@ def test_codex_checkpoint_identity_preserves_bridge_protocol_version():
     with tempfile.TemporaryDirectory() as tmp:
         graph = _bare_graph(tmp, config={"llm_backend": "codex"})
         signature = graph._run_signature("stock", "2026-05-08")
-        assert signature.startswith("codex|codex-bridge-v1|checkpoint-config-v2|")
+        assert signature.startswith("codex|codex-bridge-v1|checkpoint-config-v3|")
 
 
 @pytest.mark.parametrize("variable,first,second", [
