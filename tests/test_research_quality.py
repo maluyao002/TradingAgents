@@ -126,6 +126,20 @@ def test_explicit_rating_supports_rendered_markdown(decision):
     assert assess_research_quality(state)["signal"] == "Hold"
 
 
+@pytest.mark.parametrize("decision", [
+    "Rating: Buy / Sell", "Rating: REVIEW\nBuy", "Rating: Buy\nRating: Sell",
+    "Rating: Buy / REVIEW", "Rating: Buy or REVIEW", "Rating: Buy / TBD",
+    "Rating scale: Buy, Overweight, Hold, Underweight, Sell",
+])
+def test_ambiguous_rating_cannot_pass_acceptance(decision):
+    state = complete_state()
+    state["final_trade_decision"] = decision
+    state["risk_debate_state"]["judge_decision"] = decision
+    quality = assess_research_quality(state)
+    assert quality["signal"] == "REVIEW"
+    assert {"code": "unparseable_final_rating"} in quality["reasons"]
+
+
 @pytest.mark.parametrize(
     "content",
     [
@@ -143,6 +157,22 @@ def test_unavailable_required_evidence_cannot_be_accepted(content):
     assert result["accepted"] is False
     code = "source_unavailable" if content else "invalid_evidence"
     assert {"role": "sentiment", "code": code} in result["reasons"]
+
+
+@pytest.mark.parametrize(("source_index", "provider"), [
+    (0, "Yahoo Finance news"), (1, "Yahoo Finance global news"),
+])
+def test_historical_yahoo_coverage_gap_rejects_required_news(source_index, provider):
+    from tradingagents.dataflows.date_window import coverage_gap
+
+    state = complete_state(("news",))
+    state["_research_backend"] = "codex"
+    notice = coverage_gap([], "2020-01-01", "2020-01-07", provider, "news")
+    assert notice
+    state["prepared_data"]["news"]["sources"][source_index]["content"] = notice
+    quality = assess_research_quality(state)
+    assert quality["signal"] == "REVIEW"
+    assert {"role": "news", "code": "source_unavailable"} in quality["reasons"]
 
 
 @pytest.mark.parametrize(

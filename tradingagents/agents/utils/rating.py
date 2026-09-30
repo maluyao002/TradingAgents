@@ -10,8 +10,9 @@ Centralising it here avoids drift between those call sites.
 
 ``extract_rating`` returns ``None`` when no rating can be found, so the graph can
 surface an explicit ``REVIEW`` signal instead of a fabricated ``Hold`` (#1170).
-``parse_rating`` keeps the legacy silent-default behaviour for callers (e.g. the
-memory log) that need a rating string regardless.
+``parse_rating`` uses ``REVIEW`` for callers that need a string, including the
+decision log. Conflicting labels remain ambiguous, as required by the fork's
+research acceptance gate.
 """
 
 from __future__ import annotations
@@ -31,10 +32,10 @@ RATINGS_5_TIER: tuple[str, ...] = (
 RATING_REVIEW = "REVIEW"
 
 _RATING_SET = {r.lower() for r in RATINGS_5_TIER}
-
-# Matches "Rating: X" / "rating - X" / "Rating: **X**" — tolerates markdown
-# bold wrappers and either a colon or hyphen separator.
-_RATING_LABEL_RE = re.compile(r"rating.*?[:\-][\s*]*(\w+)", re.IGNORECASE)
+_RATING_LABEL_RE = re.compile(
+    r"^\s*(?:#{1,6}\s*|[-*]\s+|\d+[.)]\s+)?\**Rating\**\s*"
+    r"[:\-\u2010-\u2015][\s*]*(\w+)(.*)$", re.IGNORECASE | re.MULTILINE,
+)
 
 # Standalone 5-tier word anywhere (word boundaries so "Buyer"/"Holding" don't match).
 _RATING_WORD_RE = re.compile(
@@ -42,38 +43,38 @@ _RATING_WORD_RE = re.compile(
 )
 
 
-def extract_rating(text: str) -> str | None:
-    """Extract a 5-tier rating from prose, or ``None`` if none is present.
+def extract_explicit_rating(text: str) -> str | None:
+    """Read an unambiguous standalone label shared by the gate and log."""
+    if not isinstance(text, str):
+        return None
+    labels = _RATING_LABEL_RE.findall(unicodedata.normalize("NFKC", text))
+    ratings = set()
+    for value, suffix in labels:
+        if value.lower() not in _RATING_SET:
+            return None
+        rating = value.capitalize()
+        # Decision renderers put explanations on subsequent lines. Requiring a
+        # standalone label also rejects alternatives such as "Buy / REVIEW" or
+        # "Buy or TBD", which contain no second member of the rating scale.
+        if suffix.strip().strip("*").strip() not in {"", "."}:
+            return None
+        ratings.add(rating)
+    return next(iter(ratings)) if len(ratings) == 1 else None
 
-    Two-pass strategy on the NFKC-normalized text (so fullwidth punctuation like
-    ``Rating：Overweight`` is matched the same as ASCII):
-    1. An explicit "Rating: X" label (tolerant of markdown bold).
-    2. The first standalone 5-tier rating word found anywhere.
-    """
-    if not text:
+
+def extract_rating(text: str) -> str | None:
+    """Read a labelled decision, or a single unambiguous rating in prose."""
+    if not isinstance(text, str) or not text:
         return None
     norm = unicodedata.normalize("NFKC", text)
-
-    for line in norm.splitlines():
-        m = _RATING_LABEL_RE.search(line)
-        if m and m.group(1).lower() in _RATING_SET:
-            return m.group(1).capitalize()
-
-    m = _RATING_WORD_RE.search(norm)
-    if m:
-        return m.group(1).capitalize()
-
-    return None
+    if _RATING_LABEL_RE.search(norm):
+        return extract_explicit_rating(norm)
+    named = {m.group(1).capitalize() for m in _RATING_WORD_RE.finditer(norm)}
+    return named.pop() if len(named) == 1 else None
 
 
-def parse_rating(text: str, default: str = "Hold") -> str:
-    """Extract a 5-tier rating, falling back to ``default`` when none is found.
-
-    Legacy convenience wrapper: it always returns a rating string, so an
-    unparseable decision silently becomes ``default`` (``Hold``). Callers that
-    must distinguish "no rating" from a real Hold should use
-    :func:`extract_rating` (or the graph's REVIEW-surfacing signal) instead.
-    """
+def parse_rating(text: str, default: str = RATING_REVIEW) -> str:
+    """Extract a rating, defaulting unreadable decisions to ``REVIEW``."""
     rating = extract_rating(text)
     return rating if rating is not None else default
 

@@ -44,6 +44,8 @@ from cli.utils import (
     select_research_depth,
     select_shallow_thinking_agent,
 )
+from tradingagents.dataflows.config import run_config
+from tradingagents.dataflows.date_window import require_iso_date
 from tradingagents.dataflows.request_cache import run_data_scope
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.analyst_execution import (
@@ -1075,8 +1077,15 @@ def _display_profile_summary(config: dict, selected_analysts) -> None:
 def run_analysis(checkpoint: bool | None = None, *, selections=None, codex_adapter=None):
     # First get all user selections
     selections = selections if selections is not None else get_user_selections()
+    require_iso_date(selections["analysis_date"])
 
     config = _build_run_config(selections, checkpoint)
+    with run_config(config):
+        return _run_analysis_scoped(selections, config, codex_adapter)
+
+
+def _run_analysis_scoped(selections, config, codex_adapter):
+    """Run the entire CLI analysis with its graph's vendor config bound."""
     _display_profile_summary(config, selections["analysts"])
 
     # Create stats callback handler for tracking LLM/tool calls
@@ -1183,7 +1192,7 @@ def run_analysis(checkpoint: bool | None = None, *, selections=None, codex_adapt
         # the real company (#814); the CLI builds state directly rather than
         # going through propagate(), so this must happen on the CLI path too.
         instrument_context = graph.resolve_instrument_context(
-            selections["ticker"], selections["asset_type"]
+            selections["ticker"], selections["asset_type"], selections["analysis_date"]
         )
         init_agent_state = graph.propagator.create_initial_state(
             selections["ticker"],

@@ -139,7 +139,7 @@ DEFAULT_CONFIG = _apply_env_overrides({
     "data_vendors": {
         "core_stock_apis": "yfinance",       # Options: alpha_vantage, yfinance
         "technical_indicators": "yfinance",  # Options: alpha_vantage, yfinance
-        "fundamental_data": "yfinance",      # Options: alpha_vantage, yfinance
+        "fundamental_data": "yfinance",      # Options: alpha_vantage, yfinance, sec_edgar (statements)
         "news_data": "yfinance",             # Options: alpha_vantage, yfinance
         "macro_data": "fred",                # Options: fred (needs FRED_API_KEY)
         "prediction_markets": "polymarket",  # Options: polymarket (keyless)

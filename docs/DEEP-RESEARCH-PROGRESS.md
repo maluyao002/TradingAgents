@@ -1,9 +1,65 @@
 # Deep Research V2 — implementation record
 
-Updated September 25, 2026. This is the concise record of completed engineering
+Updated September 29, 2026. This is the concise record of completed engineering
 and validation checkpoints, **not a second work queue**. For current priorities,
 open gates and user decisions, use the [current roadmap](DEEP-RESEARCH-STATUS.md).
 The [original implementation plan](DEEP-RESEARCH-PLAN.md) is preserved.
+
+## Selected upstream v0.5.1 integration — September 29
+
+The first two backport PRs are verified as merged into `main`:
+
+- [PR #32](https://github.com/maluyao002/TradingAgents/pull/32) merged on
+  September 29 at 21:01:57 PDT (September 30 at 04:01:57 UTC), commit
+  `9a9ab046af6e806d035fa08f3876f477d8719c06`. It delivers run-scoped data settings,
+  graph-owned tool dates, historical-data availability notices, conservative
+  rating parsing, and checkpoint identity v3. Review fixed ambiguous ratings,
+  historical insider/publication leakage, reversed date windows, and live
+  instrument-context leakage. The exact committed offline suite passed
+  **1,394 tests, 65 subtests, with 2 expected skips**; independent review and all
+  six hosted checks passed.
+- [PR #33](https://github.com/maluyao002/TradingAgents/pull/33) merged on
+  September 29 at 21:18:46 PDT (September 30 at 04:18:46 UTC), commit
+  `9f61fdce0751b4cdcc241c2c591a822039733172`. It adds optional SEC statement
+  snapshots with original values and filing provenance, dated calculated facts,
+  historical SEC-only routing, canonical run dates, and checkpoint identity v4.
+  Review tightened form/amendment selection, accession requirements, vendor-chain
+  consistency, date validation, and the noncontrolling-interest equity caveat.
+  The exact committed offline suite passed **1,431 tests, 65 subtests, with 2
+  expected skips**; independent review, Ruff, whitespace, and all six hosted
+  checks passed. The skips cover optional Bedrock installation and a live
+  DeepSeek API check; no live SEC or model calls were made for validation.
+- A delayed GitHub review of PR #32 found that the fundamentals pilot reset
+  active vendor settings when its new `config` argument was omitted.
+  [PR #35](https://github.com/maluyao002/TradingAgents/pull/35) corrects that
+  compatibility regression and merged into `main` on September 29 at 21:33:31
+  PDT (September 30 at 04:33:31 UTC), commit
+  `c87ada79cc7c1f1fbbe412f996bfac75f07810ca`. Its 51 focused offline tests,
+  independent review, lint, whitespace, and all six hosted checks passed.
+  The original review thread is resolved. Omitted configuration inherits a
+  snapshot of the active process or run settings; explicit overrides retain
+  their previous behavior and scope cleanup.
+
+The third integration branch, `codex/sync-main-research-v2`, merges this reviewed
+`main` history into V2 without conflicts, including PR #35. Initial combined
+local validation passed 3,345 tests and 69 subtests with 16 skips; eight checks
+needed Git metadata absent from the source archive. Both affected modules then
+passed all 19 tests in a Git checkout of the same commit, resolving all eight
+environment-only failures (3,353 distinct passing tests). The final pilot fix
+was checked with the focused 51-test set. Skips cover optional dependencies,
+the live API gate, and local frozen packets absent from clean checkouts.
+Whole-repository Ruff and independent integration review pass. The V2 merge
+receipt and final hosted validation will be recorded after verification.
+The three main feature branches and both managed worktrees are retained while
+the integration is completed.
+Earlier entries saying main was unchanged describe their dated checkpoints.
+
+The [backport guide](UPSTREAM-BACKPORTS.md) documents configuration and limits.
+V2's separate evidence collector still requires exact filing acceptance times
+and accession-bound sources; the new date-only companyfacts path does not replace
+it or refresh frozen packets. Stage 3 remains open, no improved NVDA reader is
+admitted, and HOOD remains Stage 4. These engineering changes authorize no live
+continuation, new budget, financial acceptance, or production activation.
 
 ## V7 receipt interaction and versioned continuation repair — September 25
 
