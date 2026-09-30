@@ -120,6 +120,8 @@ For development, use `uv sync --locked --extra dev`. Installing with `pip instal
 is also supported, but resolves dependency ranges independently of `uv.lock`.
 See [Codex integration and release status](docs/CODEX-INTEGRATION.md) for backend
 setup, accepted/degraded research outputs, and acceptance limitations.
+See [selected upstream improvements and SEC EDGAR setup](docs/UPSTREAM-BACKPORTS.md)
+for the optional statement provider and historical-data behavior.
 
 ### Docker
 

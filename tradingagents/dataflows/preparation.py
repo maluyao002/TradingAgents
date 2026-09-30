@@ -5,18 +5,19 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import date as date_type, datetime, timezone
 from io import StringIO
 from typing import Any
 
 from . import date_window
 from .financial_calculations import free_cash_flow, parse_decimal, plain_number, ratio
-from .interface import route_to_vendor_with_metadata
+from .interface import configured_vendor_chain, route_to_vendor_with_metadata
 from .market_data_validator import (
     build_verified_market_snapshot_data,
     market_finality_caveat,
     render_verified_market_snapshot,
 )
+from .sec_edgar import _STATEMENTS as _SEC_STATEMENTS
 
 _STATEMENT_METHODS = {
     "get_balance_sheet": "Balance sheet",
@@ -152,12 +153,13 @@ def _fact(
     kind: str,
     inputs: list[str] | None = None,
     caveats: list[str] | None = None,
+    published_at: str | None = None,
 ) -> dict[str, Any]:
     role_prefix = "market" if source_id.startswith("market-") else "fundamentals"
     digest_input = "|".join((source_id, basis, period, metric, kind))
     digest = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()[:16]
     fact_id = f"{role_prefix}-fact-{metric.replace('_', '-')}-{digest}"
-    return {
+    record = {
         "id": fact_id,
         "metric": metric,
         "value": value,
@@ -169,6 +171,9 @@ def _fact(
         "inputs": list(inputs or []),
         "caveats": list(caveats or []),
     }
+    if published_at is not None:
+        record["published_at"] = published_at
+    return record
 
 
 def prepare_market(ticker: str, date: str) -> dict[str, Any]:
@@ -317,7 +322,7 @@ def _append_source(
     }
     if basis:
         source["period"] = basis
-        source["basis"] = "not_disclosed"
+        source["basis"] = "US-GAAP as filed" if vendor == "sec_edgar" else "not_disclosed"
     seen[dedup_key] = len(sources)
     sources.append(source)
     internal.append({"method": method, "basis": basis, "source": source})
@@ -495,6 +500,100 @@ def _parse_yfinance_source(
     return parsed
 
 
+def _parse_sec_source(
+    item: dict[str, Any],
+    facts: list[dict[str, Any]],
+    values: dict[tuple[str, str | None, str, str], dict[str, dict[str, Any]]],
+    caveats: list[str],
+    ticker: str,
+    cutoff: str,
+) -> bool:
+    """Consume original SEC values, retaining each fact's filing provenance."""
+    method = item["method"]
+    frequency = item.get("basis")
+    if method not in _SEC_STATEMENTS or frequency not in {"annual", "quarterly"}:
+        return False
+    try:
+        payload = json.loads(item["source"]["content"])
+    except (TypeError, json.JSONDecodeError):
+        return False
+    if (
+        not isinstance(payload, dict)
+        or payload.get("vendor") != "sec_edgar"
+        or payload.get("ticker") != ticker.upper()
+        or payload.get("method") != method
+        or payload.get("frequency") != frequency
+        or payload.get("as_of") != cutoff
+        or not isinstance(payload.get("facts"), list)
+    ):
+        return False
+
+    parsed = False
+    seen: set[tuple[str, str]] = set()
+    for raw in payload["facts"]:
+        if not isinstance(raw, dict):
+            continue
+        metric = raw.get("metric")
+        tag = raw.get("tag")
+        unit = raw.get("unit")
+        period = raw.get("end")
+        filed = raw.get("filed")
+        if (
+            not isinstance(metric, str)
+            or tag not in _SEC_STATEMENTS[method].get(metric, ())
+            or raw.get("taxonomy") != "us-gaap"
+            or not isinstance(unit, str)
+            or not isinstance(period, str)
+            or not isinstance(filed, str)
+            or (metric, period) in seen
+            or period > cutoff or filed > cutoff
+        ):
+            continue
+        try:
+            if date_type.fromisoformat(period).isoformat() != period:
+                continue
+            if date_type.fromisoformat(filed).isoformat() != filed:
+                continue
+        except ValueError:
+            continue
+        decimal = parse_decimal(raw.get("val"))
+        if decimal is None:
+            continue
+        expected_unit = (
+            "shares" if metric in _SHARE_METRICS
+            else "USD/shares" if metric == "diluted_eps" else "USD"
+        )
+        if unit != expected_unit:
+            continue
+        start = raw.get("start")
+        provenance = [
+            f"SEC US-GAAP tag {tag}; form {raw.get('form') or 'unavailable'}; "
+            f"accession {raw.get('accn') or 'unavailable'}; filed {filed}."
+        ]
+        if isinstance(start, str):
+            provenance.append(f"Reported duration {start}..{period}.")
+        if tag == "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest":
+            provenance.append(
+                "This equity tag includes the portion attributable to noncontrolling interests; "
+                "it is not parent-only shareholders' equity."
+            )
+        record = _fact(
+            metric=metric, value=raw["val"], unit=unit,
+            period=f"{frequency}:{period}", basis=f"US-GAAP:{tag}",
+            source_id=item["source"]["id"], kind="reported",
+            caveats=provenance, published_at=filed,
+        )
+        facts.append(record)
+        values.setdefault(("sec_edgar", unit, frequency, period), {})[metric] = {
+            "decimal": decimal, "fact": record,
+        }
+        seen.add((metric, period))
+        parsed = True
+    if parsed:
+        caveats.extend(payload.get("caveats", []) if isinstance(payload.get("caveats"), list) else [])
+    return parsed
+
+
 def _parse_overview_source(
     item: dict[str, Any],
     facts: list[dict[str, Any]],
@@ -626,10 +725,19 @@ def _calculated_facts(
         capex = period_values.get("capital_expenditures")
         direct_fcf = period_values.get("free_cash_flow")
         if operating and capex and not direct_fcf:
-            is_alpha = operating["fact"]["source_id"].split(":", 2)[1] == "alpha_vantage"
+            cashflow_vendor = operating["fact"]["source_id"].split(":", 2)[1]
+            if cashflow_vendor == "sec_edgar" and capex["decimal"] < 0:
+                calculation_caveats.append(
+                    f"{reported_period} free_cash_flow: SEC capex outflow magnitude "
+                    "was negative, so the calculation was withheld."
+                )
+                continue
+            outflow_magnitude = cashflow_vendor in {
+                "alpha_vantage", "sec_edgar",
+            }
             value, caveats = free_cash_flow(
                 operating["decimal"], capex["decimal"],
-                capital_expenditure_is_outflow_magnitude=is_alpha,
+                capital_expenditure_is_outflow_magnitude=outflow_magnitude,
             )
             calculated.append(_fact(
                 metric="free_cash_flow", value=plain_number(value),
@@ -757,14 +865,15 @@ def _cash_outflow_magnitude(
             "yfinance reports these cash outflows as negative; this calculated fact "
             "shows their positive magnitude."
         ]
-    if vendor == "alpha_vantage":
+    if vendor in {"alpha_vantage", "sec_edgar"}:
+        vendor_label = "Alpha Vantage" if vendor == "alpha_vantage" else "SEC EDGAR"
         if any(value < 0 for value in values):
             return None, [
-                f"{label} includes a negative Alpha Vantage value although this field "
+                f"{label} includes a negative {vendor_label} value although this field "
                 "normally reports an outflow magnitude; magnitude was withheld."
             ]
         return sum(values), [
-            "Alpha Vantage reports this field as an outflow magnitude; the sign was retained."
+            f"{vendor_label} reports this field as an outflow magnitude; the sign was retained."
         ]
     return None, [f"{label} sign convention is unknown for vendor {vendor}; magnitude withheld."]
 
@@ -953,7 +1062,7 @@ def _material_summary_facts(
                             if vendor == "yfinance" and capex_value <= 0:
                                 expected_fcf = total["decimal"] + capex_value
                                 operator = "plus provider-signed capital expenditures"
-                            elif vendor == "alpha_vantage" and capex_value >= 0:
+                            elif vendor in {"alpha_vantage", "sec_edgar"} and capex_value >= 0:
                                 expected_fcf = total["decimal"] - capex_value
                                 operator = "minus capital-expenditure outflow magnitude"
                             if annual_fcf and expected_fcf == parse_decimal(annual_fcf["value"]):
@@ -1162,7 +1271,7 @@ def _material_summary_facts(
                 if capex_value is not None:
                     if vendor == "yfinance" and capex_value <= 0:
                         expected_fcf = parse_decimal(operating["value"]) + capex_value
-                    elif vendor == "alpha_vantage" and capex_value >= 0:
+                    elif vendor in {"alpha_vantage", "sec_edgar"} and capex_value >= 0:
                         expected_fcf = parse_decimal(operating["value"]) - capex_value
                 if capex and expected_fcf == parse_decimal(fcf_fact["value"]):
                     supporting.append(capex)
@@ -1380,10 +1489,39 @@ def _required_financial_evidence_ids(facts: list[dict[str, Any]]) -> list[str]:
     return selected
 
 
+def _propagate_filing_dates(facts: list[dict[str, Any]]) -> None:
+    """Date derived values only when every input fact has a known filing date."""
+    by_id = {fact["id"]: fact for fact in facts}
+    for _ in range(len(facts)):
+        changed = False
+        for fact in facts:
+            if fact["kind"] != "calculated" or fact.get("published_at"):
+                continue
+            inputs = fact.get("inputs", [])
+            dependencies = [by_id.get(item) for item in inputs]
+            if not dependencies or any(
+                dependency is None or not dependency.get("published_at")
+                for dependency in dependencies
+            ):
+                continue
+            fact["published_at"] = max(
+                dependency["published_at"] for dependency in dependencies
+            )
+            changed = True
+        if not changed:
+            break
+
+
 def prepare_fundamentals(ticker: str, date: str) -> dict[str, Any]:
     """Prefetch routed fundamentals, preserve raw payloads, and derive safe facts."""
+    date_window.require_iso_date(date)
     today = date_window.get_current_date()
-    if date < today:
+    historical = date < today
+    sec_methods = {
+        method for method in _STATEMENT_METHODS
+        if "sec_edgar" in configured_vendor_chain(method)
+    }
+    if historical and not sec_methods:
         return {
             "analysis_date": date,
             "sources": [],
@@ -1403,15 +1541,30 @@ def prepare_fundamentals(ticker: str, date: str) -> dict[str, Any]:
     seen: dict[tuple[str, str, str, str | None], int] = {}
     caveats: list[str] = []
 
-    overview = route_to_vendor_with_metadata("get_fundamentals", ticker, date)
-    _append_source(
-        sources, internal, seen, method="get_fundamentals", basis=None,
-        ticker=ticker, vendor=overview.vendor, value=overview.value,
-    )
+    if not historical:
+        overview = route_to_vendor_with_metadata("get_fundamentals", ticker, date)
+        _append_source(
+            sources, internal, seen, method="get_fundamentals", basis=None,
+            ticker=ticker, vendor=overview.vendor, value=overview.value,
+        )
+    else:
+        caveats.append(
+            "Live company-profile fields were withheld: no historical publication "
+            "vintage is available for names, classifications, or valuation fields."
+        )
 
     for method in _STATEMENT_METHODS:
+        if historical and method not in sec_methods:
+            caveats.append(f"{_STATEMENT_METHODS[method]} unavailable: sec_edgar is not configured.")
+            continue
         for basis in ("annual", "quarterly"):
             routed = route_to_vendor_with_metadata(method, ticker, basis, date)
+            if historical and routed.vendor != "sec_edgar":
+                caveats.append(
+                    f"{_STATEMENT_METHODS[method]} ({basis}) unavailable from SEC EDGAR "
+                    "for the selected historical date."
+                )
+                continue
             _append_source(
                 sources, internal, seen, method=method, basis=basis,
                 ticker=ticker, vendor=routed.vendor, value=routed.value,
@@ -1422,7 +1575,8 @@ def prepare_fundamentals(ticker: str, date: str) -> dict[str, Any]:
             "Historical company profile values are withheld because the provider "
             "does not supply a point-in-time vintage for the requested date."
         )
-    if any(item["method"] in _STATEMENT_METHODS for item in internal):
+    if any(item["method"] in _STATEMENT_METHODS and item["source"]["vendor"] != "sec_edgar"
+           for item in internal):
         caveats.append(
             "Fiscal period end dates are accounting period boundaries, not "
             "publication dates. The provider did not supply publication timestamps, "
@@ -1441,6 +1595,8 @@ def prepare_fundamentals(ticker: str, date: str) -> dict[str, Any]:
             parsed = _parse_alpha_source(item, facts, values, caveats, date)
         elif vendor == "yfinance":
             parsed = _parse_yfinance_source(item, facts, values, caveats, date)
+        elif vendor == "sec_edgar":
+            parsed = _parse_sec_source(item, facts, values, caveats, ticker, date)
         else:
             parsed = False
         if item["method"] in _STATEMENT_METHODS and not parsed:
@@ -1457,6 +1613,7 @@ def prepare_fundamentals(ticker: str, date: str) -> dict[str, Any]:
     )
     facts.extend(material)
     caveats.extend(material_caveats)
+    _propagate_filing_dates(facts)
     return {
         "analysis_date": date,
         "sources": sources,

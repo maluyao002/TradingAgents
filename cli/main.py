@@ -45,6 +45,7 @@ from cli.utils import (
     select_shallow_thinking_agent,
 )
 from tradingagents.dataflows.config import run_config
+from tradingagents.dataflows.date_window import require_iso_date
 from tradingagents.dataflows.request_cache import run_data_scope
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.analyst_execution import (
@@ -1076,6 +1077,7 @@ def _display_profile_summary(config: dict, selected_analysts) -> None:
 def run_analysis(checkpoint: bool | None = None, *, selections=None, codex_adapter=None):
     # First get all user selections
     selections = selections if selections is not None else get_user_selections()
+    require_iso_date(selections["analysis_date"])
 
     config = _build_run_config(selections, checkpoint)
     with run_config(config):

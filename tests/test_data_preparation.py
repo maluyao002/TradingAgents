@@ -74,6 +74,7 @@ def test_alpha_statement_frequencies_share_one_raw_request():
         })
 
     with mock.patch.object(interface, "get_vendor", return_value="alpha_vantage"), \
+            mock.patch.object(interface, "get_current_date", return_value="2025-12-31"), \
             mock.patch.object(alpha, "_make_api_request", side_effect=request), \
             data_request_scope():
         annual = interface.route_to_vendor("get_balance_sheet", "AAPL", "annual", "2025-12-31")
