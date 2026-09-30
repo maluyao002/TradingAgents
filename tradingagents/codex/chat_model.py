@@ -50,7 +50,7 @@ class _ToolSpec:
     description: str
     parameters: dict[str, Any]
     output_parameters: dict[str, Any]
-    args_schema: type[BaseModel]
+    call_schema: type[BaseModel]
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,9 +174,11 @@ def _message_payload(message: BaseMessage) -> dict[str, Any]:
 def _tool_spec(tool: object) -> _ToolSpec:
     if not isinstance(tool, BaseTool):
         raise ValueError("Codex tool binding requires LangChain BaseTool instances")
-    args_schema = tool.args_schema
-    if not isinstance(args_schema, type) or not issubclass(args_schema, BaseModel):
-        raise ValueError(f"tool {tool.name!r} does not expose a Pydantic argument schema")
+    # LangGraph injects state fields only when ToolNode executes the call. The
+    # model must see and return the tool-call schema, which omits those fields.
+    call_schema = tool.tool_call_schema
+    if not isinstance(call_schema, type) or not issubclass(call_schema, BaseModel):
+        raise ValueError(f"tool {tool.name!r} does not expose a Pydantic tool-call schema")
     converted = convert_to_openai_tool(tool)
     function = converted.get("function") if isinstance(converted, dict) else None
     if not isinstance(function, dict):
@@ -190,8 +192,8 @@ def _tool_spec(tool: object) -> _ToolSpec:
         name=name,
         description=description,
         parameters=_json_copy(parameters, "tool schema"),
-        output_parameters=_strict_pydantic_schema(args_schema),
-        args_schema=args_schema,
+        output_parameters=_strict_pydantic_schema(call_schema),
+        call_schema=call_schema,
     )
 
 
@@ -470,7 +472,7 @@ class CodexChatModel(BaseChatModel):
                 raise CodexInferenceError("Codex requested an unknown or unbound tool")
             if not isinstance(arguments, dict):
                 raise CodexInferenceError("Codex returned malformed tool arguments")
-            schema = tools_by_name[name].args_schema
+            schema = tools_by_name[name].call_schema
             try:
                 validated = schema.model_validate(arguments, strict=True)
                 normalized = validated.model_dump(

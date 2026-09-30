@@ -10,9 +10,12 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
+from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field
 
 from cli.stats_handler import StatsCallbackHandler
+from tradingagents.agents.utils import fundamental_data_tools
 from tradingagents.codex.adapter import CodexInferenceError
 from tradingagents.codex.chat_model import CodexChatModel
 
@@ -130,6 +133,46 @@ def test_bind_tools_requests_schema_and_returns_validated_unique_calls(tool_choi
     assert schema["properties"]["tool_calls"]["items"]["properties"]["name"]["enum"] == [
         "lookup"
     ]
+
+
+def test_codex_visible_tool_schema_excludes_injected_date_and_toolnode_receives_it(monkeypatch):
+    tool = fundamental_data_tools.get_balance_sheet
+    adapter = _FakeAdapter(json.dumps({
+        "content": "", "tool_calls": [{"name": tool.name, "arguments": {"ticker": "AAPL"}}],
+    }))
+    call = _model(adapter).bind_tools([tool]).invoke("inspect the balance sheet").tool_calls[0]
+
+    prompt = json.loads(adapter.calls[0][0][1])
+    visible = prompt["available_tools"][0]["arguments_schema"]["properties"]
+    output = adapter.calls[0][1]["output_schema"]
+    assert "trade_date" not in visible
+    assert "trade_date" not in json.dumps(output)
+    assert call["args"] == {"ticker": "AAPL"}
+
+    class RunState(MessagesState):
+        trade_date: str
+
+    graph = StateGraph(RunState)
+    graph.add_node("tools", ToolNode([tool]))
+    graph.add_edge(START, "tools")
+    graph.add_edge("tools", END)
+    monkeypatch.setattr(fundamental_data_tools, "route_to_vendor", lambda *args: repr(args))
+    result = graph.compile().invoke({
+        "messages": [AIMessage("", tool_calls=[call])],
+        "trade_date": "2026-08-14",
+    })
+    assert "'2026-08-14'" in result["messages"][-1].content
+
+
+def test_codex_rejects_model_attempt_to_supply_injected_date():
+    adapter = _FakeAdapter(json.dumps({
+        "content": "", "tool_calls": [{
+            "name": "get_balance_sheet",
+            "arguments": {"ticker": "AAPL", "trade_date": "2026-09-29"},
+        }],
+    }))
+    with pytest.raises(CodexInferenceError, match="invalid tool arguments"):
+        _model(adapter).bind_tools([fundamental_data_tools.get_balance_sheet]).invoke("inspect")
 
 
 @pytest.mark.parametrize(

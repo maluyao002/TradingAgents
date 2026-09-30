@@ -15,6 +15,7 @@ from .stockstats_utils import (
     yf_retry,
 )
 from .symbol_utils import NoMarketDataError, normalize_symbol
+from .utils import get_current_date
 
 logger = logging.getLogger(__name__)
 
@@ -454,11 +455,25 @@ def get_income_statement(
         return f"Error retrieving income statement for {ticker}: {str(e)}"
 
 
+_TRANSACTION_DATE_VINTAGE = (
+    "# Rows are dated by transaction date. A trade becomes public when its Form 4 "
+    "is filed, up to two business days later, so the newest rows may not have been "
+    "known on this date.\n\n"
+)
+
+
 def get_insider_transactions(
-    ticker: Annotated[str, "ticker symbol of the company"]
+    ticker: Annotated[str, "ticker symbol of the company"],
+    curr_date: Annotated[str | None, "only transactions on or before this date, yyyy-mm-dd"] = None,
 ):
     """Get insider transactions data from yfinance."""
     canonical = normalize_symbol(ticker)
+    if curr_date and curr_date < get_current_date():
+        return (
+            f"<unavailable: insider transactions for {canonical} as of {curr_date}: "
+            "Yahoo exposes transaction dates but not Form 4 filing dates, so their "
+            "public availability by the analysis date cannot be verified>"
+        )
     try:
         ticker_obj = yf.Ticker(canonical)
         data = yf_retry(lambda: ticker_obj.insider_transactions)
@@ -468,12 +483,27 @@ def get_insider_transactions(
         if data is None or data.empty:
             return f"No insider transactions reported for symbol '{canonical}'"
 
+        if curr_date:
+            # Yahoo exposes transaction dates, not the Form 4 filing date. A
+            # current snapshot with no earlier rows cannot prove none existed.
+            if "Start Date" not in data:
+                return f"<unavailable: insider transactions for {canonical} as of {curr_date}: Yahoo supplied no transaction dates>"
+            traded = pd.to_datetime(data["Start Date"], errors="coerce", utc=True)
+            cutoff = pd.Timestamp(curr_date, tz="UTC") + pd.Timedelta(days=1)
+            kept = data[traded.notna() & (traded < cutoff)]
+            if kept.empty:
+                return (
+                    f"<unavailable: insider transactions for {canonical} as of {curr_date}: "
+                    "Yahoo serves recent transactions only>"
+                )
+            data = kept
+
         # Convert to CSV string for consistency with other functions
         csv_string = data.to_csv()
 
         # Add header information
         header = f"# Insider Transactions data for {canonical}\n"
-        header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        header += _TRANSACTION_DATE_VINTAGE
 
         return header + csv_string
 
