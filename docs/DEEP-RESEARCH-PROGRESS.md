@@ -29,11 +29,29 @@ The first two backport PRs are verified as merged into `main`:
   expected skips**; independent review, Ruff, whitespace, and all six hosted
   checks passed. The skips cover optional Bedrock installation and a live
   DeepSeek API check; no live SEC or model calls were made for validation.
+- A delayed GitHub review of PR #32 found that the fundamentals pilot reset
+  active vendor settings when its new `config` argument was omitted.
+  [PR #35](https://github.com/maluyao002/TradingAgents/pull/35) corrects that
+  compatibility regression and merged into `main` on September 29 at 21:33:31
+  PDT (September 30 at 04:33:31 UTC), commit
+  `c87ada79cc7c1f1fbbe412f996bfac75f07810ca`. Its 51 focused offline tests,
+  independent review, lint, whitespace, and all six hosted checks passed.
+  The original review thread is resolved. Omitted configuration inherits a
+  snapshot of the active process or run settings; explicit overrides retain
+  their previous behavior and scope cleanup.
 
 The third integration branch, `codex/sync-main-research-v2`, merges this reviewed
-`main` history into V2 without conflicts. Its V2 merge receipt and final combined
-validation will be recorded after verification. The two main feature branches
-and both managed worktrees are retained while the integration is completed.
+`main` history into V2 without conflicts, including PR #35. Initial combined
+local validation passed 3,345 tests and 69 subtests with 16 skips; eight checks
+needed Git metadata absent from the source archive. Both affected modules then
+passed all 19 tests in a Git checkout of the same commit, resolving all eight
+environment-only failures (3,353 distinct passing tests). The final pilot fix
+was checked with the focused 51-test set. Skips cover optional dependencies,
+the live API gate, and local frozen packets absent from clean checkouts.
+Whole-repository Ruff and independent integration review pass. The V2 merge
+receipt and final hosted validation will be recorded after verification.
+The three main feature branches and both managed worktrees are retained while
+the integration is completed.
 Earlier entries saying main was unchanged describe their dated checkpoints.
 
 The [backport guide](UPSTREAM-BACKPORTS.md) documents configuration and limits.

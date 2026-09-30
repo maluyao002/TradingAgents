@@ -15,7 +15,9 @@ diagnostic or merged code increment is not a completed or accepted report.
 
 - **Selected upstream v0.5.1 backports are merged into main** through
   [PR #32](https://github.com/maluyao002/TradingAgents/pull/32) (`9a9ab04`) and
-  [PR #33](https://github.com/maluyao002/TradingAgents/pull/33) (`9f61fdc`). Both
+  [PR #33](https://github.com/maluyao002/TradingAgents/pull/33) (`9f61fdc`), with
+  [PR #35](https://github.com/maluyao002/TradingAgents/pull/35) (`c87ada7`)
+  preserving vendor settings for existing fundamentals-pilot callers. All three
   passed independent review and all six hosted checks. The conflict-free V2
   synchronization is prepared on `codex/sync-main-research-v2`, pending its own
   validation and reviewed merge. It brings run-scoped configuration, protected
