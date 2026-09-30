@@ -7,7 +7,8 @@ from threading import Barrier
 
 import pytest
 
-from tradingagents.dataflows.config import get_config, run_config
+from tradingagents.dataflows import config as config_module
+from tradingagents.dataflows.config import get_config, run_config, set_config
 from tradingagents.dataflows.interface import get_vendor
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.trading_graph import TradingAgentsGraph
@@ -99,6 +100,51 @@ def test_fundamentals_pilot_receives_explicit_vendor_config(monkeypatch):
     assert fundamentals.run_fundamentals(
         "AAPL", "2026-09-01", backend="api", model="example", effort="low", config=config,
     ) == "alpha_vantage"
+    assert get_config() == outside
+
+
+def test_fundamentals_pilot_uses_process_config_when_omitted(monkeypatch):
+    from tradingagents.codex import fundamentals
+
+    monkeypatch.setattr(config_module, "_config", deepcopy(DEFAULT_CONFIG))
+    set_config({"tool_vendors": {"get_balance_sheet": "alpha_vantage"}})
+    monkeypatch.setattr(fundamentals, "_run_fundamentals_scoped", lambda *a, **k: _vendor())
+
+    assert fundamentals.run_fundamentals(
+        "AAPL", "2026-09-01", backend="api", model="example", effort="low",
+    ) == "alpha_vantage"
+    assert _vendor() == "alpha_vantage"
+
+
+def test_fundamentals_pilot_uses_outer_scope_and_restores_it(monkeypatch):
+    from tradingagents.codex import fundamentals
+
+    monkeypatch.setattr(fundamentals, "_run_fundamentals_scoped", lambda *a, **k: _vendor())
+    outside = get_config()
+    with run_config({"tool_vendors": {"get_balance_sheet": "alpha_vantage"}}):
+        assert fundamentals.run_fundamentals(
+            "AAPL", "2026-09-01", backend="api", model="example", effort="low",
+        ) == "alpha_vantage"
+        assert fundamentals.run_fundamentals(
+            "AAPL", "2026-09-01", backend="api", model="example", effort="low",
+            config={"tool_vendors": {"get_balance_sheet": "yfinance"}},
+        ) == "yfinance"
+        assert fundamentals.run_fundamentals(
+            "AAPL", "2026-09-01", backend="api", model="example", effort="low",
+            config={"output_language": "French"},
+        ) == DEFAULT_CONFIG["data_vendors"]["fundamental_data"]
+        assert _vendor() == "alpha_vantage"
+
+        def fail(*args, **kwargs):
+            assert _vendor() == "alpha_vantage"
+            raise RuntimeError("offline pilot failure")
+
+        monkeypatch.setattr(fundamentals, "_run_fundamentals_scoped", fail)
+        with pytest.raises(RuntimeError, match="offline pilot failure"):
+            fundamentals.run_fundamentals(
+                "AAPL", "2026-09-01", backend="api", model="example", effort="low",
+            )
+        assert _vendor() == "alpha_vantage"
     assert get_config() == outside
 
 
