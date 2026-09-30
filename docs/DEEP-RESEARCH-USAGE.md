@@ -15,6 +15,23 @@ acceptance, see the [current status and roadmap](DEEP-RESEARCH-STATUS.md).
 
 ## Configuration and replay
 
+### Shared graph fixes and the separate SEC statement provider
+
+The selected upstream v0.5.1 backport updates the shared trading graph and
+fundamentals pilot: run-scoped vendor settings, protected analysis dates,
+conservative rating parsing, and optional filing-dated SEC statements. See
+[configuration and limitations](UPSTREAM-BACKPORTS.md). New shared graph runs use
+checkpoint identity `checkpoint-config-v4`; older checkpoint files are preserved.
+
+The statement provider uses `SEC_EDGAR_USER_AGENT` plus statement `tool_vendors`
+overrides. V2's public evidence collector continues to use `SEC_USER_AGENT`,
+explicit instrument identity, exact accession archive sources, and filing
+acceptance timestamps. Date-only companyfacts rows from the shared provider are
+not automatically admitted to a V2 evidence snapshot. The backport does not
+refresh frozen packets, alter saved report bytes, or establish compatibility for
+replaying a live continuation under changed runtime code. Recheck the exact
+runtime/input contract before any separately authorized continuation.
+
 ### Typed historical cash-flow reconciliation (offline)
 
 The optional cash-flow package `historical_reconciliation` selects a complete,

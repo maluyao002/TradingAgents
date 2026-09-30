@@ -1,6 +1,6 @@
 # Deep Research V2 — current status and next deliverables
 
-Updated September 25, 2026. **This is the single active work queue.**
+Updated September 29, 2026. **This is the single active work queue.**
 Start at the [documentation index](README.md) for other purposes.
 The [original design](DEEP-RESEARCH-DESIGN.md) and
 [implementation / acceptance plan](DEEP-RESEARCH-PLAN.md) remain authoritative
@@ -12,6 +12,18 @@ The engine foundation and several review/integration increments are implemented,
 but **Stage 3 is still open: no admitted final improved English NVDA reader
 has been delivered**. The HOOD contrast remains Stage 4 work. A successful
 diagnostic or merged code increment is not a completed or accepted report.
+
+- **Selected upstream v0.5.1 backports are merged into main** through
+  [PR #32](https://github.com/maluyao002/TradingAgents/pull/32) (`9a9ab04`) and
+  [PR #33](https://github.com/maluyao002/TradingAgents/pull/33) (`9f61fdc`). Both
+  passed independent review and all six hosted checks. The conflict-free V2
+  synchronization is prepared on `codex/sync-main-research-v2`, pending its own
+  validation and reviewed merge. It brings run-scoped configuration, protected
+  dates, rating fixes, optional SEC statements, and checkpoint identity v4.
+  V2's separate evidence collector and frozen research artifacts retain their
+  existing contracts. See the [implementation record](DEEP-RESEARCH-PROGRESS.md#selected-upstream-v051-integration--september-29)
+  and [operating boundary](DEEP-RESEARCH-USAGE.md#shared-graph-fixes-and-the-separate-sec-statement-provider).
+  This is engineering work; it does not close Stage 3 or renew a live-run budget.
 
 - **[PR #30](https://github.com/maluyao002/TradingAgents/pull/30) merged**
   into `codex/deep-research-v2` as `91ac1ac` on September 25 at 23:40 PDT.

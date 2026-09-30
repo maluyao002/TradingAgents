@@ -1,9 +1,47 @@
 # Deep Research V2 — implementation record
 
-Updated September 25, 2026. This is the concise record of completed engineering
+Updated September 29, 2026. This is the concise record of completed engineering
 and validation checkpoints, **not a second work queue**. For current priorities,
 open gates and user decisions, use the [current roadmap](DEEP-RESEARCH-STATUS.md).
 The [original implementation plan](DEEP-RESEARCH-PLAN.md) is preserved.
+
+## Selected upstream v0.5.1 integration — September 29
+
+The first two backport PRs are verified as merged into `main`:
+
+- [PR #32](https://github.com/maluyao002/TradingAgents/pull/32) merged on
+  September 29 at 21:01:57 PDT (September 30 at 04:01:57 UTC), commit
+  `9a9ab046af6e806d035fa08f3876f477d8719c06`. It delivers run-scoped data settings,
+  graph-owned tool dates, historical-data availability notices, conservative
+  rating parsing, and checkpoint identity v3. Review fixed ambiguous ratings,
+  historical insider/publication leakage, reversed date windows, and live
+  instrument-context leakage. The exact committed offline suite passed
+  **1,394 tests, 65 subtests, with 2 expected skips**; independent review and all
+  six hosted checks passed.
+- [PR #33](https://github.com/maluyao002/TradingAgents/pull/33) merged on
+  September 29 at 21:18:46 PDT (September 30 at 04:18:46 UTC), commit
+  `9f61fdce0751b4cdcc241c2c591a822039733172`. It adds optional SEC statement
+  snapshots with original values and filing provenance, dated calculated facts,
+  historical SEC-only routing, canonical run dates, and checkpoint identity v4.
+  Review tightened form/amendment selection, accession requirements, vendor-chain
+  consistency, date validation, and the noncontrolling-interest equity caveat.
+  The exact committed offline suite passed **1,431 tests, 65 subtests, with 2
+  expected skips**; independent review, Ruff, whitespace, and all six hosted
+  checks passed. The skips cover optional Bedrock installation and a live
+  DeepSeek API check; no live SEC or model calls were made for validation.
+
+The third integration branch, `codex/sync-main-research-v2`, merges this reviewed
+`main` history into V2 without conflicts. Its V2 merge receipt and final combined
+validation will be recorded after verification. The two main feature branches
+and both managed worktrees are retained while the integration is completed.
+Earlier entries saying main was unchanged describe their dated checkpoints.
+
+The [backport guide](UPSTREAM-BACKPORTS.md) documents configuration and limits.
+V2's separate evidence collector still requires exact filing acceptance times
+and accession-bound sources; the new date-only companyfacts path does not replace
+it or refresh frozen packets. Stage 3 remains open, no improved NVDA reader is
+admitted, and HOOD remains Stage 4. These engineering changes authorize no live
+continuation, new budget, financial acceptance, or production activation.
 
 ## V7 receipt interaction and versioned continuation repair — September 25
 
