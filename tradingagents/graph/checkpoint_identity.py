@@ -11,7 +11,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from tradingagents.agents.utils.analysis_time import analysis_calendar
 
-CHECKPOINT_IDENTITY_VERSION = "checkpoint-config-v2"
+CHECKPOINT_IDENTITY_VERSION = "checkpoint-config-v4"
 CODEX_BRIDGE_VERSION = "codex-bridge-v1"
 
 # These query parameters select API behavior rather than authenticate a caller.

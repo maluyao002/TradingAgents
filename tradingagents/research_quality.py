@@ -5,7 +5,7 @@ import unicodedata
 from collections.abc import Mapping, Sequence
 
 from tradingagents.agents.utils.evidence import _packet_from_value
-from tradingagents.agents.utils.rating import RATING_REVIEW, RATINGS_5_TIER
+from tradingagents.agents.utils.rating import RATING_REVIEW, extract_explicit_rating
 
 _REPORTS = {
     "market": "market_report",
@@ -20,10 +20,6 @@ _UNAVAILABLE = re.compile(
     r"(?:company news|global news|news|data) unavailable\b|"
     r"no (?:(?:global )?news|articles|posts|messages|data) (?:found|available|returned)\b)",
     re.IGNORECASE,
-)
-_EXPLICIT_RATING = re.compile(
-    r"^\s*(?:#{1,6}\s*)?\**Rating\**\s*[:：-][\s*]*(" + "|".join(RATINGS_5_TIER) + r")\b",
-    re.IGNORECASE | re.MULTILINE,
 )
 
 
@@ -156,13 +152,7 @@ def assess_research_quality(state: Mapping, selected_analysts=None, backend=None
         reasons.append({"code": "final_decision_mismatch"})
     # A passing gate requires an explicit, unambiguous decision label. Mentioning
     # "buy" in a rejected alternative must not produce an accepted Buy signal.
-    ratings = (
-        set(_EXPLICIT_RATING.findall(unicodedata.normalize("NFKC", decision)))
-        if isinstance(decision, str)
-        else set()
-    )
-    ratings = {value.capitalize() for value in ratings}
-    rating = next(iter(ratings)) if len(ratings) == 1 else None
+    rating = extract_explicit_rating(decision)
     if rating is None:
         reasons.append({"code": "unparseable_final_rating"})
     accepted = not reasons

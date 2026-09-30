@@ -5,6 +5,7 @@ import logging
 import os
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+from functools import wraps
 from pathlib import Path
 from typing import Any
 
@@ -30,9 +31,10 @@ from tradingagents.agents.utils.agent_utils import (
 )
 from tradingagents.agents.utils.memory import TradingMemoryLog
 from tradingagents.agents.utils.prompt_policy import PROMPT_POLICY_VERSION
-from tradingagents.dataflows.config import set_config
+from tradingagents.dataflows.config import run_config, set_config
+from tradingagents.dataflows.date_window import require_iso_date
 from tradingagents.dataflows.request_cache import run_data_scope
-from tradingagents.dataflows.utils import safe_ticker_component
+from tradingagents.dataflows.utils import get_current_date, safe_ticker_component
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.llm_clients import create_llm_client
 from tradingagents.reporting import write_report_tree
@@ -46,6 +48,15 @@ from .setup import GraphSetup
 from .signal_processing import SignalProcessor
 
 logger = logging.getLogger(__name__)
+
+
+def _with_run_config(method):
+    """Bind the graph's vendor config for the entire synchronous run."""
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with run_config(self.config):
+            return method(self, *args, **kwargs)
+    return wrapper
 
 
 def _coerce_max_retries(value):
@@ -423,17 +434,19 @@ class TradingAgentsGraph:
         if updates:
             self.memory_log.batch_update_with_outcomes(updates)
 
-    def resolve_instrument_context(self, ticker: str, asset_type: str = "stock") -> str:
-        """Resolve ticker identity once and return the full instrument context.
+    def resolve_instrument_context(
+        self, ticker: str, asset_type: str = "stock", curr_date: str | None = None,
+    ) -> str:
+        """Build date-appropriate instrument context for the selected ticker.
 
-        Deterministic yfinance lookup (cached, fail-open) injected into a
-        context string so every agent anchors to the real company instead of
-        hallucinating one from the price chart (#814). Both the propagate()
-        path and the CLI call this so the resolved identity reaches the whole
-        graph regardless of entry point.
+        Historical runs use ticker-only context: the live identity provider
+        cannot prove what a company was called or how it was classified on a
+        past date. Current runs retain the cached, fail-open identity lookup.
         """
+        if curr_date is not None and curr_date < get_current_date():
+            return build_instrument_context(ticker, asset_type, curr_date=curr_date)
         identity = resolve_instrument_identity(ticker)
-        return build_instrument_context(ticker, asset_type, identity)
+        return build_instrument_context(ticker, asset_type, identity, curr_date=curr_date)
 
     def _memory_as_of(self, trade_date) -> str | None:
         """Point-in-time cutoff for past-context lessons (#1251).
@@ -457,6 +470,7 @@ class TradingAgentsGraph:
         )
 
     @run_data_scope
+    @_with_run_config
     def propagate(self, company_name, trade_date, asset_type: str = "stock"):
         """Run the trading agents graph for a company on a specific date.
 
@@ -475,6 +489,7 @@ class TradingAgentsGraph:
         ``tradingagents.agents.utils.rating.is_review`` before mapping it to the
         PortfolioRating enum.
         """
+        trade_date = require_iso_date(trade_date)
         self.ticker = company_name
 
         # Resolve any pending memory-log entries for this ticker before the pipeline runs.
@@ -574,7 +589,9 @@ class TradingAgentsGraph:
         past_context = self.memory_log.get_past_context(
             company_name, as_of=self._memory_as_of(trade_date)
         )
-        instrument_context = self.resolve_instrument_context(company_name, asset_type)
+        instrument_context = self.resolve_instrument_context(
+            company_name, asset_type, str(trade_date),
+        )
         init_agent_state = self.propagator.create_initial_state(
             company_name,
             trade_date,

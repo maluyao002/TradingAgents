@@ -101,5 +101,22 @@ def test_global_news_empty_after_filter_is_informative(monkeypatch):
 
     monkeypatch.setattr(ynews.yf, "Search", FakeSearch)
     out = ynews.get_global_news_yfinance("2025-05-09", look_back_days=7, limit=10)
-    assert "No global news found" in out
+    assert "unavailable" in out and "not an absence" in out
     assert "###" not in out  # no empty article body
+
+
+@pytest.mark.unit
+def test_ticker_news_feed_without_historical_coverage_does_not_claim_absence(monkeypatch):
+    recent = {"title": "RECENT", "publisher": "P", "link": "l",
+              "providerPublishTime": _epoch("2026-09-01")}
+    monkeypatch.setattr(ynews.yf, "Ticker", lambda _: type("Ticker", (), {"get_news": lambda self, **_: [recent]})())
+    out = ynews.get_news_yfinance("AAPL", "2025-05-01", "2025-05-09")
+    assert "unavailable" in out and "not an absence" in out
+    assert "RECENT" not in out and "No news found" not in out
+
+
+@pytest.mark.unit
+def test_empty_global_feed_does_not_claim_historical_absence(monkeypatch):
+    monkeypatch.setattr(ynews.yf, "Search", lambda **_: type("Search", (), {"news": []})())
+    out = ynews.get_global_news_yfinance("2025-05-09", look_back_days=7, limit=10)
+    assert "unavailable" in out and "No global news found" not in out

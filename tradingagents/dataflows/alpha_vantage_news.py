@@ -1,4 +1,7 @@
+import json
+
 from .alpha_vantage_common import _make_api_request, format_datetime_for_api
+from .utils import get_current_date
 
 
 def get_news(ticker, start_date, end_date) -> dict[str, str] | str:
@@ -53,7 +56,7 @@ def get_global_news(curr_date, look_back_days: int = 7, limit: int = 50) -> dict
     return _make_api_request("NEWS_SENTIMENT", params)
 
 
-def get_insider_transactions(symbol: str) -> dict[str, str] | str:
+def get_insider_transactions(symbol: str, curr_date: str | None = None) -> dict[str, str] | str:
     """Returns latest and historical insider transactions by key stakeholders.
 
     Covers transactions by founders, executives, board members, etc.
@@ -65,8 +68,37 @@ def get_insider_transactions(symbol: str) -> dict[str, str] | str:
         Dictionary containing insider transaction data or JSON string.
     """
 
+    if curr_date and curr_date < get_current_date():
+        return (
+            f"<unavailable: insider transactions for {symbol} as of {curr_date}: "
+            "Alpha Vantage exposes transaction dates but not Form 4 filing dates, "
+            "so their public availability by the analysis date cannot be verified>"
+        )
+
     params = {
         "symbol": symbol,
     }
 
-    return _make_api_request("INSIDER_TRANSACTIONS", params)
+    response = _make_api_request("INSIDER_TRANSACTIONS", params)
+    if not curr_date:
+        return response
+    try:
+        payload = json.loads(response) if isinstance(response, str) else response
+    except (TypeError, ValueError):
+        return f"<unavailable: insider transactions for {symbol} as of {curr_date}: provider response has no usable dates>"
+    if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+        return f"<unavailable: insider transactions for {symbol} as of {curr_date}: provider response has no usable dated rows>"
+    dated = [row for row in payload["data"] if isinstance(row, dict) and isinstance(row.get("transaction_date"), str)]
+    if not dated:
+        if not payload["data"]:
+            return json.dumps(payload)
+        return f"<unavailable: insider transactions for {symbol} as of {curr_date}: provider supplied no dated coverage>"
+    kept = [row for row in dated if row["transaction_date"] <= curr_date]
+    if not kept:
+        return f"<unavailable: insider transactions for {symbol} as of {curr_date}: provider supplied no covered historical rows>"
+    payload["data"] = kept
+    payload["point_in_time_notice"] = (
+        "Rows use transaction dates, not Form 4 filing dates; the newest trades "
+        "may not have been public on the analysis date."
+    )
+    return json.dumps(payload)

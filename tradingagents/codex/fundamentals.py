@@ -17,6 +17,7 @@ from tradingagents.agents.analysts.fundamentals_analyst import (
     create_fundamentals_analyst,
 )
 from tradingagents.agents.utils.evidence import _normalize_prepared
+from tradingagents.dataflows.config import run_config
 from tradingagents.dataflows.preparation import prepare_fundamentals
 from tradingagents.dataflows.symbol_utils import normalize_symbol
 from tradingagents.dataflows.utils import safe_ticker_component
@@ -264,8 +265,28 @@ def run_fundamentals(
     effort: str,
     prepared: dict | None = None,
     adapter: Any | None = None,
+    config: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run the existing fundamentals analyst once with an explicit backend."""
+
+    with run_config(DEFAULT_CONFIG if config is None else dict(config)):
+        return _run_fundamentals_scoped(
+            ticker, analysis_date, backend=backend, model=model, effort=effort,
+            prepared=prepared, adapter=adapter,
+        )
+
+
+def _run_fundamentals_scoped(
+    ticker: str,
+    analysis_date: str,
+    *,
+    backend: str,
+    model: str,
+    effort: str,
+    prepared: dict | None,
+    adapter: Any | None,
+) -> dict[str, Any]:
+    """Keep preparation and inference in the same dataflow config scope."""
 
     started = time.monotonic()
     ticker, analysis_date, snapshot = validate_inputs(ticker, analysis_date, prepared)
